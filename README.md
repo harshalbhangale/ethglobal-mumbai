@@ -19,7 +19,7 @@ Node 20+.
 
 ```sh
 npm install
-cp .env.example .env.local   # add NEXT_PUBLIC_PRIVY_APP_ID
+cp apps/web/.env.example apps/web/.env.local   # add NEXT_PUBLIC_PRIVY_APP_ID
 npm run dev                  # http://localhost:3000
 ```
 
@@ -30,18 +30,18 @@ The service worker only registers in production builds: `npm run build && npm st
 ## Structure
 
 ```
-app/
-  page.tsx          landing
-  app/page.tsx      the desk (/app)
-  providers.tsx     Privy config (Base, embedded wallets)
-  manifest.ts       PWA manifest
-components/         auth, wallet panel, thread demo, install button
-lib/chain.ts        Base client, USDC address, balances
-public/sw.js        service worker
-public/icons/       app icons
+apps/
+  web/                Next.js PWA: landing (/), desk (/app), Privy, PWA manifest + service worker
+packages/
+  domain/             reputation, signals, view models
+  integrations/       call classification, scoring, price data
+  database/           Postgres schema, X ID ↔ wallet identity
+docs/PLAN.md          what we are building and in what order
 ```
 
 ## Next
+
+See [docs/PLAN.md](docs/PLAN.md). Short version:
 
 - Flash order flow: quote, sign, submit, with `attachedBracket` for TP/SL
 - X bot: read mentions, parse calls, reply with the after market
