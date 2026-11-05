@@ -118,7 +118,7 @@ describe("flashCard", () => {
     expect(q(card, ".swap-out").textContent).toBe("≈ 0.01");
     expect(card.textContent).toContain("+10% · $2,750");
     expect(card.textContent).toContain("−5% · $2,375");
-    expect(q(card, ".review").textContent).toContain("RouteDefinitive Flash · MEV-protected");
+    expect(q(card, ".review").textContent).toContain("RouteBest route by Definitive · MEV-protected");
     expect(q(card, ".review").textContent).toContain("ExitsTP $2,750 · SL $2,375");
     expect(q(card, ".swap-submit").textContent).toBe("Buy ETH · $25.00");
     const submit = q<HTMLButtonElement>(card, ".swap-submit");

@@ -129,7 +129,10 @@ export const flashQuoteSchema = z.object({
     .optional(),
   from: z.object({ amount: z.string(), notional: z.string().nullable().optional() }),
   to: z.object({ amount: z.string(), notional: z.string().nullable().optional() }),
+  /** Decimals: 0.01 = 1%. */
   estimatedPriceImpact: z.string().nullable().optional(),
+  recommendedSlippage: z.coerce.string().nullable().optional(),
+  fees: z.object({ estimatedFeeNotional: z.coerce.string().nullable().optional() }).nullable().optional(),
   evm: z.object({
     approveTx: approveTxSchema.optional(),
     permitTypedData: z.string().nullable().optional(),

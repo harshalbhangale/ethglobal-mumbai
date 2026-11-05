@@ -80,7 +80,22 @@ async function api<T>(type: "flash-quote" | "flash-order", payload: Record<strin
   return answer;
 }
 
-export async function placeOnX(o: CardOrder, onStep: (step: Step) => void) {
+/** What Flash's quote says about the fill, shown before any wallet prompt. Fractions: 0.01 = 1%. */
+export type QuoteFacts = { received: string; receivedUsd: number | null; impact: number | null; slippage: number | null; feeUsd: number | null };
+
+export function quoteFacts(q: FlashQuote): QuoteFacts {
+  const num = (v: string | null | undefined) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+  const impact = num(q.estimatedPriceImpact);
+  return {
+    received: q.to.amount,
+    receivedUsd: num(q.to.notional),
+    impact: impact === null ? null : Math.abs(impact),
+    slippage: num(q.recommendedSlippage),
+    feeUsd: num(q.fees?.estimatedFeeNotional),
+  };
+}
+
+export async function placeOnX(o: CardOrder, onStep: (step: Step) => void, onQuote?: (facts: QuoteFacts) => void) {
   onStep("connecting");
   const from = await connect();
   await ensureBase();
@@ -93,6 +108,7 @@ export async function placeOnX(o: CardOrder, onStep: (step: Step) => void) {
   const parsed = flashQuoteSchema.safeParse(raw.quote);
   if (!parsed.success) throw new Error("Flash returned a quote we couldn't read. Try again.");
   const quote: FlashQuote = parsed.data;
+  onQuote?.(quoteFacts(quote));
 
   // Selling native ETH: turn exactly the order amount into WETH first (one deposit transaction).
   if (quote.wrap?.evmTx) {

@@ -3,7 +3,7 @@ import type { Answer, PostRef } from "./call-view";
 import { formatBps } from "./card-metrics";
 import { appOrigin } from "./config";
 import { el, openDesk, safeLink } from "./dom";
-import { placeOnX, type Step } from "./flash-direct";
+import { placeOnX, type QuoteFacts, type Step } from "./flash-direct";
 import { followButton } from "./follows";
 import { definitiveLogo, tokenIcon } from "./logos";
 import { cardOrderText, COPYABLE, DECIMAL, deskOrderUrl } from "./post";
@@ -330,7 +330,7 @@ export function flashCard(input: {
           ? row("Exits", "None · plain swap")
           : []),
       ...row("Steps", withExits ? "Approve twice, sign twice (first time)" : "Approve once (first time), sign once"),
-      ...row("Route", "Definitive Flash · MEV-protected"),
+      ...row("Route", "Best route by Definitive · MEV-protected"),
       ...row("Network", "Base mainnet · real funds"),
       ...row("Sign in", walletOnPage === false ? "Kallr desk (Privy wallet)" : "Your browser wallet"),
     );
@@ -402,6 +402,7 @@ export function flashCard(input: {
           native: side === "sell" && choice?.kind === "known" && choice.key === "ETH",
         },
         (step) => tracker.to(step),
+        (facts) => progress.prepend(quoteSummary(facts, side === "buy" ? tokenSym() : "USDC")),
       );
       tracker.finish();
       walletChip.textContent = `${result.from.slice(0, 6)}…${result.from.slice(-4)}`;
@@ -601,4 +602,22 @@ export function flashCard(input: {
     });
   }
   return { card, open: () => tradable && toggle(true) };
+}
+
+const pct = (f: number) => `${(f * 100).toFixed(f >= 0.1 ? 1 : 2)}%`;
+
+/** Flash's own numbers for this fill, shown the moment the quote lands (before any wallet prompt). */
+export function quoteSummary(f: QuoteFacts, symbol: string) {
+  const row = (k: string, v: Node | string, hint?: string) => [el("dt", hint ? { title: hint } : {}, k), el("dd", {}, v)];
+  const amount = Number(f.received);
+  const got = Number.isFinite(amount) ? amount.toLocaleString("en-US", { maximumFractionDigits: amount >= 1 ? 4 : 8 }) : f.received;
+  const tone = f.impact === null ? "" : f.impact >= 0.03 ? "down" : f.impact >= 0.01 ? "warn" : "up";
+  return el(
+    "dl",
+    { class: "review quote-facts" },
+    ...row("You get", `${got} ${symbol}${f.receivedUsd !== null ? ` · ≈$${f.receivedUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}`),
+    ...(f.impact !== null ? row("Price impact", el("span", { class: tone }, pct(f.impact)), "How much this order moves the price") : []),
+    ...(f.slippage !== null ? row("Max slippage", pct(f.slippage), "Recommended by Definitive for this quote") : []),
+    ...(f.feeUsd !== null ? row("Flash fee", f.feeUsd === 0 ? "Free" : `$${f.feeUsd.toFixed(2)}`) : []),
+  );
 }

@@ -205,6 +205,8 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .review { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 2px 0 0; padding: 12px 14px; border-radius: 14px;
   border: 1px solid var(--line); font-size: 13px; }
 .review dt { color: var(--muted); }
+.quote-facts { margin-bottom: 8px; }
+.quote-facts .warn { color: #f5a524; }
 .review dd { margin: 0; text-align: right; font-weight: 600; color: var(--foreground); }
 
 /* Step tracker while placing */
