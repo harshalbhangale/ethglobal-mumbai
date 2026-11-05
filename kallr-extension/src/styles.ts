@@ -105,8 +105,7 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .inline-submit:disabled { opacity: .4; cursor: not-allowed; }
 .swap-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; color: var(--muted);
   font-size: 12px; padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--line); }
-.swap-powered { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border: 1px solid rgba(61,220,132,.55); border-radius: 99px;
-  background: rgba(61,220,132,.08); box-shadow: 0 0 0 3px rgba(61,220,132,.07); font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.swap-powered { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; }
 .swap-powered-sep { width: 1px; height: 14px; background: var(--line); }
 .swap-venue { color: var(--foreground); font-weight: 800; letter-spacing: -0.01em; }
 

@@ -88,7 +88,7 @@ describe("flashCard", () => {
     ]);
     expect(q(card, ".inline-buy").textContent).toBe("⇄ Copy");
     expect(q(card, ".inline-panel").hidden).toBe(true);
-    expect(q(card, ".swap-powered").textContent).toBe("Powered byKallrDEFINITIVE");
+    expect(q(card, ".swap-powered").textContent).toBe("Powered byDEFINITIVE");
     expect(q(card, ".swap-powered .definitive-logo").getAttribute("aria-label")).toBe("Definitive");
   });
 

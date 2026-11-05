@@ -2,7 +2,7 @@ import { callInsights } from "./call-insights";
 import type { Answer, PostRef } from "./call-view";
 import { formatBps } from "./card-metrics";
 import { appOrigin } from "./config";
-import { el, openDesk, safeLink, wordmark } from "./dom";
+import { el, openDesk, safeLink } from "./dom";
 import { placeOnX, type Step } from "./flash-direct";
 import { followButton } from "./follows";
 import { definitiveLogo, tokenIcon } from "./logos";
@@ -517,8 +517,6 @@ export function flashCard(input: {
       "span",
       { class: "swap-powered" },
       "Powered by",
-      wordmark(14),
-      el("i", { class: "swap-powered-sep", "aria-hidden": "true" }),
       definitiveLogo(11),
     ),
     safeLink(`https://x.com/${post.handle}`, `@${post.handle} on X ↗`),
