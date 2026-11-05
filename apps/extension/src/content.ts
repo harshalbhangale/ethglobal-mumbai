@@ -1,7 +1,10 @@
 import { type Answer, callLine, copyActions } from "./call-view";
 import { el as h, send, shadowHost } from "./dom";
+import { addFollowBadge } from "./creator-badge";
 import { openDrawer } from "./drawer";
+import { onFollowsChanged } from "./follows";
 import { identityFromHref, mightBeCall } from "./post";
+import { scanProfile } from "./profile";
 import { recordPanel } from "./record-panel";
 import { type LivePrice, livePrice, priceLine } from "./ticker-price";
 import { ALIASES, attachToXTicker } from "./x-ticker";
@@ -30,6 +33,7 @@ async function decorate(article: HTMLElement) {
   if (handled.get(article) === key) return;
   handled.set(article, key);
   article.querySelector(".aftermarkets-host")?.remove();
+  void addFollowBadge(article, post.handle);
 
   // X's own ticker card names the asset outright: offer a copy button there, call or not.
   const ticker = attachToXTicker(article, post);
@@ -64,9 +68,20 @@ async function decorate(article: HTMLElement) {
   post.textNode.after(host);
 }
 
+const articles = () => document.querySelectorAll<HTMLElement>('article[data-testid="tweet"]');
+
 function scan() {
-  document.querySelectorAll<HTMLElement>('article[data-testid="tweet"]').forEach((a) => void decorate(a));
+  articles().forEach((a) => void decorate(a));
+  void scanProfile();
 }
+
+// Following someone (here or in another tab) updates every byline chip on the page.
+onFollowsChanged(() => {
+  for (const article of articles()) {
+    const post = readPost(article);
+    if (post) void addFollowBadge(article, post.handle);
+  }
+});
 
 let queued = false;
 new MutationObserver(() => {
