@@ -114,7 +114,7 @@ Source: `~/Desktop/Xtrading/apps/extension/src` (Monad/Kuru/Perpl). Port onto Ba
 - [x] 6. Follows synced with the web app: `app-bridge.ts` (app origin only, nonce, follow commands only) + desk **Following** section (`components/following.tsx`, `lib/follows.ts`); browser-only fallback without the extension
 - [x] 7. Follow on X = follow here (opt-in switch in the desk): `follow-observer.ts` reads X's Follow/Following buttons on profiles and your Following page; `follow-sync.ts` adds on X follow and removes on X unfollow only callers X added. No X API, no cookies
 - [x] 8. Sign Flash orders on X with MetaMask/Rabby: `wallet-bridge.ts` (main world, fixed method list + eth_signTypedData_v4), `wallet.ts`, `flash-direct.ts` (connect → switch to Base → quote → approve → sign order + exits → submit through the app's /api/flash routes); no browser wallet → desk with Privy
-- [ ] 9. Toolbar popup with connection status: `popup.ts`
+- [x] 9. Toolbar popup (Xtrading layout): app reachable, Chainlink prices, Flash on Base, follow count, follow-on-X setting, Open desk
 - Skipped: Perpl (`perp-*`, Monad only), Kuru (`direct-trade.ts`), Nansen (`nansen-panel.ts`, `token-risk-*`, `flagged-token-card.ts`), image posts (`post-media.ts`)
 - [ ] Load unpacked for the demo
 

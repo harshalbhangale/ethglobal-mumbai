@@ -23,7 +23,7 @@ manifest.content_scripts.push({
 await writeFile("dist/manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
 
 await build({
-  entryPoints: ["src/content.ts", "src/background.ts", "src/app-bridge.ts", "src/wallet-bridge.ts"],
+  entryPoints: ["src/content.ts", "src/background.ts", "src/app-bridge.ts", "src/wallet-bridge.ts", "src/popup.ts"],
   outdir: "dist",
   bundle: true,
   format: "iife",
