@@ -1,0 +1,43 @@
+[versions]
+android-gradle-plugin = "8.12.0"
+androidx-activity = "1.11.0"
+androidx-compose-bom = "2025.11.00"
+androidx-core = "1.17.0"
+androidx-lifecycle = "2.9.4"
+androidx-navigation = "2.9.6"
+compose-multiplatform = "1.9.3"
+junit-jupiter = "5.13.4"
+kotlin = "2.2.20"
+kotlinx-coroutines = "1.10.2"
+kover = "0.9.3"
+ksp = "2.2.20-2.0.3"
+vanniktech-maven-publish = "0.34.0"
+
+[libraries]
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidx-compose-bom" }
+androidx-compose-material-icons = { module = "androidx.compose.material:material-icons-extended" }
+androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
+androidx-compose-ui = { module = "androidx.compose.ui:ui" }
+androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
+androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidx-lifecycle" }
+androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "androidx-navigation" }
+junit-jupiter-api = {  module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit-jupiter" }
+junit-jupiter-params = {  module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter" }
+kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlin" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+ksp-api = { module = "com.google.devtools.ksp:symbol-processing-api", version.ref = "ksp" }
+
+[plugins]
+agp-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
+agp-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-plugin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+vanniktech-maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "vanniktech-maven-publish" }
