@@ -29,5 +29,22 @@ button:hover { border-color: var(--ink); }
 .breakdown summary { cursor: pointer; color: var(--muted); font-weight: 600; }
 .breakdown-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-variant-numeric: tabular-nums; }
 .small { font-size: 12px; margin: 6px 0 0; }
+.drawer { position: fixed; top: 0; right: 0; width: min(400px, 100vw); height: 100vh; overflow-y: auto;
+  z-index: 2147483000; background: var(--bg); color: var(--ink); border-left: 1px solid var(--rule);
+  box-shadow: -12px 0 40px rgba(0,0,0,.18); font-size: 14px; line-height: 1.45; }
+.drawer header { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px; background: var(--bg); border-bottom: 1px solid var(--rule); }
+.drawer .close { border: 0; font-size: 22px; padding: 4px 10px; }
+.section { padding: 14px 16px; border-bottom: 1px solid var(--rule); }
+.section h3 { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.kv { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.kv span:first-child { color: var(--muted); }
+.kv span:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+blockquote { margin: 0 0 8px; padding: 8px 10px; border-left: 3px solid var(--rule); white-space: pre-wrap; overflow-wrap: anywhere; }
+.calls { list-style: none; margin: 0; padding: 0; }
+.calls li { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--rule); font-variant-numeric: tabular-nums; }
+.calls li:last-child { border-bottom: 0; }
+.note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.footer { padding: 14px 16px; margin: 0; }
 button:focus-visible { outline: 3px solid var(--muted); outline-offset: 2px; }
 `;

@@ -1,9 +1,9 @@
-import { appOrigin } from "./config";
-import { el as h, openDesk, send, shadowHost } from "./dom";
-import { COPYABLE, deskUrl, identityFromHref, mightBeCall, PRESETS, pct, timeLeft, usd } from "./post";
-import type { SeenCall } from "./card-metrics";
+import { type Answer, callLine, copyActions } from "./call-view";
+import { el as h, send, shadowHost } from "./dom";
+import { openDrawer } from "./drawer";
+import { identityFromHref, mightBeCall } from "./post";
 import { recordPanel } from "./record-panel";
-import { livePrice, priceLine } from "./ticker-price";
+import { type LivePrice, livePrice, priceLine } from "./ticker-price";
 import { ALIASES, attachToXTicker } from "./x-ticker";
 
 /**
@@ -11,18 +11,6 @@ import { ALIASES, attachToXTicker } from "./x-ticker";
  * under them with the caller's record, this call's move since posting, and copy buttons that
  * open the desk to review and sign. It reads only what's on screen; no X API, no cookies.
  */
-
-type ScoredCall = {
-  asset: string;
-  direction: "up" | "down";
-  expiresAt: number;
-  entry: number | null;
-  last: number | null;
-  status: "hit" | "miss" | "flat" | "open" | "unpriced";
-  returnBps: number | null;
-};
-type Record = { scored: number; hits: number; hitRate: number | null; medianReturnBps: number | null; open: number };
-type Answer = { call: ScoredCall | null; record: Record; calls?: SeenCall[] };
 
 const handled = new WeakMap<HTMLElement, string>();
 
@@ -33,31 +21,6 @@ function readPost(article: HTMLElement) {
   const text = textNode?.innerText.trim();
   if (!id || !textNode || !text || text.length > 2000) return null;
   return { ...id, text, textNode };
-}
-
-function callLine(call: ScoredCall | null, asset: string) {
-  if (!call) return h("div", { class: "line muted" }, `$${asset} call · pricing…`);
-  if (call.entry === null) return h("div", { class: "line muted" }, `$${call.asset} ${call.direction} · no price at posting time`);
-  const moved = call.returnBps === null ? null : h("span", { class: call.returnBps >= 0 ? "up" : "down" }, pct(call.returnBps));
-  const now = Math.floor(Date.now() / 1000);
-  const tail =
-    call.status === "open"
-      ? ` · ${timeLeft(call.expiresAt - now)}`
-      : call.status === "hit"
-        ? " · hit"
-        : call.status === "miss"
-          ? " · missed"
-          : call.status === "flat"
-            ? " · flat"
-            : "";
-  return h(
-    "div",
-    { class: "line" },
-    `This call: $${call.asset} ${call.direction} from ${usd(call.entry)}`,
-    call.last !== null ? ` → ${usd(call.last)} ` : " ",
-    moved,
-    tail,
-  );
 }
 
 async function decorate(article: HTMLElement) {
@@ -82,26 +45,21 @@ async function decorate(article: HTMLElement) {
   root.append(card);
 
   const body = h("div", {});
-  const actions = h("div", { class: "row" });
-  if (COPYABLE.has(asset)) {
-    PRESETS.forEach((p, i) => {
-      const b = h("button", { class: i === 0 ? "primary" : "", type: "button" }, `Copy $${p.usd} · TP ${p.tpPct}% SL ${p.slPct}%`);
-      b.addEventListener("click", () => openDesk(deskUrl(appOrigin, asset, p, post)));
-      actions.append(b);
-    });
-    const custom = h("button", { type: "button" }, "Custom");
-    custom.addEventListener("click", () => openDesk(deskUrl(appOrigin, asset, null, post)));
-    actions.append(custom);
-  } else {
-    actions.append(h("span", { class: "muted" }, `$${asset} isn't tradable on Base yet`));
-  }
+  const actions = copyActions(asset, post);
+  let live: LivePrice | null = null;
+  const check = h("button", { type: "button" }, "Call check");
+  check.addEventListener("click", () => openDrawer({ post, answer, live }));
+  actions.append(check);
   card.append(
     h("div", { class: "top" }, h("span", { class: "brand" }, "AfterMarkets"), h("span", { class: "muted" }, "priced at posting · not advice")),
     body,
     actions,
   );
   body.append(recordPanel(post.handle, answer.calls ?? []), callLine(answer.call, asset));
-  void livePrice(article, asset, ALIASES[asset as keyof typeof ALIASES] ?? []).then((live) => body.append(priceLine(asset, live)));
+  void livePrice(article, asset, ALIASES[asset as keyof typeof ALIASES] ?? []).then((value) => {
+    live = value;
+    body.append(priceLine(asset, value));
+  });
   article.querySelector(".aftermarkets-host")?.remove();
   post.textNode.after(host);
 }
