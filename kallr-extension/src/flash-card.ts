@@ -1,50 +1,91 @@
 import { callInsights } from "./call-insights";
 import type { Answer, PostRef } from "./call-view";
+import { formatBps } from "./card-metrics";
 import { appOrigin } from "./config";
-import { assetUrl, el, openDesk, safeLink, wordmark } from "./dom";
-import { placeOnX, STEP_LABEL } from "./flash-direct";
+import { el, openDesk, safeLink, wordmark } from "./dom";
+import { placeOnX, type Step } from "./flash-direct";
+import { followButton } from "./follows";
+import { definitiveLogo, tokenIcon } from "./logos";
 import { cardOrderText, COPYABLE, DECIMAL, deskOrderUrl } from "./post";
 import { ALIASES, formatPrice, type LivePrice, livePrice } from "./ticker-price";
 import { hasBrowserWallet, rejected } from "./wallet";
 
+export { tokenIcon } from "./logos";
+
 /**
- * The post card, laid out as a swap card: live price header, the Call check strip, then
- * a trade panel. Here it trades on Base through Definitive Flash, with take-profit / stop-loss
- * attached as one bracket. Signing happens in the Kallr desk, never on X.
+ * The post card: live price header, the caller strip (record + Follow), the Call check strip, then
+ * the trade flow. Trades on Base through Definitive Flash with take-profit / stop-loss attached as
+ * one bracket. With MetaMask / Rabby on the page every step is signed right here, with a step
+ * tracker; otherwise the Kallr desk opens to sign with the Privy wallet.
  */
 
 const NAMES: Record<string, string> = { ETH: "Ethereum", BTC: "Bitcoin" };
 /** Token actually traded on Base: brackets need an ERC-20, so ETH trades as WETH. */
 const TOKENS: Record<string, string> = { ETH: "WETH", BTC: "cbBTC" };
-const IMAGES: Record<string, string> = { ETH: "brand/tokens/eth.png", BTC: "brand/tokens/btc.png", USDC: "brand/tokens/usdc.png" };
 export const TP_CHOICES = [5, 10, 20, 50] as const;
 export const SL_CHOICES = [3, 5, 10, 20] as const;
-
-export function tokenIcon(asset: string, size = 40) {
-  const image = IMAGES[asset];
-  if (image)
-    return el("img", {
-      class: "swap-icon",
-      src: assetUrl(image),
-      width: String(size),
-      height: String(size),
-      alt: "",
-      style: `width:${size}px;height:${size}px;border-radius:50%`,
-    });
-  const colors: Record<string, string> = { ETH: "#627EEA", BTC: "#F7931A", USDC: "#2775CA", SOL: "#9945FF" };
-  return el(
-    "span",
-    {
-      class: "swap-icon",
-      style: `width:${size}px;height:${size}px;background:${colors[asset] ?? "#536471"};font-size:${Math.round(size * 0.48)}px`,
-      "aria-hidden": "true",
-    },
-    asset.slice(0, 1),
-  );
-}
+export const AMOUNT_PRESETS = [5, 10, 25, 50] as const;
+/** Below this, Flash often rejects an order because fees would exceed 30% of it. */
+export const MIN_SENSIBLE_USD = 5;
 
 const money = (value: number) =>
   Number.isFinite(value) ? `$${value.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}` : "";
+
+/** Every step placeOnX can report, in order. Approvals and the TP/SL signature appear only when they happen. */
+const TRACK: Array<{ step: Step; label: string; optional?: boolean }> = [
+  { step: "connecting", label: "Connect wallet · Base" },
+  { step: "quoting", label: "Get a Flash quote" },
+  { step: "approving", label: "Approve USDC (sized to this order)", optional: true },
+  { step: "approving-exits", label: "Approve the TP/SL exit", optional: true },
+  { step: "signing", label: "Sign the order" },
+  { step: "signing-exits", label: "Sign the TP/SL", optional: true },
+  { step: "submitting", label: "Place on Base" },
+];
+
+/** The live step list: done ✓, current ●, upcoming ○; optional steps show only once reached. */
+export function stepTracker() {
+  const list = el("ol", { class: "steps", "aria-live": "polite" });
+  const reached = new Set<Step>();
+  let current: Step | null = null;
+  let failed = false;
+  const render = () => {
+    const order = TRACK.filter((t) => !t.optional || reached.has(t.step));
+    const at = current ? order.findIndex((t) => t.step === current) : -1;
+    list.replaceChildren(
+      ...order.map((t, i) => {
+        const state = i < at ? "done" : i === at ? (failed ? "failed" : "active") : "todo";
+        return el(
+          "li",
+          { class: `step ${state}` },
+          el("span", { class: "step-dot", "aria-hidden": "true" }, state === "done" ? "✓" : state === "failed" ? "!" : ""),
+          el("span", {}, t.label),
+        );
+      }),
+    );
+  };
+  render();
+  return {
+    root: list,
+    to(step: Step) {
+      reached.add(step);
+      current = step;
+      failed = false;
+      render();
+    },
+    fail() {
+      failed = true;
+      render();
+    },
+    finish() {
+      current = null;
+      list.replaceChildren(
+        ...TRACK.filter((t) => !t.optional || reached.has(t.step)).map((t) =>
+          el("li", { class: "step done" }, el("span", { class: "step-dot", "aria-hidden": "true" }, "✓"), el("span", {}, t.label)),
+        ),
+      );
+    },
+  };
+}
 
 export type FlashCard = { card: HTMLElement; open: () => void };
 
@@ -64,6 +105,11 @@ export function flashCard(input: {
   let tp: number | null = 10;
   let sl: number | null = 5;
   let live: LivePrice | null = null;
+  let walletOnPage: boolean | null = null;
+  void hasBrowserWallet().then((v) => {
+    walletOnPage = v;
+    if (!panel.hidden) update();
+  });
 
   const card = el("section", {
     class: `inline-card swap-card${input.attached ? " inline-attached" : ""}`,
@@ -74,6 +120,34 @@ export function flashCard(input: {
   const buy = el("button", { type: "button", class: "inline-buy", "aria-expanded": "false" }, "⇄ Copy");
   const close = el("button", { type: "button", class: "inline-close", hidden: "", "aria-label": "Close" }, "✕ Close");
   if (!tradable) buy.hidden = true;
+
+  // --- caller strip: who made the call, their record at a glance, and Follow ---
+  const callerStrip = (() => {
+    const calls = input.answer?.calls ?? [];
+    const scored = calls.filter((c) => c.status === "hit" || c.status === "miss" || c.status === "flat");
+    const hits = scored.filter((c) => c.status === "hit").length;
+    const summary = scored.length
+      ? `${hits}/${scored.length} calls moved their way`
+      : calls.length
+        ? `${calls.length} call${calls.length === 1 ? "" : "s"} seen · none scored yet`
+        : "New caller on Kallr";
+    const thisMove =
+      call?.returnBps != null
+        ? el("span", { class: call.returnBps >= 0 ? "up" : "down" }, ` · this call ${formatBps(call.returnBps)}`)
+        : null;
+    const follow = followButton(post.handle, (label) => el("button", { type: "button", class: "x-follow" }, label) as HTMLButtonElement);
+    return el(
+      "div",
+      { class: "caller-strip" },
+      el(
+        "div",
+        { class: "caller-id" },
+        safeLink(`https://x.com/${post.handle}`, `@${post.handle}`, "caller-handle"),
+        el("span", { class: "caller-record" }, summary, thisMove),
+      ),
+      follow,
+    );
+  })();
 
   // --- trade panel ---
   const panel = el("div", { class: "inline-panel", hidden: "" });
@@ -89,6 +163,7 @@ export function flashCard(input: {
   const payLabel = el("span", { class: "swap-label" }, "You pay");
   const payUsd = el("span", { class: "swap-usd" });
   const payToken = el("span", {});
+  const presets = el("div", { class: "amount-presets", role: "group", "aria-label": "Amount" });
   const receiveAmount = el("strong", { class: "inline-output swap-out" }, "0");
   const receiveUsd = el("span", { class: "swap-usd" });
   const receiveToken = el("span", {});
@@ -102,12 +177,13 @@ export function flashCard(input: {
     el("div", { class: "exit-row" }, el("span", {}, "Take-profit ", tpText), tpChips),
     el("div", { class: "exit-row" }, el("span", {}, "Stop-loss ", slText), slChips),
   );
-  const meta = el("p", { class: "swap-meta" });
+  const review = el("dl", { class: "review" });
   const walletChip = el("span", { class: "swap-wallet", hidden: "" });
   const status = el("p", { class: "inline-note", role: "status", "aria-live": "polite" });
   const submit = el("button", { type: "button", class: "inline-submit swap-submit", disabled: "" }, `Buy ${asset}`);
+  const progress = el("div", { class: "progress", hidden: "" });
 
-  const pill = (symbol: string) => el("span", { class: "swap-pill" }, tokenIcon(symbol === "USDC" ? "USDC" : asset, 22), symbol);
+  const pill = (symbol: string) => el("span", { class: "swap-pill" }, tokenIcon(symbol === "USDC" ? "USDC" : symbol, 22), symbol);
 
   for (const value of ["buy", "sell"] as const) {
     const button = el("button", { type: "button", "aria-pressed": String(value === side) }, value === "buy" ? "Buy" : "Sell");
@@ -118,6 +194,17 @@ export function flashCard(input: {
       update();
     });
     sides.append(button);
+  }
+
+  for (const usd of AMOUNT_PRESETS) {
+    const b = el("button", { type: "button" }, `$${usd}`);
+    b.addEventListener("click", () => {
+      // On a sell the box takes the asset amount: convert the dollar preset at the live price.
+      const p = price();
+      amount.value = side === "buy" ? String(usd) : Number.isFinite(p) ? String(Math.floor((usd / p) * 1e8) / 1e8) : "";
+      update();
+    });
+    presets.append(b);
   }
 
   function chips(target: HTMLElement, choices: readonly number[], get: () => number | null, set: (v: number | null) => void) {
@@ -143,20 +230,23 @@ export function flashCard(input: {
     return side === "buy" ? v : v * price();
   }
 
+  const row = (k: string, v: Node | string) => [el("dt", {}, k), el("dd", {}, v)];
+
   function update() {
     payLabel.textContent = side === "buy" ? "You pay" : "You sell";
     payToken.replaceChildren(pill(side === "buy" ? "USDC" : token));
     receiveToken.replaceChildren(pill(side === "buy" ? token : "USDC"));
-    submit.textContent = `${side === "buy" ? "Buy" : "Sell"} ${asset}`;
     exits.hidden = side === "sell";
     const p = price();
+    const exitPrice = (pct: number, dir: 1 | -1) => formatPrice(String(p * (1 + (dir * pct) / 100)));
     const fmt = (pct: number | null, dir: 1 | -1) =>
-      pct === null ? "off" : Number.isFinite(p) ? `${dir > 0 ? "+" : "−"}${pct}% · ${formatPrice(String(p * (1 + (dir * pct) / 100)))}` : `${pct}%`;
+      pct === null ? "off" : Number.isFinite(p) ? `${dir > 0 ? "+" : "−"}${pct}% · ${exitPrice(pct, dir)}` : `${pct}%`;
     tpText.textContent = fmt(tp, 1);
     slText.textContent = fmt(sl, -1);
 
     const value = Number(amount.value);
     const ok = DECIMAL.test(amount.value) && value > 0;
+    const usd = usdValue();
     if (ok && Number.isFinite(p)) {
       const out = side === "buy" ? value / p : value * p;
       receiveAmount.textContent = `≈ ${out.toLocaleString("en-US", { maximumSignificantDigits: 6 })}`;
@@ -166,17 +256,31 @@ export function flashCard(input: {
       receiveAmount.textContent = "0";
       payUsd.textContent = receiveUsd.textContent = "";
     }
-    meta.replaceChildren(
-      Number.isFinite(p) ? `1 ${asset} ≈ ${formatPrice(live?.price ?? "0").slice(1)} USDC` : "Price unavailable",
-      " · Definitive Flash · Base",
+    for (const b of presets.querySelectorAll("button"))
+      b.setAttribute("aria-pressed", String(side === "buy" && amount.value === b.textContent?.slice(1)));
+
+    // Review: everything the order will do, before any wallet prompt.
+    const withExits = side === "buy" && tp !== null && sl !== null;
+    review.replaceChildren(
+      ...row("Rate", Number.isFinite(p) ? `1 ${asset} ≈ ${formatPrice(live?.price ?? "0").slice(1)} USDC` : "Price unavailable"),
+      ...(withExits && Number.isFinite(p)
+        ? row("Exits", el("span", {}, el("span", { class: "up" }, `TP ${exitPrice(tp as number, 1)}`), " · ", el("span", { class: "down" }, `SL ${exitPrice(sl as number, -1)}`)))
+        : side === "buy"
+          ? row("Exits", "None · plain swap")
+          : []),
+      ...row("Route", "Definitive Flash · MEV-protected"),
+      ...row("Network", "Base mainnet · real funds"),
+      ...row("Sign in", walletOnPage === false ? "Kallr desk (Privy wallet)" : "Your browser wallet"),
     );
 
     const pairBroken = side === "buy" && (tp === null) !== (sl === null);
-    const usd = usdValue();
     if (pairBroken) status.textContent = "Flash places take-profit and stop-loss as a pair: set both, or neither.";
     else if (amount.value && !ok) status.textContent = "Enter a positive amount.";
-    else status.textContent = ok ? "Estimate from the live price; you review the exact quote and sign in the desk." : "";
+    else if (usd !== null && usd < MIN_SENSIBLE_USD)
+      status.textContent = `Orders under $${MIN_SENSIBLE_USD} are often rejected: fees would be over 30% of the order.`;
+    else status.textContent = "";
     const ready = ok && !pairBroken && usd !== null && Number.isFinite(usd);
+    submit.textContent = `${side === "buy" ? "Buy" : "Sell"} ${asset}${ready && usd !== null ? ` · ${money(usd)}` : ""}`;
     if (ready) submit.removeAttribute("disabled");
     else submit.setAttribute("disabled", "");
   }
@@ -207,6 +311,12 @@ export function flashCard(input: {
   async function placeHere() {
     busy = true;
     submit.setAttribute("disabled", "");
+    const tracker = stepTracker();
+    progress.replaceChildren(tracker.root);
+    progress.hidden = false;
+    review.hidden = true;
+    status.textContent = "";
+    const spent = side === "buy" ? money(Number(amount.value)) : `${amount.value} ${token}`;
     try {
       const result = await placeOnX(
         {
@@ -219,27 +329,35 @@ export function flashCard(input: {
           postId: post.postId,
           caller: post.handle,
         },
-        (step) => {
-          status.textContent = STEP_LABEL[step];
-        },
+        (step) => tracker.to(step),
       );
+      tracker.finish();
       walletChip.textContent = `${result.from.slice(0, 6)}…${result.from.slice(-4)}`;
       walletChip.hidden = false;
-      status.replaceChildren(
-        `${side === "buy" ? "Bought" : "Sold"} ${asset} with Flash on Base ✓ `,
-        result.exits ? `Exits ${result.exits === "pending_activation" ? "arm on the first fill" : result.exits}. ` : "",
-        safeLink(`${appOrigin}/app#orders`, `Order ${result.orderId.slice(0, 8)}… ↗`),
+      progress.append(
+        el(
+          "div",
+          { class: "done-card" },
+          el("strong", {}, `${side === "buy" ? "Bought" : "Sold"} ${asset} with ${spent} ✓`),
+          el(
+            "span",
+            {},
+            result.exits ? `TP/SL ${result.exits === "pending_activation" ? "arm on the first fill" : result.exits}. ` : "",
+            safeLink(`${appOrigin}/app#orders`, `Order ${result.orderId.slice(0, 8)}… ↗`),
+          ),
+        ),
       );
       amount.value = "";
     } catch (error) {
+      tracker.fail();
       status.textContent = rejected(error) ? "Cancelled in your wallet. Nothing was sent." : (error as Error).message || "The order didn't go through.";
     } finally {
       busy = false;
-      const keep = status.textContent;
-      const keepNodes = [...status.childNodes];
+      review.hidden = false;
+      const keep = [...status.childNodes];
       update();
       // update() rewrites the hint; keep the result line the user needs to see.
-      if (keep) status.replaceChildren(...keepNodes);
+      if (keep.length) status.replaceChildren(...keep);
     }
   }
 
@@ -266,14 +384,14 @@ export function flashCard(input: {
       "div",
       { class: "swap-row" },
       sides,
-      el("span", { class: "swap-row-end" }, walletChip, el("span", { class: "swap-chain-pill" }, el("span", { class: "swap-chain", "aria-hidden": "true" }), "Base mainnet")),
+      el("span", { class: "swap-row-end" }, walletChip, el("span", { class: "swap-chain-pill" }, el("span", { class: "swap-chain", "aria-hidden": "true" }), "Base")),
     ),
     el(
       "label",
       { class: "swap-box swap-pay" },
       payLabel,
       el("div", { class: "swap-line" }, amount, payToken),
-      payUsd,
+      el("div", { class: "swap-line" }, payUsd, presets),
     ),
     el("span", { class: "swap-arrow", "aria-hidden": "true" }, "↓"),
     el(
@@ -284,7 +402,8 @@ export function flashCard(input: {
       receiveUsd,
     ),
     exits,
-    meta,
+    review,
+    progress,
     status,
     submit,
   );
@@ -296,11 +415,11 @@ export function flashCard(input: {
       "span",
       { class: "swap-powered" },
       "Powered by",
-      wordmark(),
+      wordmark(14),
       el("i", { class: "swap-powered-sep", "aria-hidden": "true" }),
-      el("b", { class: "swap-venue" }, "Definitive Flash"),
+      definitiveLogo(11),
     ),
-    safeLink(`https://x.com/${post.handle}`, `@${post.handle} record ↗`),
+    safeLink(`https://x.com/${post.handle}`, `@${post.handle} on X ↗`),
   );
 
   function toggle(open: boolean) {
@@ -335,13 +454,13 @@ export function flashCard(input: {
   if (input.attached) {
     card.hidden = true;
     card.append(
-      el("header", { class: "swap-head" }, el("div", { class: "swap-title" }, el("strong", {}, `Trade ${asset} with Kallr`)), close),
+      el("header", { class: "swap-head" }, tokenIcon(asset, 28), el("div", { class: "swap-title" }, el("strong", {}, `Trade ${asset} with Kallr`)), close),
       ...(insights ? [insights] : []),
       panel,
       el("div", { style: "padding: 0 16px 12px" }, footer),
     );
   } else {
-    card.append(header, ...(insights ? [insights] : []));
+    card.append(header, callerStrip, ...(insights ? [insights] : []));
     if (tradable) card.append(panel);
     else card.append(el("p", { class: "inline-note", style: "padding: 0 16px" }, `$${asset} isn't tradable on Base yet. The record above still counts.`));
     card.append(el("div", { style: "padding: 0 16px 12px" }, footer));

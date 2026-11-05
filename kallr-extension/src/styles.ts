@@ -176,4 +176,57 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 /* Following chip beside a name */
 .chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 999px; font: 600 11px/18px system-ui; border: 1px solid; white-space: nowrap; }
 .chip.following { color: var(--lime); background: #c6f25a14; border-color: #c6f25a55; font-weight: 700; letter-spacing: .02em; }
+
+/* Caller strip under the price header: who called it, their record, and Follow. */
+.caller-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px 12px; }
+.caller-id { display: flex; flex-direction: column; min-width: 0; }
+.inline-card a.caller-handle { color: var(--foreground); font-weight: 700; font-size: 15px; text-decoration: none; }
+.inline-card a.caller-handle:hover { text-decoration: underline; }
+.caller-record { color: var(--muted); font-size: 13px; }
+
+/* Follow pill, as X draws it: white "Follow", outlined "Following", red "Unfollow" on hover. */
+.x-follow { flex: 0 0 auto; min-width: 84px; height: 34px; padding: 0 16px; border-radius: 99px; cursor: pointer;
+  border: 1px solid transparent; background: #eff3f4; color: #0f1419; font: 700 15px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.x-follow:hover { background: #d7dbdc; }
+:host([data-theme="light"]) .x-follow { background: #0f1419; color: #fff; }
+:host([data-theme="light"]) .x-follow:hover { background: #272c30; }
+.x-follow[aria-pressed="true"] { background: transparent; color: var(--foreground, #e7e9ea); border-color: #536471; }
+:host([data-theme="light"]) .x-follow[aria-pressed="true"] { color: #0f1419; border-color: #cfd9de; }
+.x-follow[aria-pressed="true"]:hover { color: #f4212e; border-color: #67070f; background: #f4212e1a; }
+:host([data-theme="light"]) .x-follow[aria-pressed="true"]:hover { border-color: #fdc9ce; }
+.x-follow:disabled { opacity: .6; cursor: progress; }
+
+/* Quick amounts inside the pay box */
+.amount-presets { display: flex; gap: 4px; }
+.amount-presets button { padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line); background: transparent; color: var(--muted);
+  font: 600 12px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; }
+.amount-presets button:hover, .amount-presets button[aria-pressed="true"] { color: var(--foreground); border-color: var(--foreground); }
+
+/* Review before any wallet prompt */
+.review { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 2px 0 0; padding: 12px 14px; border-radius: 14px;
+  border: 1px solid var(--line); font-size: 13px; }
+.review dt { color: var(--muted); }
+.review dd { margin: 0; text-align: right; font-weight: 600; color: var(--foreground); }
+
+/* Step tracker while placing */
+.progress { display: grid; gap: 10px; }
+.steps { list-style: none; margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--raised); display: grid; gap: 8px; font-size: 14px; }
+.step { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.step-dot { display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 auto; border-radius: 50%; border: 1.5px solid var(--line);
+  font: 800 11px/1 -apple-system, sans-serif; }
+.step.done { color: var(--foreground); }
+.step.done .step-dot { background: var(--positive); border-color: var(--positive); color: #fff; }
+.step.active { color: var(--foreground); font-weight: 700; }
+.step.active .step-dot { border-color: #1d9bf0; border-top-color: transparent; animation: kallr-spin .8s linear infinite; }
+.step.failed { color: var(--negative); font-weight: 700; }
+.step.failed .step-dot { background: var(--negative); border-color: var(--negative); color: #fff; }
+@keyframes kallr-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .step.active .step-dot { animation: none; border-top-color: #1d9bf0; } }
+.done-card { display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--positive); background: color-mix(in srgb, var(--positive) 10%, transparent); font-size: 14px; }
+.done-card strong { color: var(--foreground); }
+
+.definitive-logo { display: block; color: var(--foreground); }
+.card .title { gap: 12px; margin-bottom: 12px; }
+.title-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.title-sub { color: var(--muted); font: 500 12px/1.2 system-ui, sans-serif; }
 `;

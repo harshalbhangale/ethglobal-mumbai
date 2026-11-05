@@ -53,6 +53,13 @@ export function followButton(handle: string, make: (label: string) => HTMLButton
     button.textContent = on ? "Following" : "Follow";
     button.setAttribute("aria-pressed", String(on));
   };
+  // As on X: "Following" turns into a red "Unfollow" while hovered.
+  button.addEventListener("mouseenter", () => {
+    if (button.getAttribute("aria-pressed") === "true") button.textContent = "Unfollow";
+  });
+  button.addEventListener("mouseleave", () => {
+    if (button.getAttribute("aria-pressed") === "true") button.textContent = "Following";
+  });
   void isFollowing(handle).then(render);
   onFollowsChanged(() => void isFollowing(handle).then(render));
   button.addEventListener("click", async () => {

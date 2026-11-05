@@ -59,7 +59,7 @@ export async function scanProfile() {
   const details = el("div", {}, el("p", { class: "note" }, "Loading the calls this browser has seen…"));
   const toggle = el("button", { type: "button", class: "card-toggle", "aria-expanded": "false" }, "Show details");
   const overview = el("div", { class: "card-overview", hidden: "" });
-  const follow = followButton(handle, (label) => el("button", { type: "button", class: "card-follow" }, label) as HTMLButtonElement);
+  const follow = followButton(handle, (label) => el("button", { type: "button", class: "x-follow" }, label) as HTMLButtonElement);
   let calls: SeenCall[] = [];
   const setOpen = (open: boolean) => {
     overview.hidden = !open;
@@ -73,14 +73,18 @@ export async function scanProfile() {
     el(
       "div",
       { class: "card" },
-      el("div", { class: "title" }, wordmark(20)),
+      el(
+        "div",
+        { class: "title" },
+        el("span", { class: "title-id" }, wordmark(20), el("span", { class: "title-sub" }, `@${handle} on Kallr`)),
+        follow,
+      ),
       details,
       el(
         "div",
         { class: "card-actions" },
         safeLink(new URL("/app", appOrigin).href, "Open desk ↗", "cta"),
         toggle,
-        follow,
       ),
       overview,
       poweredBy(),

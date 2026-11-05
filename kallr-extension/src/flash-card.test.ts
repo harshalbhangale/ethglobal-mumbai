@@ -76,7 +76,11 @@ describe("flashCard", () => {
   it("has the card layout: price header, Call check strip, Copy button, Powered by footer", async () => {
     const { card } = await mounted();
     expect(q(card, ".swap-title strong").textContent).toBe("Ethereum");
-    expect(q(card, ".swap-icon").getAttribute("src")).toBe("chrome-extension://t/brand/tokens/eth.png");
+    // Logos are inlined, so they survive extension reloads.
+    expect(q(card, ".swap-icon").getAttribute("src")).toMatch(/^data:image\/png;base64,/);
+    expect(q(card, ".caller-strip .caller-handle").textContent).toBe("@kol");
+    expect(q(card, ".caller-strip .caller-record").textContent).toBe("1/1 calls moved their way · this call +2.5%");
+    expect(q(card, ".caller-strip .x-follow").textContent).toBe("Follow");
     expect(buttons(card, ".call-insights summary .ci-chip").map((c) => c.textContent)).toEqual([
       "Bullish ETH",
       "Creator record",
@@ -84,7 +88,8 @@ describe("flashCard", () => {
     ]);
     expect(q(card, ".inline-buy").textContent).toBe("⇄ Copy");
     expect(q(card, ".inline-panel").hidden).toBe(true);
-    expect(q(card, ".swap-powered").textContent).toBe("Powered byKallrDefinitive Flash");
+    expect(q(card, ".swap-powered").textContent).toBe("Powered byKallrDEFINITIVE");
+    expect(q(card, ".swap-powered .definitive-logo").getAttribute("aria-label")).toBe("Definitive");
   });
 
   it("opens the Call check with the post as text, this call and the record", async () => {
@@ -112,9 +117,11 @@ describe("flashCard", () => {
     expect(q(card, ".swap-out").textContent).toBe("≈ 0.01");
     expect(card.textContent).toContain("+10% · $2,750");
     expect(card.textContent).toContain("−5% · $2,375");
-    expect(card.textContent).toContain("Definitive Flash · Base");
+    expect(q(card, ".review").textContent).toContain("RouteDefinitive Flash · MEV-protected");
+    expect(q(card, ".review").textContent).toContain("ExitsTP $2,750 · SL $2,375");
+    expect(q(card, ".swap-submit").textContent).toBe("Buy ETH · $25.00");
     const submit = q<HTMLButtonElement>(card, ".swap-submit");
-    expect(submit.textContent).toBe("Buy ETH");
+    expect(submit.textContent).toBe("Buy ETH · $25.00");
     submit.click();
     await vi.waitFor(() => expect(open).toHaveBeenCalled());
     expect(card.textContent).toContain("No browser wallet here");
@@ -267,7 +274,8 @@ describe("sign on X with a browser wallet", () => {
       eth_getTransactionReceipt: () => ({ status: "0x1" }),
       eth_signTypedData_v4: (p) => (String(p[1]).includes("Bracket") ? "0xb2" : "0xa1"),
     });
-    await vi.waitFor(() => expect(card.textContent).toContain("Bought ETH with Flash on Base ✓"));
+    await vi.waitFor(() => expect(card.textContent).toContain("Bought ETH with $25.00 ✓"));
+    expect([...card.querySelectorAll(".steps .step")].map((s) => s.className)).toEqual(Array(6).fill("step done"));
     expect(open).not.toHaveBeenCalled();
     expect(calls.map((c) => c.method)).toEqual([
       "kallr_ping",
@@ -298,7 +306,7 @@ describe("sign on X with a browser wallet", () => {
       bracket: { userSignature: "0xb2", salt: "0x1", deadline: "281474976710655", signedMaxFromAmount: "0.0104" },
     });
     expect(q(card, ".swap-wallet").textContent).toBe("0x0000…00a1");
-    expect(card.textContent).toContain("Exits arm on the first fill");
+    expect(card.textContent).toContain("TP/SL arm on the first fill");
   });
 
   it("stops cleanly when the user rejects in the wallet", async () => {

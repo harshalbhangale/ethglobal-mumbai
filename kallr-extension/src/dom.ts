@@ -1,4 +1,5 @@
 import { css } from "./styles";
+import { KALLR_MARK } from "./token-logos";
 
 type Child = Node | string | null | undefined | false;
 
@@ -39,11 +40,11 @@ export function assetUrl(path: string) {
  * mark is white on X's dark theme and ink on light without separate assets.
  */
 export function brandMark(size = 16) {
-  const url = assetUrl("brand/mark.png");
+  // Inlined, so the mark survives extension reloads (file URLs from an old install break).
   return el("span", {
     class: "brand-mark-glyph",
     "aria-hidden": "true",
-    style: `width:${size}px;height:${size}px;-webkit-mask-image:url("${url}");mask-image:url("${url}")`,
+    style: `width:${size}px;height:${size}px;-webkit-mask-image:url("${KALLR_MARK}");mask-image:url("${KALLR_MARK}")`,
   });
 }
 
