@@ -15,14 +15,18 @@ Crypto Twitter runs on calls. A KOL (key opinion leader) posts "$ETH to 4k, long
 
 ## Surfaces
 
-| Surface | What it does | Status |
-| --- | --- | --- |
-| Landing page `/` | Explains the product, thread demo | Done |
-| Web app `/app` (PWA) | Desk on laptop and phone: sign in with X, wallet, order composer, open orders | Desk + order parser done; no real execution yet |
-| X bot @AfterMarkets | Reads mentions, replies with the caller's after market, takes `copy` replies as orders | Not started |
-| Telegram bot | Same commands in DMs/groups; fill and exit alerts; the "call you back" channel | Not started |
-| Chrome extension | Overlays the after market on any call in the X timeline, one-click copy | Not started |
-| Agent | Watches calls and positions, places and exits trades, pays for data and execution with x402 | Not started |
+Each surface: the idea, the product, the sponsors it uses, and what we build it with.
+
+| Surface | Idea | Product | Sponsors | Built with | Status |
+| --- | --- | --- | --- | --- | --- |
+| Landing page `/` | Explain it in one thread | Product story with a thread demo | — | Next.js | Done |
+| Web app `/app` (PWA) | One desk on laptop and phone | Sign in with X, wallet, order composer, open orders | Definitive Flash, Base | Next.js, Privy, viem | Real Flash orders with TP/SL; cancel + live stream open |
+| Chrome extension (main) | Trade where you read the call | Card under every call on X: caller's record, this call's move, copy with TP/SL, follow the caller | Definitive Flash, Base, Chainlink | Chrome MV3 content script + service worker, Privy/desk fallback for signing | v0.1 card + copy links; port of the Xtrading extension below |
+| Follow platform `/creators`, `/app/following` | Following someone on X means following them here | Creator pages with a priced record, a Follow button, and a feed of calls from people you follow, one tap to copy | Base, Chainlink | Postgres (follows + stored calls), extension follow sync | Not started |
+| Android keyboard (mobile) | No extensions on phones, but every app has a keyboard | Keyboard with an AfterMarkets row: caller's record for a pasted call, and "copy $5 tp 10% sl 5%" becomes a link to sign in the PWA | Definitive Flash, Base, Chainlink | Kotlin `InputMethodService`, same API; the keyboard never holds keys | Not started |
+| X bot @AfterMarkets (if time) | Tag it like @grok | Replies with the caller's after market; `copy …` replies get a link to approve | Definitive Flash, Base | X API, `services/x-bot` | Built; needs X API keys and a live run |
+| Telegram bot | The "we call you back" channel | Same commands in DMs/groups; fill and exit alerts | — | Telegram Bot API | Not started |
+| Agent | Copy the callers you trust, within limits | Watches followed callers, places and exits trades, pays for data with x402 | Base, x402 | Flash, session keys | Not started |
 
 ## Building blocks
 
@@ -99,10 +103,31 @@ docs/
 - [ ] `/after @handle`, `/copy <post url> $2 tp 10% sl 5%`
 - [ ] Push alerts: filled, TP hit, SL hit (this is the "we call you back"; voice call via Twilio is a stretch goal)
 
-### 5. Chrome extension
-- [ ] Add `apps/extension`: detects cashtags/ticker cards, shows creator reputation
-- [ ] Flash ticket on each call (amount + TP/SL)
+### 5. Chrome extension: port Xtrading, one commit per piece
+Source: `~/Desktop/Xtrading/apps/extension/src` (Monad/Kuru/Perpl). Port onto Base + Flash; keep v0.1's card and copy links working at every step.
+- [ ] 1. Shared plumbing: `dom.ts` (messaging, shadow roots), `styles.ts`, `config.ts`; move the v0.1 card onto it
+- [ ] 2. Ticker detection + live price: `x-ticker.ts`, `ticker-price.ts` (Chainlink/Flash, not Kuru)
+- [ ] 3. Richer record: `reputation.ts`, `card-metrics.ts`, `risk-line.ts` (tiers + red flags from `packages/domain`)
+- [ ] 4. Call check drawer: `drawer.ts`, `call-insights.ts`, `overview.ts` (caller's last calls)
+- [ ] 5. Creator badge + profile card with Follow: `creator-badge.ts`, `profile.ts`
+- [ ] 6. Watchlist synced with the web app: `watchlist-storage.ts`, `app-bridge.ts`
+- [ ] 7. X follow sync (opt-in, reads your own following list, no X API, no cookies): `follow-observer.ts`, `follow-storage.ts`
+- [ ] 8. Sign on X with MetaMask/Rabby: `wallet-bridge.ts` + a Flash ticket in place of Kuru's `swap-card.ts`; desk popup stays the fallback
+- [ ] 9. Toolbar popup with connection status: `popup.ts`
+- Skipped: Perpl (`perp-*`, Monad only), Kuru (`direct-trade.ts`), Nansen (`nansen-panel.ts`, `token-risk-*`, `flagged-token-card.ts`), image posts (`post-media.ts`)
 - [ ] Load unpacked for the demo
+
+### 5b. Follow platform
+- [ ] Store scored calls in Postgres from `/api/after-market` (today they live only in each browser, so creator pages would be empty); AWS RDS in ap-south-1 via Xtrading's CloudFormation template
+- [ ] `follows` table + `/api/follows`, tied to the X account through the Privy identity binding
+- [ ] `/creators` (list + search) and `/creators/[handle]` (record, calls, Follow, Copy), same look as the desk
+- [ ] `/app/following`: calls from people you follow, newest first, one tap to copy
+- [ ] Extension Follow button and X follow sync write to `/api/follows` when signed in
+
+### 5c. Android keyboard
+- [ ] `apps/keyboard`: Kotlin `InputMethodService` with an AfterMarkets suggestion row
+- [ ] Paste or select a call → caller's record from `/api/after-market`
+- [ ] Type `copy $5 tp 10% sl 5%` → opens the PWA desk prefilled to sign; the keyboard never holds keys
 
 ### 6. Agent + payments
 - [ ] Agent loop: watch new calls from followed KOLs, apply user rules (max size, only KOLs with hit rate > X), place orders through Flash within a pre-approved budget
