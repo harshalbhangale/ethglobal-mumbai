@@ -120,6 +120,4 @@ chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
   return true; // async response
 });
 
-chrome.action.onClicked.addListener(() => {
-  chrome.tabs.create({ url: `${appOrigin}/app` });
-});
+// The toolbar button opens popup.html (see popup.ts), which links to the desk.
