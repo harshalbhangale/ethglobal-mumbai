@@ -1,153 +1,116 @@
 # Kallr: build plan
 
-ETHGlobal Mumbai 2026. Living doc: tick items off as they land.
+ETHGlobal Mumbai 2026. This is a living doc, so tick items off as they land. It was cut down on purpose: if something isn't
+listed under "Build next", we don't build it before the demo.
 
-## The problem: KOL calls have no after market
+## The problem
 
-Crypto Twitter runs on calls. A KOL (key opinion leader) posts "$ETH to 4k, longing here", thousands of people see it, and a lot of them buy. Then:
+Crypto Twitter runs on calls ("$ETH to 4k, longing here"), and nobody keeps score:
 
-- **Nobody keeps score.** Calls are never priced at the moment they're posted, so a KOL's track record is whatever they say it is. Wins get screenshotted, losses get deleted.
-- **Followers act late and blind.** Between reading a call and buying, the follower has to leave X, open an exchange, find the token, size the trade and guess the exits. By then the price has moved, and they have no take-profit or stop-loss, so they hold losers too long.
-- **Incentives are backwards.** KOLs get paid for reach (and sometimes for shilling), not for being right. Paid promotions look exactly like honest calls.
-- **No accountability loop.** When a call goes bad there's no record linking the post, the price at posting and the outcome.
+- Calls are never priced when they're posted, so a caller's record is whatever they say it is.
+- To act on a call, a follower leaves X, finds the token and guesses the exits. They end up late, with no take-profit or stop-loss.
+- When a call goes bad, nothing links the post, the price at posting and the outcome.
 
-**Kallr fixes this where the call happens: in the replies.** Tag @Kallr under any call and it replies with that KOL's after market: how their past calls actually played out, priced at posting time. Reply `copy $2, TP 10%, SL 5%` and it places the trade on Base with the exits attached, then calls you when one of them hits.
+**Kallr** prices every call at the minute it was posted and scores it when its timeframe ends. It lets you copy the call
+with one tap: a real Definitive Flash order on Base with TP/SL attached, signed in your own wallet.
 
-## Surfaces
+## The whole product, in one line per surface
 
-Each surface: the idea, the product, the sponsors it uses, and what we build it with.
-
-| Surface | Idea | Product | Sponsors | Built with | Status |
-| --- | --- | --- | --- | --- | --- |
-| Landing page `/` | Explain it in one thread | Product story with a thread demo | — | Next.js | Done |
-| Web app `/app` (PWA) | One desk on laptop and phone | Sign in with X, wallet, order composer, open orders | Definitive Flash, Base | Next.js, Privy, viem | Real Flash orders with TP/SL; cancel + live stream open |
-| Chrome extension (main) | Trade where you read the call | Card under every call on X: caller's record, this call's move, copy with TP/SL, follow the caller | Definitive Flash, Base, Chainlink | Chrome MV3 content script + service worker, Privy/desk fallback for signing | v0.1 card + copy links; full card set below |
-| Follow platform `/creators`, `/app/following` | Following someone on X means following them here | Creator pages with a priced record, a Follow button, and a feed of calls from people you follow, one tap to copy | Base, Chainlink | Postgres (follows + stored calls), extension follow sync | Not started |
-| Android keyboard (mobile) | No extensions on phones, but every app has a keyboard | Keyboard with an Kallr row: caller's record for a pasted call, and "copy $5 tp 10% sl 5%" becomes a link to sign in the PWA | Definitive Flash, Base, Chainlink | Fork of FlorisBoard (Kotlin, Apache-2.0) + `/api/keyboard`; the keyboard never holds keys | Built (debug APK) |
-| X bot @Kallr (if time) | Tag it like @grok | Replies with the caller's after market; `copy …` replies get a link to approve | Definitive Flash, Base | X API, `kallr-xbot` | Built; needs X API keys and a live run |
-| Telegram bot | The "we call you back" channel | Same commands in DMs/groups; fill and exit alerts | — | Telegram Bot API | Not started |
-| Agent | Copy the callers you trust, within limits | Watches followed callers, places and exits trades, pays for data with x402 | Base, x402 | Flash, session keys | Not started |
-
-## Building blocks
-
-| Piece | Where it lands | Work for Kallr |
+| Surface | What it does | Status |
 | --- | --- | --- |
-| Chrome extension (trade cards on cashtags, creator badge, reputation, drawer) | `kallr-extension` | Flash ticket with TP/SL, after market badge |
-| Creator pages, methodology page | `kallr-webapp` | Next to the PWA desk |
-| Call classifier + scoring at expiry (`directional-return-v1`) | `packages/integrations` | Prices from Base / Chainlink |
-| Reputation tiers, red flags, view models | `packages/domain` | Ready |
-| X ID ↔ wallet identity binding (Privy, nonce/replay protection) | `packages/database` | Ready |
-| Postgres schema (drizzle) | `packages/database` | Add orders, bot users, Telegram links |
-| Post archive: public posts snapshotted on-chain (text hash + oEmbed) so deleted calls stay provable | `contracts/PostArchive.sol` | Deploy on Base |
-| MCP server for agents (unsigned trades + approval links) | `kallr-webapp/app/api/mcp` | Add Flash tools; the agent's toolset |
-| Envio indexer | `services/indexer` | Base: Flash fills, archive events (optional) |
+| **Chrome extension** (`kallr-extension`) | On x.com: the caller's record and the call's move under each call, a trade card with TP/SL, token checks on contract posts | Built |
+| **Web app** (`kallr-webapp`) | Desk at `/app` (type an order, sign, placed on Flash) and `/trades` (every trade and caller record, read from Arkiv) | Built; first funded mainnet order not run |
+| **Terminal** (`/terminal` in the web app) | Live calls, your trades, and a chat box for standing rules (see below) | Not started |
+| **Android keyboard** (`kallr-keyboard`) | A Kallr row in any app: paste a post link to see the record; `copy $5 tp 10% sl 5%` opens the desk to sign | Built (debug APK) |
 
-Ground rules: keep identity, call record and wallet returns separate; token amounts as bigint, never floats; no automatic signing; honest empty states.
+Rules that hold everywhere:
+
+- **The user signs every trade.** No agent wallet, no session keys, no auto-trading.
+- Approvals are sized to the order (`forceMinimalAllowance`), never unlimited.
+- We show records and checks, never advice.
+
+## Sponsors (max 3)
+
+1. **Definitive:** every trade is a Flash order on Base mainnet with an attached TP/SL bracket. The demo must show a real order.
+2. **Arkiv:** trades, calls and call results live on Arkiv (Rabdi testnet). Terminal rules go there next. See [arkiv/](../arkiv/schema.md).
+3. Third: undecided (ENS names on records, or none). Not built.
+
+## The Terminal
+
+One page that answers "what's happening, and what should Kallr do about it for me":
+
+```
+┌ LIVE CALLS ─────────────────────────┬ MY TRADES ───────────────────────────────┐
+│ @caller   $BTC ▲  2m ago   +0.4%     │ $5 BTC  TP 82,000 / SL 76,000   Working  │
+│ @caller2  $ETH ▼  9m ago   −1.1%     │ $20 ETH  TP hit +10%             Done     │
+│ [Copy] [Watch]                       │ History ▸                                 │
+├ CHAT ────────────────────────────────┴───────────────────────────────────────────┤
+│ > if @caller calls BTC, ask me to copy $10 tp 10% sl 5%                          │
+│ ✓ Rule: @caller · BTC · ask me · $10 · TP 10% / SL 5%                            │
+│ > ignore posts with a contract address                                           │
+│ ✓ Rule: any caller · contract posts · ignore                                     │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Live calls:** open `kallr.calls` from Arkiv (what the extension and keyboard have priced), with the move since posting.
+- **My trades:** `kallr.trades` for your wallet from Arkiv, with live status from Flash. This is what `/trades` already reads.
+- **Chat:** plain English becomes a stored rule. The rule is shown back so you can see what was understood, and a small
+  form does the same job without the chat.
+
+A rule matches on **caller, asset, direction**, plus optionally "record at least N% hit rate", and does one of three things:
+
+| Action | What happens |
+| --- | --- |
+| Notify me | A push notification: "@caller called BTC ▲" |
+| Ask me to approve | A notification with the order filled in; tapping it opens the desk to sign |
+| Ignore | Never show these calls |
+
+"Approve" never trades on its own: it opens the order and you sign. Rules are `kallr.rules` entities on Arkiv, owned by
+your wallet. They're matched when a new call is written to Arkiv. Notifications are Web Push from the installed PWA
+(Android and desktop; no Telegram, no app store).
+
+## Build next (in order)
+
+1. [ ] **First real Flash order on Base mainnet.** Needs a Privy app ID and a funded wallet (~$20 USDC + ~$1 of ETH for gas). Record it for the demo.
+2. [ ] **Terminal, read-only:** `/terminal` with live calls and my trades from Arkiv + Flash (reuse `/trades` reads).
+3. [ ] **Rules:** `kallr.rules` schema on Arkiv, form + chat to create them, list and delete.
+4. [ ] **Matching + notifications:** on each new call, match rules; Web Push for notify and approve; approve opens `/app?order=…`.
+5. [ ] **Deploy** the web app (Vercel project `kallr`, HTTPS for the PWA) and allow its origin in Privy.
+6. [ ] **Demo video:** call on X → card → copy → signed Flash order on Base → shows on Arkiv and in the Terminal. Post on Discord and X, tagging @DefinitiveFi.
+
+## Done
+
+- Flash client: quote → approve (minimal) → sign entry + TP/SL → submit (`packages/integrations/src/definitive.ts`, `/api/flash/*`)
+- Desk order parser and composer, open orders from Flash
+- Call classifier and scoring at expiry (`directional-return-v1`, Chainlink prices on Base)
+- Extension: trade card, ticker Buy button, record panel, call-check drawer, profile card, follows, MetaMask/Rabby signing, popup
+- Token safety checks (GoPlus, Dexscreener) and caller wallet check (Etherscan V2, needs a free key)
+- Arkiv: `kallr.trades`, `kallr.calls`, `kallr.call-results`, `/trades` dashboard reading Arkiv from the browser, `/api/arkiv/score`
+- Android keyboard row and `/api/keyboard`
+
+## Parked (code may exist, not part of the demo)
+
+| Item | Why parked |
+| --- | --- |
+| X bot (`kallr-xbot`) | Code works in dry run; a live run costs X API credits and isn't needed for the demo |
+| Telegram bot, MCP, agents, x402 | Replaced by the Terminal's rules + notifications, which keep the user signing |
+| Postgres / AWS (`packages/database`) | Arkiv is the store |
+| Chainlink CRE, PostArchive contract, Envio | Not needed to show the product working |
+| World ID | Not one of our three sponsors |
+| Cancel from the desk, orders WebSocket | Nice to have; polling works |
+| Android Share target in the PWA | The keyboard already covers Android |
 
 ## Repo layout
 
 ```
-apps/
-  web/            Next.js PWA: landing, /app desk, creator + methodology pages
-  extension/      Chrome MV3 extension, Flash ticket
-services/
-  x-bot/          mention poller + reply writer
-  telegram-bot/   bot + alerts
-  agent/          order executor + exit watcher, x402 client
-  indexer/        Envio (optional)
+kallr-webapp/     Next.js PWA: landing (/), desk (/app), /trades, API routes (Flash, after market, checks, Arkiv, keyboard)
+kallr-extension/  Chrome MV3 extension for x.com
+kallr-keyboard/   Android keyboard (FlorisBoard fork) with the Kallr row
+kallr-xbot/       X bot (parked)
 packages/
-  domain/         reputation, signals, view models, order parser
-  integrations/   calls, scoring, signals, definitive.ts, chainlink.ts
-  database/       identity, schema, orders, bot users
-contracts/        PostArchive.sol on Base
-cre/              Chainlink CRE workflows (last)
-docs/
+  domain/         order parser, reputation, signals
+  integrations/   call scoring, after market, Definitive Flash, Arkiv, safety checks, X API
+  database/       Postgres schema (parked)
+arkiv/            Arkiv schema and judging notes
+docs/             this plan, brand
 ```
-
-## Build order
-
-### 0. Restructure (before anything else)
-- [x] Convert this repo to an npm workspace; move the PWA to `kallr-webapp`
-- [x] Add `packages/domain`, `packages/integrations` (calls, scoring, signals), `packages/database`
-- [x] Move `lib/order.ts` into `packages/domain`
-
-### 1. Definitive Flash execution (first)
-- [x] Flash client: quote → fund → user signs (Privy wallet) → submit (`packages/integrations/src/definitive.ts`, `/api/flash/*`)
-- [x] `attachedBracket` for TP/SL on each buy; approvals sized per order (`forceMinimalAllowance`)
-- [x] Composer places real orders; open orders read from Flash
-- [x] USDC approval flow and low-gas warning
-- [ ] First real order on Base mainnet from a funded wallet (not yet run)
-- [x] Order status: pending, working, filled, exits armed, cancelled
-- [ ] Cancel from the desk (needs a funder-signed cancel message)
-- [ ] Orders WebSocket instead of 15s polling
-
-### 2. Call data
-- [ ] Wire the imported classifier + scoring into the desk and bot
-- [ ] Market list: Base tokens tradable on Flash
-- [ ] Price each call at post time and store it: post id, handle, asset, direction, price, time
-- [ ] "After market" card: hit rate, median return, last N calls with outcomes
-- [ ] Keep identity, call outcomes and wallet returns as separate signals; never blend into one score
-
-### 3. X bot
-- [ ] X API access for the bot account (Basic tier or higher for mentions + user posts); keys go in `kallr-xbot/.env`. Scraping X breaks their terms and gets accounts banned: use the API for the bot, scraping only for offline backfill if at all
-- [x] Poll mentions → parse the parent post (call) → reply with the after market (text; `kallr-xbot`)
-- [x] Caller record scored on the fly from their recent posts (`after-market.ts`); move to the database once it is live
-- [ ] After market card as an image
-- [x] `copy …` replies → parse with `parseOrder`, take the call's asset → link that opens the desk prefilled to review and sign
-- [x] Never trade without an explicit signature from the user's wallet
-- [ ] First live run with the bot account (dry run first, then X_BOT_POST=1)
-- [ ] Archive each call the bot sees (post archive step)
-
-### 4. Telegram bot
-- [ ] `/link` to connect a Telegram chat to the Kallr account
-- [ ] `/after @handle`, `/copy <post url> $2 tp 10% sl 5%`
-- [ ] Push alerts: filled, TP hit, SL hit (this is the "we call you back"; voice call via Twilio is a stretch goal)
-
-### 5. Chrome extension: full card set, one commit per piece
-Built on Base + Flash; keep v0.1's card and copy links working at every step.
-- [x] 1. Shared plumbing: `dom.ts` (messaging, shadow roots), `styles.ts`, `config.ts`; move the v0.1 card onto it
-- [x] 2. Ticker detection + live price: `x-ticker.ts`, `ticker-price.ts` (Chainlink/Flash)
-- [x] 3. Richer record: `card-metrics.ts` + `record-panel.ts` (hit rate, median, profit factor, by-asset breakdown, honest caveats). Tiers and deleted-post flags wait for server-stored calls (5b); Nansen `risk-line.ts` skipped
-- [x] 4. Call check drawer: `drawer.ts` + `call-view.ts` (post text, this call's prices and horizon, record, recent calls with links, copy buttons); renders from the card's data, no extra request
-- [x] 5. Profile card with Follow + Following chip on bylines: `profile.ts`, `follows.ts`, `creator-badge.ts`, `watchlist-storage.ts` (follows kept in the extension until `/api/follows`); wallet-linked badge waits for an identity API
-- [x] UI: post card = swap card (price header, Call check strip, Buy/Sell, You pay / You receive, TP/SL chips, Powered by footer) on Flash + Base; ⇄ Buy inside X's ticker cards; profile card with metric tiles and Open desk / Show details / Follow. Text wordmark until the Kallr logo arrives
-- [x] 6. Follows synced with the web app: `app-bridge.ts` (app origin only, nonce, follow commands only) + desk **Following** section (`components/following.tsx`, `lib/follows.ts`); browser-only fallback without the extension
-- [x] 7. Follow on X = follow here (opt-in switch in the desk): `follow-observer.ts` reads X's Follow/Following buttons on profiles and your Following page; `follow-sync.ts` adds on X follow and removes on X unfollow only callers X added. No X API, no cookies
-- [x] 8. Sign Flash orders on X with MetaMask/Rabby: `wallet-bridge.ts` (main world, fixed method list + eth_signTypedData_v4), `wallet.ts`, `flash-direct.ts` (connect → switch to Base → quote → approve → sign order + exits → submit through the app's /api/flash routes); no browser wallet → desk with Privy
-- [x] 9. Toolbar popup: app reachable, Chainlink prices, Flash on Base, follow count, follow-on-X setting, Open desk
-- Out of scope for now: perps, image-post classification. Token risk is covered by the GoPlus/Dexscreener safety checks
-- [ ] Load unpacked for the demo
-
-### 5b. Follow platform
-- [ ] Store scored calls in Postgres from `/api/after-market` (today they live only in each browser, so creator pages would be empty); or Arkiv as the shared store
-- [ ] `follows` table + `/api/follows`, tied to the X account through the Privy identity binding
-- [ ] `/creators` (list + search) and `/creators/[handle]` (record, calls, Follow, Copy), same look as the desk
-- [ ] `/app/following`: calls from people you follow, newest first, one tap to copy
-- [ ] Extension Follow button and X follow sync write to `/api/follows` when signed in
-
-### 5c. Android keyboard
-- [x] `kallr-keyboard`: FlorisBoard fork with an Kallr row above the Smartbar
-- [x] Copy or select a post link → the call's after market and caller's record from `/api/keyboard`
-- [x] Type `copy $5 tp 10% sl 5%` → opens the PWA desk prefilled to sign; the keyboard never holds keys
-
-### 6. Agent + payments
-- [ ] Agent loop: watch new calls from followed KOLs, apply user rules (max size, only KOLs with hit rate > X), place orders through Flash within a pre-approved budget
-- [ ] Payments with x402: the agent pays per request for call data and scoring, and KOLs can charge for premium calls
-- [ ] Session keys / spend limits on the embedded wallet so the agent can't drain it
-
-### 7. Post archive
-- [ ] Deploy `PostArchive.sol` on Base
-- [ ] Bot archives every call it's tagged under (text hash + public oEmbed snapshot), so a deleted call still has a record
-- [ ] After market card links each call to its archive transaction
-
-### 8. Chainlink CRE (last)
-- [ ] CRE workflow that scores calls at expiry using Chainlink price feeds and writes the result on-chain, so track records are verifiable, not just our database
-- [ ] CRE workflow as the exit watcher: trigger TP/SL settlement from Chainlink prices
-- [ ] Price feed already wired: ETH/USD on Base `0x7104…Bb70`
-
-## Ship checklist
-- [ ] Deploy web to Vercel (PWA works only on HTTPS)
-- [ ] Privy app: X + email login, embedded wallets, production origin allowed
-- [ ] X developer app + bot account; Telegram bot token
-- [ ] Extension packed and loaded unpacked for the demo (Chrome Web Store review is too slow for the hackathon)
-- [ ] Demo script: tag bot under a real call → reply → copy → fill on Base → TP alert on Telegram

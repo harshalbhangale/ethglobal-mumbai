@@ -9,7 +9,7 @@
 - **Callers with a good record.** A record that is read-only and public is something they can point to.
 - **Other apps.** Anything that wants caller records or trade history can read the same entities.
 
-TODO(team): numbers, e.g. how many people used Xtrading before the event, waitlist or demo users, the accounts we tested with.
+TODO(team): numbers, e.g. how many people used our earlier extension before the event, waitlist or demo users, the accounts we tested with.
 
 ## Can they try it today?
 
