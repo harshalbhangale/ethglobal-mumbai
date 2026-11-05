@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Logo, LogoMark } from "@/components/logo";
 import { SignInButton, WithSession, type Session } from "@/components/auth";
@@ -76,6 +77,13 @@ function Desk({ session }: { session: Session }) {
               {item.label}
             </a>
           ))}
+          <div className="my-2 border-t border-rule" />
+          <Link href="/dashboard" className="rounded-lg px-3 py-2 text-[15px] text-slate hover:text-ink">
+            Dashboard
+          </Link>
+          <Link href="/trades" className="rounded-lg px-3 py-2 text-[15px] text-slate hover:text-ink">
+            Trade history
+          </Link>
         </nav>
         <div className="mt-auto space-y-3">
           <InstallButton />
