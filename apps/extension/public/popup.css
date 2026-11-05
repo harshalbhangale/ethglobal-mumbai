@@ -79,3 +79,7 @@ a:focus-visible {
 #status b.off {
   color: #ff8a7a;
 }
+#status b.pending {
+  color: #8b978d;
+  font-weight: 500;
+}
