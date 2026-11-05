@@ -18,7 +18,7 @@ describe("shadowHost", () => {
     document.body.style.backgroundColor = "rgb(0, 0, 0)";
     const { host, root } = shadowHost("aftermarkets-host");
     expect(host.dataset.theme).toBe("dark");
-    expect(root.querySelector("style")?.textContent).toContain("--bg");
+    expect(root.querySelector("style")?.textContent).toContain("--surface");
     const outer = vi.fn();
     const parent = el("div");
     parent.addEventListener("click", outer);

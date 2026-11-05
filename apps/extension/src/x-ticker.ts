@@ -1,16 +1,20 @@
-import { appOrigin } from "./config";
-import { el, openDesk, shadowHost } from "./dom";
-import { deskUrl } from "./post";
+import { el, shadowHost } from "./dom";
 import { tickerCards } from "./ticker-price";
+
+export { ALIASES } from "./ticker-price";
 
 /** X cashtag symbols that map to an asset the desk trades on Base through Flash. */
 const ASSETS = { ETH: "ETH", WETH: "ETH", BTC: "BTC", WBTC: "BTC", CBBTC: "BTC" } as const;
 type TickerSymbol = keyof typeof ASSETS;
 export type TickerAsset = (typeof ASSETS)[TickerSymbol];
 
-export const ALIASES: Record<TickerAsset, string[]> = { ETH: ["WETH"], BTC: ["WBTC", "CBBTC"] };
-
-export type XTickerCard = { link: HTMLElement; symbol: TickerSymbol; asset: TickerAsset };
+export type XTickerCard = {
+  link: HTMLElement;
+  /** X's carousel block; our attached card goes right after it. */
+  container: HTMLElement;
+  symbol: TickerSymbol;
+  asset: TickerAsset;
+};
 
 /**
  * X renders a ticker card (name, live price, 24h change, sparkline) in a ScrollSnap carousel for
@@ -21,7 +25,8 @@ export function findXTicker(article: HTMLElement): XTickerCard | null {
   for (const { link, texts } of tickerCards(article)) {
     if (!texts.some((t) => /^\$[0-9,]+(\.[0-9]+)?$/.test(t))) continue;
     const symbol = texts.map((t) => t.toUpperCase()).find((t): t is TickerSymbol => t in ASSETS);
-    if (symbol) return { link, symbol, asset: ASSETS[symbol] };
+    const container = link.closest("nav")?.parentElement ?? link.parentElement;
+    if (symbol && container) return { link, container, symbol, asset: ASSETS[symbol] };
   }
   return null;
 }
@@ -37,29 +42,21 @@ function pin(link: HTMLElement, host: HTMLElement) {
 }
 
 /**
- * Puts a "Copy on Base" button inside X's ticker card. It opens the desk prefilled with the asset
- * and default exits; the user sets the amount and signs there. Idempotent per card, and restores
- * itself when X re-renders the card.
+ * Puts a "⇄ Buy" button inside X's ticker card, as Xtrading does. Idempotent per card; restores
+ * itself when X re-renders the card. The button never lets the click navigate X's link.
  */
-export function attachToXTicker(article: HTMLElement, post: { postId: string; handle: string }) {
-  const card = findXTicker(article);
-  if (!card) return null;
-  if (card.link.querySelector(".aftermarkets-xbuy")) return card;
-
+export function mountTickerButton(card: XTickerCard, onOpen: () => void) {
+  if (card.link.querySelector(".aftermarkets-xbuy")) return;
   const { host, root } = shadowHost("aftermarkets-xbuy");
-  host.style.marginTop = "0";
-  const button = el("button", { class: "primary", type: "button" }, "Copy on Base");
-  root.append(button);
-  // The button sits inside X's link: never let the click or keypress navigate.
+  root.append(el("button", { class: "xbuy", type: "button" }, "⇄ Buy"));
   for (const type of ["click", "mousedown", "pointerdown", "keydown"])
     host.addEventListener(type, (event) => {
       if (type === "keydown" && (event as KeyboardEvent).key !== "Enter") return;
       event.stopPropagation();
       if (type === "click" || type === "keydown") {
         event.preventDefault();
-        openDesk(deskUrl(appOrigin, card.asset, null, post));
+        onOpen();
       }
     });
   pin(card.link, host);
-  return card;
 }

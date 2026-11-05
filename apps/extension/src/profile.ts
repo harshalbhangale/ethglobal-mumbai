@@ -1,8 +1,9 @@
+import { recentCalls } from "./call-insights";
 import type { SeenCall } from "./card-metrics";
-import { el, send, shadowHost } from "./dom";
-import { recentCalls } from "./drawer";
+import { appOrigin } from "./config";
+import { el, poweredBy, safeLink, send, shadowHost } from "./dom";
 import { followButton } from "./follows";
-import { recordPanel } from "./record-panel";
+import { breakdown, recordPanel } from "./record-panel";
 
 /** First path segments on x.com that are app pages, not profiles. */
 const RESERVED = new Set([
@@ -34,8 +35,9 @@ function mount(anchor: HTMLElement, host: HTMLElement) {
 type RecordAnswer = { calls?: SeenCall[]; seen?: number };
 
 /**
- * The AfterMarkets card on an X profile: Follow, the caller's record and their recent calls, from
- * the posts this browser has seen. Refreshes at most once a minute per profile.
+ * The AfterMarkets card on an X profile, laid out like Xtrading's: the caller's record as metric
+ * tiles, recent calls, and Open desk / Show details / Follow. From the posts this browser has seen.
+ * Refreshes at most once a minute per profile.
  */
 export async function scanProfile() {
   const handle = profileHandle();
@@ -48,36 +50,59 @@ export async function scanProfile() {
   const anchor = document.querySelector<HTMLElement>('[data-testid="primaryColumn"] [data-testid="UserName"]');
   if (!anchor) return;
   if (existing && Number(existing.dataset.refreshAt) > Date.now()) return;
+  const expanded = existing?.dataset.expanded === "true";
   existing?.remove();
 
   const { host, root } = shadowHost("aftermarkets-profile-host");
   host.dataset.handle = handle;
   host.dataset.refreshAt = String(Date.now() + 60_000);
-  host.style.margin = "12px 16px";
-  const body = el("div", {}, el("p", { class: "note" }, "Loading the calls this browser has seen…"));
-  const follow = followButton(handle, (label) => el("button", { type: "button" }, label) as HTMLButtonElement);
-  const card = el(
-    "div",
-    { class: "card" },
-    el("div", { class: "top" }, el("span", { class: "brand" }, "AfterMarkets"), follow),
-    body,
+  const details = el("div", {}, el("p", { class: "note" }, "Loading the calls this browser has seen…"));
+  const toggle = el("button", { type: "button", class: "card-toggle", "aria-expanded": "false" }, "Show details");
+  const overview = el("div", { class: "card-overview", hidden: "" });
+  const follow = followButton(handle, (label) => el("button", { type: "button", class: "card-follow" }, label) as HTMLButtonElement);
+  let calls: SeenCall[] = [];
+  const setOpen = (open: boolean) => {
+    overview.hidden = !open;
+    host.dataset.expanded = String(open);
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.textContent = open ? "Hide details" : "Show details";
+    if (open) overview.replaceChildren(breakdown(calls));
+  };
+  toggle.addEventListener("click", () => setOpen(overview.hidden));
+  root.append(
+    el(
+      "div",
+      { class: "card" },
+      el("div", { class: "title" }, "AfterMarkets"),
+      details,
+      el(
+        "div",
+        { class: "card-actions" },
+        safeLink(new URL("/app", appOrigin).href, "Open desk ↗", "cta"),
+        toggle,
+        follow,
+      ),
+      overview,
+      poweredBy(),
+    ),
   );
-  root.append(card);
   mount(anchor, host);
 
   const answer = await send<RecordAnswer>({ type: "caller-record", handle });
   if (!host.isConnected || profileHandle() !== handle) return;
-  const calls = answer?.calls ?? [];
-  body.replaceChildren(
+  calls = answer?.calls ?? [];
+  details.replaceChildren(
     ...(answer
-      ? [recordPanel(handle, calls), ...(calls.length ? [recentCalls(handle, calls, 5)] : [])]
+      ? [recordPanel(calls)]
       : [el("p", { class: "note" }, "Couldn't load the record. Try again in a minute.")]),
     el(
       "p",
       { class: "note" },
       answer?.seen
-        ? `From ${answer.seen} post${answer.seen === 1 ? "" : "s"} by @${handle} this browser has seen, priced at posting. Not wallet returns.`
+        ? `Detected from ${answer.seen} post${answer.seen === 1 ? "" : "s"} by @${handle} this browser has seen. Priced at posting; not wallet returns.`
         : `No posts by @${handle} seen yet. Scroll their posts and calls get priced as they appear.`,
     ),
+    ...(calls.length ? [recentCalls(handle, calls, 3) as HTMLElement] : []),
   );
+  if (expanded) setOpen(true);
 }

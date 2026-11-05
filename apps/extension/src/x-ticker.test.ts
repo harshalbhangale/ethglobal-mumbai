@@ -39,28 +39,25 @@ describe("findXTicker", () => {
   });
 });
 
-describe("attachToXTicker", () => {
-  it("pins one Copy button in the card that opens the desk without navigating X", async () => {
-    const open = vi.fn();
-    vi.stubGlobal("open", open);
-    const { attachToXTicker } = await import("./x-ticker");
+describe("mountTickerButton", () => {
+  it("pins one ⇄ Buy button in X's card that opens ours without navigating X", async () => {
+    const { findXTicker, mountTickerButton } = await import("./x-ticker");
     document.body.innerHTML = xCard("ETH");
-    const post = { postId: "2110056722328908098", handle: "kol" };
-    expect(attachToXTicker(article(), post)).not.toBeNull();
-    attachToXTicker(article(), post);
-    const hosts = article().querySelectorAll(".aftermarkets-xbuy");
+    const card = findXTicker(article());
+    if (!card) throw new Error("no ticker");
+    expect(card.container.querySelector("nav")).not.toBeNull();
+    const onOpen = vi.fn();
+    mountTickerButton(card, onOpen);
+    mountTickerButton(card, onOpen);
+    const hosts = article().querySelectorAll<HTMLElement>(".aftermarkets-xbuy");
     expect(hosts).toHaveLength(1);
+    expect(hosts[0]?.shadowRoot?.querySelector("button")?.textContent).toBe("⇄ Buy");
 
-    const link = article().querySelector("a") as HTMLElement;
     const navigated = vi.fn();
-    link.addEventListener("click", navigated);
-    (hosts[0] as HTMLElement).click();
+    card.link.addEventListener("click", navigated);
+    hosts[0]?.click();
     expect(navigated).not.toHaveBeenCalled();
-    expect(open).toHaveBeenCalledOnce();
-    const url = new URL(open.mock.calls[0]?.[0] as string);
-    expect(url.origin).toBe("https://aftermarkets.test");
-    expect(url.searchParams.get("order")).toContain("ETH");
-    expect(url.searchParams.get("caller")).toBe("kol");
+    expect(onOpen).toHaveBeenCalledOnce();
   });
 });
 

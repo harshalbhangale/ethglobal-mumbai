@@ -129,11 +129,18 @@ describe("scanProfile", () => {
     const hosts = document.querySelectorAll<HTMLElement>(".aftermarkets-profile-host");
     expect(hosts).toHaveLength(1);
     expect(hosts[0]?.nextElementSibling?.getAttribute("role")).toBe("tablist");
-    const text = hosts[0]?.shadowRoot?.textContent ?? "";
-    expect(text).toContain("Follow");
+    const root = hosts[0]?.shadowRoot;
+    const text = root?.textContent ?? "";
+    expect(root?.querySelector(".card .title")?.textContent).toBe("AfterMarkets");
+    expect(root?.querySelector(".card-follow")?.textContent).toBe("Follow");
+    expect(root?.querySelector(".card-actions .cta")?.getAttribute("href")).toBe("https://aftermarkets.test/app");
     expect(text).toContain("1/1");
-    expect(text).toContain("From 3 posts by @kol");
-    expect(hosts[0]?.shadowRoot?.querySelector(".calls a")?.getAttribute("href")).toBe("https://x.com/kol/status/9");
+    expect(text).toContain("Detected from 3 posts by @kol");
+    expect(root?.querySelector(".recent-calls a")?.getAttribute("href")).toBe("https://x.com/kol/status/9");
+    const toggle = root?.querySelector<HTMLElement>(".card-toggle");
+    toggle?.click();
+    expect(toggle?.textContent).toBe("Hide details");
+    expect(root?.querySelector(".card-overview")?.textContent).toContain("$ETH bullish1/1 moved their way");
   });
   it("is honest when nothing has been seen, and leaves non-profile pages alone", async () => {
     await wire({ calls: [], seen: 0 });

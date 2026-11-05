@@ -10,7 +10,7 @@ import {
   statTiles,
   worstCall,
 } from "./card-metrics";
-import { recordPanel } from "./record-panel";
+import { breakdown, recordPanel } from "./record-panel";
 
 let id = 0;
 const call = (status: SeenCall["status"], returnBps: number | null, asset = "ETH", direction: "up" | "down" = "up"): SeenCall => ({
@@ -86,13 +86,35 @@ describe("tiles and caveats", () => {
 });
 
 describe("recordPanel", () => {
-  it("renders tiles, caveats and the breakdown as text", () => {
-    const panel = recordPanel("kol", record);
-    expect(panel.querySelectorAll(".tile")).toHaveLength(3);
-    expect(panel.querySelector(".chips")?.textContent).toContain("Worst call");
-    expect(panel.querySelector("details")?.textContent).toContain("$BTC down");
+  it("renders Xtrading-style stat tiles and caveat rows", () => {
+    const panel = recordPanel(record);
+    const tiles = [...panel.querySelectorAll(".stat-tile")].map((t) => [
+      t.querySelector(".stat-value")?.textContent,
+      t.querySelector(".stat-label")?.textContent,
+    ]);
+    expect(tiles).toEqual([
+      ["8", "Detected calls"],
+      ["3/6", "Moved their way"],
+      ["+0.4%", "Median since post"],
+      ["6", "Bullish"],
+      ["2", "Bearish"],
+    ]);
+    expect(panel.querySelector(".stat-tile.good .stat-label")?.textContent).toBe("Median since post");
+    const rows = panel.textContent ?? "";
+    expect(rows).toContain("Profit factor0.32");
+    expect(rows).toContain("Worst call−15.0% on $ETH");
+    // Sample is 6 scored, above the minimum, so no "too few" row; unpriced calls go to No data.
+    expect(rows).not.toContain("too few");
+    expect(panel.querySelector(".unavailable summary")?.textContent).toBe("No data · 1");
   });
-  it("says so plainly when nothing is scored", () => {
-    expect(recordPanel("kol", [call("open", 5)]).textContent).toBe("@kol: no scored calls seen yet · 1 open");
+  it("puts what can't be computed in the No data dropdown, never as zero", () => {
+    const panel = recordPanel([call("open", 5)]);
+    expect(panel.querySelector(".unavailable summary")?.textContent).toBe("No data · 3");
+    expect(panel.textContent).toContain("1 still open");
+    expect(panel.textContent).toContain("0 scored · too few to judge");
+  });
+  it("breaks the record down by asset and direction", () => {
+    expect(breakdown(record).textContent).toContain("$BTC bearish1/2 moved their way · median +0.2%");
+    expect(breakdown([]).textContent).toBe("Nothing scored yet to break down.");
   });
 });
