@@ -1,4 +1,16 @@
+import { FLASH_PUBLIC_DEV_KEY, flashClient } from "@kallr/integrations/definitive";
 import { errorResponse, flash } from "@/lib/server/flash";
+
+/** Some integrator keys aren't enabled for search (403 SEARCH_NOT_ELIGIBLE); the public key is. */
+const publicFlash = flashClient({ apiKey: FLASH_PUBLIC_DEV_KEY });
+async function search(q: string) {
+  try {
+    return await flash.search(q, 8);
+  } catch (err) {
+    if ((err as { status?: number }).status === 403 || /NOT_ELIGIBLE/i.test(String((err as Error).message))) return publicFlash.search(q, 8);
+    throw err;
+  }
+}
 
 /**
  * Token search for the extension's token picker and the desk: symbol, name or a pasted contract
@@ -17,7 +29,7 @@ export async function GET(req: Request) {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return Response.json({ tokens: hit.tokens });
   try {
-    const tokens = (await flash.search(q, 8)).map((t) => ({
+    const tokens = (await search(q)).map((t) => ({
       address: t.address,
       symbol: t.symbol,
       name: t.name ?? t.symbol,
