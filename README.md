@@ -27,6 +27,17 @@ In the Privy dashboard: enable **Twitter** and **Email** login, enable **embedde
 
 The service worker only registers in production builds: `npm run build && npm start` to test install.
 
+## Chrome extension
+
+On x.com, posts that are crypto calls get an AfterMarkets card: the caller's record (from their calls seen in this browser), this call's move since posting, and Copy buttons that open the desk prefilled to review and sign.
+
+```sh
+npm run build -w @aftermarkets/extension          # for http://localhost:3000
+AFTERMARKETS_APP_ORIGIN=https://your-app.example npm run build -w @aftermarkets/extension
+```
+
+Then chrome://extensions → Developer mode → Load unpacked → `apps/extension/dist`.
+
 ## The X bot
 
 Tag @AfterMarkets under a call and it replies with the caller's record and how this call played out. Reply `copy $2, TP 10%, SL 5%` and it answers with a link to the desk, where you review and sign the order in your own wallet. The bot never trades.
@@ -47,6 +58,7 @@ The mentions loop needs an X API plan that includes reading mentions and user po
 ```
 apps/
   web/                Next.js PWA: landing (/), desk (/app), Privy, PWA manifest + service worker
+  extension/          Chrome extension for x.com: after market cards and copy buttons
 services/
   x-bot/              @AfterMarkets on X: after market replies, copy links to the desk
 packages/
