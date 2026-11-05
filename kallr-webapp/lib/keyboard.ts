@@ -9,6 +9,7 @@ import {
 import { parsePostUrl } from "@kallr/integrations/calls";
 import type { TokenCheck } from "@kallr/integrations/safety-checks";
 import { tokenReferences } from "@kallr/integrations/token-references";
+import type { CallRead } from "./server/ai";
 
 /**
  * What the Kallr row on the Android keyboard shows. The keyboard sends what's on
@@ -34,6 +35,19 @@ export type KeyboardResponse = {
   token: { address: string; symbol: string | null; warnings: string[]; line: string } | null;
   /** What the trade panel can buy for this call: ETH/BTC or a liquid, unflagged Base token. */
   trade: { token: string; symbol: string; price: number; logo: string | null } | null;
+  /** The AI's one-line read of the message (coin, direction, timeframe), when the AI layer is on. */
+  ai: { summary: string; symbol: string | null; direction: "up" | "down" | null; timeframe: string | null } | null;
+  /** A shared contract that claims a ticker but isn't the main token with that ticker on Base. Blocks the trade. */
+  fake: { claimed: string; contract: string; real: string } | null;
+  /** An order the message or the typed line asks for, to fill the trade panel. */
+  prefill: {
+    kind: "swap" | "limit" | "twap" | null;
+    usd: number | null;
+    limitPct: number | null;
+    twapMinutes: number | null;
+    tpPct: number | null;
+    slPct: number | null;
+  } | null;
   order:
     | { ok: true; text: string; summary: string; tradable: boolean; deskUrl: string }
     | { ok: false; error: string }
@@ -48,7 +62,20 @@ export type KeyboardDeps = {
   checkToken: (address: string) => Promise<TokenCheck | null>;
   /** The Base token a ticker means, or null when there's no liquid, unflagged match. */
   findTradeToken?: (symbol: string) => Promise<{ token: string; symbol: string; price: number; logo: string | null } | null>;
+  /** The AI layer: reads coin, contract, direction and any order from a message. */
+  readCall?: (text: string) => Promise<CallRead | null>;
 };
+
+/** Base contracts for the ETH and BTC keys, so "real" comparisons work for them too. */
+const CORE_ADDRESS: Record<string, string> = {
+  ETH: "0x4200000000000000000000000000000000000006",
+  BTC: "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+};
+
+/** Worth sending to the AI: a post we fetched, a $CASHTAG, a contract, or a trade instruction. */
+export function looksCrypto(text: string): boolean {
+  return /\$[A-Za-z][A-Za-z0-9]{1,9}\b|0x[0-9a-fA-F]{40}|\b(buy|sell|ape|long|short|bucks|usd|dollars?)\b/i.test(text);
+}
 
 /** The first $CASHTAG in a post, for calls on coins we can't score (no price feed) but can still trade. */
 export function firstCashtag(text: string): string | null {
@@ -69,7 +96,7 @@ export function typedOrder(typed: string): string | null {
   if (last?.index === undefined) return null;
   const candidate = line.slice(last.index).trim();
   // A sentence that merely says "buy" isn't an order; one with a dollar amount or "my <asset>" is.
-  return /\$\s*\d|\bmy\s+\$?[a-z]/i.test(candidate) ? candidate : null;
+  return /\$\s*\d|\bmy\s+\$?[a-z]|\d+\s*(?:bucks|usd|dollars?)\b/i.test(candidate) ? candidate : null;
 }
 
 export function deskUrl(appOrigin: string, order: string, post: CallPost | null) {
@@ -98,7 +125,17 @@ export function tokenLine(t: TokenCheck): { warnings: string[]; line: string } {
 
 export async function keyboardLookup(req: KeyboardRequest, deps: KeyboardDeps): Promise<KeyboardResponse> {
   const text = req.text?.trim() ?? "";
-  const out: KeyboardResponse = { post: null, call: null, record: null, token: null, trade: null, order: null };
+  const out: KeyboardResponse = {
+    post: null,
+    call: null,
+    record: null,
+    token: null,
+    trade: null,
+    ai: null,
+    fake: null,
+    prefill: null,
+    order: null,
+  };
 
   // 1. A copied X post link: read the post, score the call, and the caller's record.
   const link = POST_LINK.exec(text)?.[0];
@@ -133,21 +170,47 @@ export async function keyboardLookup(req: KeyboardRequest, deps: KeyboardDeps): 
     }
   }
 
-  // 2. A contract address, in the post or pasted on its own: check the token.
-  const evm = tokenReferences(postText || text).find((r) => r.kind === "evm");
-  if (evm) {
-    const check = await deps.checkToken(evm.address).catch(() => null);
-    if (check) out.token = { address: check.address, symbol: check.symbol, ...tokenLine(check) };
+  // 2. The AI read: a post we fetched, or a pasted message (Telegram, a tweet's text) that looks like crypto.
+  const source = postText || (link ? "" : text);
+  const read = source && deps.readCall && (postText || looksCrypto(source)) ? await deps.readCall(source).catch(() => null) : null;
+  if (read) {
+    out.ai = { summary: read.summary, symbol: read.symbol, direction: read.direction, timeframe: read.timeframe };
+    if (read.order) out.prefill = read.order;
   }
 
-  // 3. What the trade panel can buy. Never next to a shared contract (that gets the token check instead).
-  const symbol = out.call?.asset ?? (postText ? firstCashtag(postText) : null);
-  if (symbol && !out.token && deps.findTradeToken) {
+  // 3. A contract address, in the post or pasted on its own: check the token, and whether it's the real one.
+  const evm = tokenReferences(postText || text).find((r) => r.kind === "evm");
+  let check: TokenCheck | null = null;
+  if (evm) {
+    check = await deps.checkToken(evm.address).catch(() => null);
+    if (check) out.token = { address: check.address, symbol: check.symbol, ...tokenLine(check) };
+  }
+  const claimed = read?.symbol ?? firstCashtag(source) ?? check?.symbol?.toUpperCase() ?? null;
+  if (evm && claimed && deps.findTradeToken) {
+    const real = await deps.findTradeToken(claimed).catch(() => null);
+    const realAddress = real ? (CORE_ADDRESS[real.token] ?? real.token) : null;
+    if (real && realAddress) {
+      if (realAddress.toLowerCase() === evm.address.toLowerCase()) {
+        if (!check?.flags.some((f) => f.severity === "danger")) out.trade = real;
+      } else {
+        out.fake = { claimed, contract: evm.address, real: realAddress };
+      }
+    }
+  }
+
+  // 4. What the trade panel can buy. A shared contract only trades when it is the real token.
+  const symbol = out.call?.asset ?? read?.symbol ?? (source ? firstCashtag(source) : null);
+  if (symbol && !evm && deps.findTradeToken) {
     out.trade = await deps.findTradeToken(symbol).catch(() => null);
   }
 
-  // 4. An order being typed: parse it and hand back a desk link to sign.
+  // 5. An order being typed: the AI reads plain words ("buy 20 bucks of degen if it dips 10%") into the panel.
   const typed = req.typed ? typedOrder(req.typed) : null;
+  if (typed && deps.readCall) {
+    const said = await deps.readCall(typed).catch(() => null);
+    if (said?.order) out.prefill = said.order;
+    if (said?.symbol && !out.trade && !evm && deps.findTradeToken) out.trade = await deps.findTradeToken(said.symbol).catch(() => null);
+  }
   if (typed) {
     const parsed = parseOrder(typed);
     if (!parsed.ok) {

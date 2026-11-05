@@ -88,3 +88,64 @@ describe("keyboardLookup", () => {
     expect(r.order).toEqual({ ok: false, error: "Amount must be more than $0." });
   });
 });
+
+describe("AI layer and fake contracts", () => {
+  const REAL = "0x1111111111111111111111111111111111111111";
+  const FAKE = "0x2222222222222222222222222222222222222222";
+  const pepe = { token: REAL, symbol: "PEPE", price: 0.00001, logo: null };
+  const read = (over: Record<string, unknown> = {}) => ({
+    isCall: true,
+    symbol: "PEPE",
+    contract: null,
+    chain: "base",
+    direction: "up" as const,
+    timeframe: "by Friday",
+    order: null,
+    summary: "$PEPE bullish by Friday",
+    ...over,
+  });
+
+  it("reads a pasted Telegram message and offers the real token", async () => {
+    const r = await keyboardLookup(
+      { text: "aping the frog on base, $PEPE 5x by friday" },
+      deps({ readCall: vi.fn(async () => read()), findTradeToken: vi.fn(async () => pepe) }),
+    );
+    expect(r.ai?.summary).toBe("$PEPE bullish by Friday");
+    expect(r.trade?.token).toBe(REAL);
+    expect(r.fake).toBeNull();
+  });
+
+  it("blocks a contract that claims $PEPE but isn't the real one", async () => {
+    const r = await keyboardLookup(
+      { text: `$PEPE is sending, CA ${FAKE}` },
+      deps({ readCall: vi.fn(async () => read({ contract: FAKE })), findTradeToken: vi.fn(async () => pepe) }),
+    );
+    expect(r.fake).toEqual({ claimed: "PEPE", contract: FAKE, real: REAL });
+    expect(r.trade).toBeNull();
+  });
+
+  it("allows a shared contract when it is the real token", async () => {
+    const r = await keyboardLookup(
+      { text: `$PEPE CA ${REAL}` },
+      deps({ readCall: vi.fn(async () => read({ contract: REAL })), findTradeToken: vi.fn(async () => pepe) }),
+    );
+    expect(r.fake).toBeNull();
+    expect(r.trade?.token).toBe(REAL);
+  });
+
+  it("turns plain words typed in the chat into a panel order", async () => {
+    const order = { kind: "limit" as const, usd: 20, limitPct: -10, twapMinutes: null, tpPct: null, slPct: null };
+    const r = await keyboardLookup(
+      { typed: "buy 20 bucks of degen if it dips 10%" },
+      deps({ readCall: vi.fn(async () => read({ symbol: "DEGEN", order })), findTradeToken: vi.fn(async () => ({ ...pepe, symbol: "DEGEN" })) }),
+    );
+    expect(r.prefill).toEqual(order);
+    expect(r.trade?.symbol).toBe("DEGEN");
+  });
+
+  it("doesn't send ordinary chat to the AI", async () => {
+    const readCall = vi.fn(async () => read());
+    await keyboardLookup({ text: "see you at dinner" }, deps({ readCall }));
+    expect(readCall).not.toHaveBeenCalled();
+  });
+});

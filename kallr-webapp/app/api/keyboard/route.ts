@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { keyboardLookup } from "@/lib/keyboard";
 import { recordCall } from "@/lib/server/arkiv";
+import { readCall } from "@/lib/server/ai";
 import { tradeTokenForSymbol } from "@/lib/server/keyboard-tokens";
 
 /**
@@ -40,6 +41,7 @@ export async function POST(req: Request) {
     },
     checkToken: (address) => checkToken(address),
     findTradeToken: (symbol) => tradeTokenForSymbol(symbol),
+    readCall: (text) => readCall(text),
   });
   return Response.json(result);
 }

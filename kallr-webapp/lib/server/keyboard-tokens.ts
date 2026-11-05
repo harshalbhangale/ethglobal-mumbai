@@ -65,23 +65,31 @@ export async function tradeTokenByKey(key: string): Promise<TradeToken> {
   return { token: pair.baseToken.address as `0x${string}`, symbol: pair.baseToken.symbol, price: Number(pair.priceUsd), logo: pair.info?.imageUrl ?? null };
 }
 
-/** The Base token a call's ticker means: ETH/BTC, or an exact-symbol, unflagged token with real liquidity. */
+/**
+ * The Base token a call's ticker means: ETH/BTC, or the exact-symbol token with the most real pool
+ * liquidity on Base. Dexscreener decides which token is "the" PEPE, because it sums actual pools;
+ * a look-alike can report inflated liquidity elsewhere. Flash (or Dexscreener + GoPlus) then prices
+ * it and refuses flagged or illiquid tokens.
+ */
 export async function tradeTokenForSymbol(symbol: string): Promise<TradeToken | null> {
   const s = symbol.toUpperCase();
   if (s === "ETH" || s === "BTC" || s === "WETH" || s === "CBBTC") return tradeTokenByKey(s === "WETH" ? "ETH" : s === "CBBTC" ? "BTC" : s);
-  const fromFlash = await flashSearch(s);
-  if (fromFlash) {
-    const best = fromFlash
-      .filter((t) => t.symbol.toUpperCase() === s && !t.riskFlagged && Number(t.liquidity ?? 0) >= MIN_LIQUIDITY_USD && !isCore(t.address))
-      .sort((a, b) => Number(b.liquidity ?? 0) - Number(a.liquidity ?? 0))[0];
-    if (best && Number(best.price) > 0)
-      return { token: best.address as `0x${string}`, symbol: best.symbol, price: Number(best.price), logo: best.imageUrl ?? null };
-    if (best) return null;
+  const pairs = await dex(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(s)}`).catch(() => [] as DexPair[]);
+  const liquidity = new Map<string, number>();
+  for (const p of pairs) {
+    if (p.baseToken.symbol.toUpperCase() !== s || isCore(p.baseToken.address)) continue;
+    const key = p.baseToken.address.toLowerCase();
+    liquidity.set(key, (liquidity.get(key) ?? 0) + (p.liquidity?.usd ?? 0));
   }
-  const pair = bestPair(
-    await dex(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(s)}`).catch(() => []),
-    (p) => p.baseToken.symbol.toUpperCase() === s && (p.liquidity?.usd ?? 0) >= MIN_LIQUIDITY_USD && !isCore(p.baseToken.address),
+  const [best] = [...liquidity.entries()].sort((a, b) => b[1] - a[1]);
+  if (best && best[1] >= MIN_LIQUIDITY_USD) {
+    const address = pairs.find((p) => p.baseToken.address.toLowerCase() === best[0])!.baseToken.address;
+    return tradeTokenByKey(address).catch(() => null);
+  }
+  if (pairs.length) return null;
+  // Dexscreener unavailable: Flash's search, first exact-symbol, unflagged, liquid match in its own ranking.
+  const hit = (await flashSearch(s))?.find(
+    (t) => t.symbol.toUpperCase() === s && !t.riskFlagged && Number(t.liquidity ?? 0) >= MIN_LIQUIDITY_USD && !isCore(t.address),
   );
-  if (!pair) return null;
-  return tradeTokenByKey(pair.baseToken.address).catch(() => null);
+  return hit ? tradeTokenByKey(hit.address).catch(() => null) : null;
 }
