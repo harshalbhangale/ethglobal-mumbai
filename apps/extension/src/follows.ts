@@ -52,7 +52,6 @@ export function followButton(handle: string, make: (label: string) => HTMLButton
   const render = (on: boolean) => {
     button.textContent = on ? "Following" : "Follow";
     button.setAttribute("aria-pressed", String(on));
-    button.classList.toggle("primary", !on);
   };
   void isFollowing(handle).then(render);
   onFollowsChanged(() => void isFollowing(handle).then(render));

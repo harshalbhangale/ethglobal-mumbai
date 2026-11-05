@@ -38,11 +38,38 @@ export function copyOrderText(asset: string, p: CopyPreset) {
 
 /** Desk link that opens prefilled; the user reviews and signs there. */
 export function deskUrl(origin: string, asset: string, p: CopyPreset | null, post: { handle: string; postId: string }) {
+  return deskOrderUrl(origin, p ? copyOrderText(asset, p) : `copy $ of ${asset} tp 10% sl 5%`, post);
+}
+
+export function deskOrderUrl(origin: string, order: string, post: { handle: string; postId: string }) {
   const q = new URLSearchParams();
-  q.set("order", p ? copyOrderText(asset, p) : `copy $ of ${asset} tp 10% sl 5%`);
+  q.set("order", order);
   q.set("post", post.postId);
   q.set("caller", post.handle);
   return `${origin}/app?${q}`;
+}
+
+/** Positive decimal string as typed, e.g. "25" or "0.5"; no exponents, no signs. */
+export const DECIMAL = /^(0|[1-9][0-9]*)(\.[0-9]+)?$/;
+
+/**
+ * The order text the desk parses (packages/domain order.ts) for what the card shows:
+ *   buy  → "copy $25 of ETH tp 10% sl 5%"  (exits optional, both or neither)
+ *   sell → "sell $25 of ETH"              (USD value; the desk sizes the ETH)
+ * Null when the input can't make a valid order.
+ */
+export function cardOrderText(input: {
+  side: "buy" | "sell";
+  asset: string;
+  usd: string;
+  tpPct: number | null;
+  slPct: number | null;
+}): string | null {
+  if (!DECIMAL.test(input.usd) || !(Number(input.usd) > 0)) return null;
+  if (input.side === "sell") return `sell $${input.usd} of ${input.asset}`;
+  if ((input.tpPct === null) !== (input.slPct === null)) return null;
+  const exits = input.tpPct !== null && input.slPct !== null ? ` tp ${input.tpPct}% sl ${input.slPct}%` : "";
+  return `copy $${input.usd} of ${input.asset}${exits}`;
 }
 
 /** Keeps the newest posts per caller, deduplicated, capped. */
