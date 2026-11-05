@@ -86,7 +86,7 @@ export function choiceIcon(choice: Choice, size: number) {
   return img;
 }
 
-export function tokenPicker(onPick: (choice: Choice) => void, onClose: () => void) {
+export function tokenPicker(onPick: (choice: Choice) => void, onClose: () => void, initialQuery = "") {
   const input = el("input", {
     class: "picker-search",
     placeholder: "Search a name or paste a contract address",
@@ -149,6 +149,10 @@ export function tokenPicker(onPick: (choice: Choice) => void, onClose: () => voi
   });
 
   showKnown();
+  if (initialQuery) {
+    input.value = initialQuery;
+    input.dispatchEvent(new Event("input"));
+  }
   const root = el(
     "div",
     { class: "picker", role: "dialog", "aria-label": "Choose a token" },

@@ -214,6 +214,23 @@ describe("any Base token", () => {
     expect(q(made.card, ".inline-buy").hidden).toBe(true);
   });
 
+  it("asks the user to choose when a liquid look-alike shares the cashtag", async () => {
+    // Real Flash data: an unflagged look-alike reports more liquidity than the real DEGEN.
+    const LOOKALIKE = { ...DEGEN, address: "0xF83C329908c41D197CA5105223f9eAb52F72243e", liquidity: "3046015", price: "0.0000518" };
+    worker([LOOKALIKE, DEGEN, FAKE]);
+    const { flashCard } = await import("./flash-card");
+    const made = flashCard({ post, asset: "DEGEN", answer: answer("up", "DEGEN") });
+    document.body.append(made.card);
+    await vi.waitFor(() => expect(made.card.textContent).toContain("2 tokens on Base are called $DEGEN"));
+    expect(q(made.card, ".inline-buy").hidden).toBe(true);
+    q<HTMLButtonElement>(made.card, ".untradable .link-button").click();
+    expect(q<HTMLInputElement>(made.card, ".picker-search").value).toBe("DEGEN");
+    await vi.waitFor(() => expect(made.card.querySelectorAll(".picker-row")).toHaveLength(3));
+    made.card.querySelectorAll<HTMLButtonElement>(".picker-row")[1]?.click();
+    expect(q(made.card, ".swap-title strong").textContent).toBe("Degen");
+    expect(q(made.card, ".untradable").hidden).toBe(true);
+  });
+
   it("picks any token from search and orders it by contract address", async () => {
     const sendMessage = worker([DEGEN, FAKE]);
     const calls = fakeWallet({

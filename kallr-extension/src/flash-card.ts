@@ -464,7 +464,7 @@ export function flashCard(input: {
     pickerSlot.hidden = true;
     pickerSlot.replaceChildren();
   }
-  function openPicker() {
+  function openPicker(query = "") {
     const picker = tokenPicker((next) => {
       choice = next;
       tradable = true;
@@ -473,8 +473,9 @@ export function flashCard(input: {
       renderHead();
       live = null;
       void refreshPrice();
+      untradable.hidden = true;
       update();
-    }, closePicker);
+    }, closePicker, query);
     pickerSlot.replaceChildren(picker.root);
     pickerSlot.hidden = false;
     picker.focus();
@@ -586,11 +587,22 @@ export function flashCard(input: {
   // risk flag counts; anything else stays untradable rather than guessing among look-alikes.
   if (!tradable) {
     void searchTokens(input.asset).then((tokens) => {
-      const match = tokens.find(
+      const matches = tokens.filter(
         (t) => t.symbol.toUpperCase() === input.asset.toUpperCase() && !t.riskFlagged && Number(t.liquidity) >= MIN_LIQUIDITY_USD,
       );
+      const [match] = matches;
       if (!match) {
         untradable.textContent = `$${input.asset} has no liquid, unflagged token on Base. The record above still counts.`;
+        return;
+      }
+      // Look-alikes can report more liquidity than the real coin, so two candidates means the user picks.
+      if (matches.length > 1) {
+        const choose = el("button", { type: "button", class: "link-button" }, `Choose the right $${input.asset} ↗`);
+        choose.addEventListener("click", () => {
+          toggle(true);
+          openPicker(input.asset);
+        });
+        untradable.replaceChildren(`${matches.length} tokens on Base are called $${input.asset}. Check the contract before trading. `, choose);
         return;
       }
       choice = { kind: "token", token: match };

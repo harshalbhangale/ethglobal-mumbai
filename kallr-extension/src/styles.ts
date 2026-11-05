@@ -100,6 +100,8 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .swap-meta { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .inline-note { font-size: 12px; color: var(--muted); margin: 4px 0; }
 .inline-note:empty { display: none; }
+.link-button { all: unset; cursor: pointer; color: var(--accent, #1d9bf0); font-weight: 700; }
+.link-button:hover { text-decoration: underline; }
 .inline-submit { width: 100%; border: 0; border-radius: 99px; margin-top: 6px; padding: 14px; background: var(--foreground); color: var(--surface);
   font-size: 16px; font-weight: 700; cursor: pointer; }
 .inline-submit:disabled { opacity: .4; cursor: not-allowed; }
