@@ -24,9 +24,12 @@ const NAMES: Record<string, string> = { ETH: "Ethereum", BTC: "Bitcoin" };
 const TOKENS: Record<string, string> = { ETH: "WETH", BTC: "cbBTC" };
 export const TP_CHOICES = [5, 10, 20, 50] as const;
 export const SL_CHOICES = [3, 5, 10, 20] as const;
-export const AMOUNT_PRESETS = [5, 10, 25, 50] as const;
-/** Below this, Flash often rejects an order because fees would exceed 30% of it. */
-export const MIN_SENSIBLE_USD = 5;
+export const AMOUNT_PRESETS = [0.5, 1, 5, 10] as const;
+/**
+ * Smallest order worth sending. Flash quotes refuse ~$0.01 ("fees would exceed output"); $0.10
+ * quotes but returns ~$0.08; from ~$0.50 the fill is close to the amount. Checked 5 Nov 2026.
+ */
+export const MIN_SENSIBLE_USD = 0.5;
 
 const money = (value: number) =>
   Number.isFinite(value) ? `$${value.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}` : "";
@@ -277,7 +280,7 @@ export function flashCard(input: {
     if (pairBroken) status.textContent = "Flash places take-profit and stop-loss as a pair: set both, or neither.";
     else if (amount.value && !ok) status.textContent = "Enter a positive amount.";
     else if (usd !== null && usd < MIN_SENSIBLE_USD)
-      status.textContent = `Orders under $${MIN_SENSIBLE_USD} are often rejected: fees would be over 30% of the order.`;
+      status.textContent = `Under $${MIN_SENSIBLE_USD}, fees eat most of the order and Flash may refuse it. $0.50–$1 is the cheapest real test.`;
     else status.textContent = "";
     const ready = ok && !pairBroken && usd !== null && Number.isFinite(usd);
     submit.textContent = `${side === "buy" ? "Buy" : "Sell"} ${asset}${ready && usd !== null ? ` · ${money(usd)}` : ""}`;
