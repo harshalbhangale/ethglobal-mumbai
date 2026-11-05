@@ -14,9 +14,9 @@ Built at ETHGlobal Mumbai 2026.
 | --- | --- | --- |
 | **Web app** (`/app`, PWA) | Sign in with X (Privy), wallet on Base, type an order like `copy $5 of ETH tp 10% sl 5%`, sign, and it's placed on Flash with TP/SL. Open orders come back from Flash. | Works against live Flash quotes; first funded mainnet order not run yet |
 | **Chrome extension** | On x.com: a trade card under call posts and a Buy button in X's ticker cards, with live prices; the caller's record and a call-check drawer; profile cards, Follow and Following chips; token safety checks on posts that share a contract; orders signed on X with MetaMask/Rabby, or in the desk | Built; loads unpacked |
-| **@Kallr on X** | Tag it under a call: replies with the caller's record and this call's after market. Reply `copy $2, TP 10%, SL 5%`: replies with a desk link to sign | Works in dry run on real posts; needs X API keys to go live |
-| **Android keyboard** (built on [FlorisBoard](https://github.com/florisboard/florisboard)) | An Kallr row above the keyboard in any app: copy an X post link and see the call's after market and the caller's record; type `copy $5 tp 10% sl 5%` and get a desk link to sign | Built; debug APK, talks to the web app's `/api/keyboard` |
+| **Android keyboard** (built on [FlorisBoard](https://github.com/florisboard/florisboard)) | A Kallr row above the keyboard in any app: copy an X post link and see the call's after market and the caller's record; type `copy $5 tp 10% sl 5%` and get a desk link to sign | Built; debug APK, talks to the web app's `/api/keyboard` |
 | **Trades dashboard** (`/trades`) | Every order placed from the desk, the extension or the keyboard, and caller records, read in the browser straight from Arkiv | Built; reads live from Arkiv's Rabdi testnet |
+| **Terminal** (`/terminal`, planned) | Live calls and your trades in one view, plus a chat box for standing rules: "if @caller calls BTC, ask me to copy $10", "ignore contract posts". Approvals arrive as a notification that opens the desk to sign | Not started; see [docs/PLAN.md](docs/PLAN.md) |
 | **Safety checks** | Token: honeypot, owner powers, taxes, liquidity, age. Caller: did their wallet sell what they called? | Token checks live (no key); wallet check needs a free Etherscan key |
 
 ## Run it
@@ -120,9 +120,9 @@ curl -s localhost:3000/api/checks -H 'content-type: application/json' \
   -d '{"token":"0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed"}'
 ```
 
-## The X bot
+## The X bot (parked)
 
-Tag @Kallr under a call and it replies with the caller's record and how this call played out. Reply `copy $2, TP 10%, SL 5%` and it answers with a link to the desk, where you review and sign. The bot never trades.
+The code works in dry run; we aren't running it live for the demo. Tag @Kallr under a call and it replies with the caller's record and how this call played out. Reply `copy $2, TP 10%, SL 5%` and it answers with a link to the desk, where you review and sign. The bot never trades.
 
 ```sh
 # Try a reply on any public post, no keys needed (posts nothing):
@@ -138,27 +138,25 @@ The X API is pay-per-use: about $0.001 per mention read, $0.005 per post read, $
 ## Structure
 
 ```
-apps/
-  web/                Next.js PWA: landing (/), desk (/app), Flash + after market + checks APIs
-  extension/          Chrome extension for x.com: trade cards, records, profiles, follow, safety checks
-  keyboard/           Android keyboard: FlorisBoard fork with an Kallr row
-services/
-  x-bot/              @Kallr on X: after market replies, copy links to the desk
+kallr-webapp/       Next.js PWA: landing (/), desk (/app), /trades, Flash + after market + checks + Arkiv APIs
+kallr-extension/    Chrome extension for x.com: trade cards, records, profiles, follow, safety checks
+kallr-keyboard/     Android keyboard: FlorisBoard fork with a Kallr row
+kallr-xbot/         @Kallr on X (parked)
 packages/
-  domain/             order parser, reputation, signals
-  integrations/       call scoring, after market, Definitive Flash, Arkiv, safety checks, X API
-  database/           Postgres schema, X ID ↔ wallet identity (not wired in yet)
-arkiv/                Arkiv schema and judging notes
-docs/PLAN.md          what we are building and in what order
+  domain/           order parser, reputation, signals
+  integrations/     call scoring, after market, Definitive Flash, Arkiv, safety checks, X API
+  database/         Postgres schema (parked; Arkiv is the store)
+arkiv/              Arkiv schema and judging notes
+docs/PLAN.md        what we are building next, and what is parked
 ```
 
 ## Not done yet
 
 - First funded order on Base mainnet (needs a Privy app ID and a few USDC on Base)
-- Cancel orders from the desk; live orders stream instead of 15s polling
-- Follows on Arkiv (calls and trades are there now); creator pages
-- Chainlink CRE workflow that scores expired calls
-- Android keyboard: release build and a run on a real phone with the X app
+- The Terminal: live calls, your trades, chat rules with notify / ask-to-approve / ignore
+- Deployed web app; Android keyboard release build and a run on a real phone
+
+Parked, not planned for the demo: live X bot, Telegram, agents/MCP, Postgres, Chainlink CRE. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Built at ETHGlobal Mumbai: what's new and what we reused
 
