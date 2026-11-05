@@ -66,7 +66,11 @@ async function prices() {
 }
 
 chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
-  if (!sender.tab?.url?.match(/^https:\/\/(x|twitter)\.com\//)) return;
+  const url = sender.tab?.url ?? "";
+  const fromX = /^https:\/\/(x|twitter)\.com\//.test(url);
+  // The app's bridge may only manage follows; everything else is for x.com tabs.
+  const fromApp = url.startsWith(`${appOrigin}/`) && message?.type === "watchlist";
+  if (!fromX && !fromApp) return;
   let job: Promise<unknown>;
   if (message?.type === "after-market") {
     const key = message.post.postId;
