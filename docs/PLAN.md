@@ -112,7 +112,7 @@ Source: `~/Desktop/Xtrading/apps/extension/src` (Monad/Kuru/Perpl). Port onto Ba
 - [x] 5. Profile card with Follow + Following chip on bylines: `profile.ts`, `follows.ts`, `creator-badge.ts`, `watchlist-storage.ts` (follows kept in the extension until `/api/follows`); wallet-linked badge waits for an identity API
 - [x] UI: Xtrading's exact look. Post card = swap card (price header, Call check strip, Buy/Sell, You pay / You receive, TP/SL chips, Powered by footer) on Flash + Base; ⇄ Buy inside X's ticker cards; profile card with metric tiles and Open desk / Show details / Follow. Text wordmark until the AfterMarkets logo arrives
 - [x] 6. Follows synced with the web app: `app-bridge.ts` (app origin only, nonce, follow commands only) + desk **Following** section (`components/following.tsx`, `lib/follows.ts`); browser-only fallback without the extension
-- [ ] 7. X follow sync (opt-in, reads your own following list, no X API, no cookies): `follow-observer.ts`, `follow-storage.ts`
+- [x] 7. Follow on X = follow here (opt-in switch in the desk): `follow-observer.ts` reads X's Follow/Following buttons on profiles and your Following page; `follow-sync.ts` adds on X follow and removes on X unfollow only callers X added. No X API, no cookies
 - [ ] 8. Sign on X with MetaMask/Rabby: `wallet-bridge.ts` + a Flash ticket in place of Kuru's `swap-card.ts`; desk popup stays the fallback
 - [ ] 9. Toolbar popup with connection status: `popup.ts`
 - Skipped: Perpl (`perp-*`, Monad only), Kuru (`direct-trade.ts`), Nansen (`nansen-panel.ts`, `token-risk-*`, `flagged-token-card.ts`), image posts (`post-media.ts`)

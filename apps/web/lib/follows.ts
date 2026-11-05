@@ -27,8 +27,8 @@ export function extensionInstalled() {
   return typeof document !== "undefined" && document.documentElement.dataset.aftermarketsExtension === "1";
 }
 
-/** Ask the extension through its app bridge. Rejects when it isn't installed or doesn't answer. */
-export function extensionFollows(command: FollowCommand): Promise<WatchlistEntry[]> {
+/** One request through the extension's app bridge. Rejects when it isn't installed or doesn't answer. */
+function bridge(payload: Record<string, unknown>): Promise<unknown> {
   const nonce = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const onMessage = (event: MessageEvent) => {
@@ -36,17 +36,30 @@ export function extensionFollows(command: FollowCommand): Promise<WatchlistEntry
       if (event.data?.type !== RESPONSE || event.data.nonce !== nonce) return;
       clearTimeout(timer);
       window.removeEventListener("message", onMessage);
-      const parsed = watchlistSchema.safeParse(event.data.value);
-      if (parsed.success) resolve(parsed.data.entries);
-      else reject(new Error("The extension couldn't update the list (it holds up to 50)."));
+      resolve(event.data.value);
     };
     const timer = setTimeout(() => {
       window.removeEventListener("message", onMessage);
       reject(new Error("Extension not connected"));
     }, TIMEOUT_MS);
     window.addEventListener("message", onMessage);
-    window.postMessage({ type: REQUEST, nonce, ...command }, location.origin);
+    window.postMessage({ type: REQUEST, nonce, ...payload }, location.origin);
   });
+}
+
+export async function extensionFollows(command: FollowCommand): Promise<WatchlistEntry[]> {
+  const parsed = watchlistSchema.safeParse(await bridge(command));
+  if (!parsed.success) throw new Error("The extension couldn't update the list (it holds up to 50).");
+  return parsed.data.entries;
+}
+
+/** "Follow here when I follow on X": read it, or set it when `enabled` is given. */
+export async function extensionMirror(enabled?: boolean): Promise<boolean> {
+  const value = (await bridge(enabled === undefined ? { action: "mirror-read" } : { action: "mirror-set", enabled })) as {
+    enabled?: unknown;
+  } | null;
+  if (typeof value?.enabled !== "boolean") throw new Error("The extension didn't answer. Reload it and try again.");
+  return value.enabled;
 }
 
 export function readLocal(): WatchlistEntry[] {

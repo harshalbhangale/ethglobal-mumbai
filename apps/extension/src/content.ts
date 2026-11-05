@@ -1,4 +1,5 @@
 import { addFollowBadge } from "./creator-badge";
+import { observeFollowing } from "./follow-observer";
 import { onFollowsChanged } from "./follows";
 import { decorate, readPost } from "./post-card";
 import { scanProfile } from "./profile";
@@ -14,6 +15,7 @@ const articles = () => document.querySelectorAll<HTMLElement>('article[data-test
 function scan() {
   articles().forEach((a) => void decorate(a));
   void scanProfile();
+  observeFollowing();
 }
 
 // Following someone (here or in another tab) updates every byline chip on the page.

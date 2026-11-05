@@ -17,13 +17,18 @@ export function handleBridgeMessage(event: MessageEvent) {
   const message = event.data;
   if (!message || typeof message !== "object" || message.type !== REQUEST) return;
   if (typeof message.nonce !== "string" || !NONCE.test(message.nonce)) return;
+  const reply = (value: unknown) => window.postMessage({ type: RESPONSE, nonce: message.nonce, value }, appOrigin);
+  // "Follow here when I follow on X" setting.
+  if (message.action === "mirror-read") return void send<unknown>({ type: "mirror" }).then(reply);
+  if (message.action === "mirror-set") {
+    if (typeof message.enabled !== "boolean") return;
+    return void send<unknown>({ type: "mirror", enabled: message.enabled }).then(reply);
+  }
   const command = watchlistCommandSchema.safeParse(
     message.action === "read" ? { action: "read" } : { action: message.action, handle: message.handle },
   );
   if (!command.success) return;
-  void send<unknown>({ type: "watchlist", command: command.data }).then((value) =>
-    window.postMessage({ type: RESPONSE, nonce: message.nonce, value }, appOrigin),
-  );
+  void send<unknown>({ type: "watchlist", command: command.data }).then(reply);
 }
 
 window.addEventListener("message", handleBridgeMessage);
