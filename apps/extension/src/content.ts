@@ -171,7 +171,10 @@ async function decorate(article: HTMLElement) {
 
   const body = h("div", {});
   const actions = h("div", { class: "row" });
-  if (answer.call && COPYABLE.has(asset)) {
+  // A post that shares a contract is about that contract: never offer a ticker copy next to it.
+  if (token) {
+    actions.append(h("span", { class: "muted" }, "Shares a contract address: no copy offered"));
+  } else if (answer.call && COPYABLE.has(asset)) {
     PRESETS.forEach((p, i) => {
       const b = h("button", { class: i === 0 ? "primary" : "", type: "button" }, `Copy $${p.usd} · TP ${p.tpPct}% SL ${p.slPct}%`);
       b.addEventListener("click", () => openDesk(deskUrl(AFTERMARKETS_APP_ORIGIN, asset, p, post)));
