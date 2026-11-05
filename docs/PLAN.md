@@ -24,26 +24,41 @@ Crypto Twitter runs on calls. A KOL (key opinion leader) posts "$ETH to 4k, long
 | Chrome extension | Overlays the after market on any call in the X timeline, one-click copy | Not started |
 | Agent | Watches calls and positions, places and exits trades, pays for data and execution with x402 | Not started |
 
-## Proposed repo layout
+## Building blocks
 
-The repo is a single Next.js app today. Move to a workspace once a second runtime (the bots) lands:
+| Piece | Where it lands | Work for AfterMarkets |
+| --- | --- | --- |
+| Chrome extension (trade cards on cashtags, creator badge, reputation, drawer) | `apps/extension` | Flash ticket with TP/SL, after market badge |
+| Creator pages, methodology page | `apps/web` | Next to the PWA desk |
+| Call classifier + scoring at expiry (`directional-return-v1`) | `packages/integrations` | Prices from Base / Chainlink |
+| Reputation tiers, red flags, view models | `packages/domain` | Ready |
+| X ID ↔ wallet identity binding (Privy, nonce/replay protection) | `packages/database` | Ready |
+| Postgres schema (drizzle) | `packages/database` | Add orders, bot users, Telegram links |
+| Post archive: public posts snapshotted on-chain (text hash + oEmbed) so deleted calls stay provable | `contracts/PostArchive.sol` | Deploy on Base |
+| MCP server for agents (unsigned trades + approval links) | `apps/web/app/api/mcp` | Add Flash tools; the agent's toolset |
+| Envio indexer | `services/indexer` | Base: Flash fills, archive events (optional) |
+
+Ground rules: keep identity, call record and wallet returns separate; token amounts as bigint, never floats; no automatic signing; honest empty states.
+
+## Repo layout
 
 ```
 apps/
-  web/            current Next.js PWA (landing + /app)
-  extension/      Chrome MV3 extension (content script on x.com)
+  web/            Next.js PWA: landing, /app desk, creator + methodology pages
+  extension/      Chrome MV3 extension, Flash ticket
 services/
   x-bot/          mention poller + reply writer
-  telegram-bot/   grammY bot, alerts
+  telegram-bot/   bot + alerts
   agent/          order executor + exit watcher, x402 client
+  indexer/        Envio (optional)
 packages/
-  core/           order parser, call classifier, scoring (shared by everything)
-  chain/          Base client, Definitive Flash client, Chainlink feeds
+  domain/         reputation, signals, view models, order parser
+  integrations/   calls, scoring, signals, definitive.ts, chainlink.ts
+  database/       identity, schema, orders, bot users
+contracts/        PostArchive.sol on Base
 cre/              Chainlink CRE workflows (last)
 docs/
 ```
-
-`lib/order.ts` moves to `packages/core` first, since the bots and the extension all need it.
 
 ## Build order
 
@@ -54,9 +69,13 @@ docs/
 - [ ] USDC approval flow and low-gas warning (wallet panel already detects it)
 - [ ] Order status: pending, filled, TP hit, SL hit, cancelled
 
+### 0. Restructure (before anything else)
+- [ ] Convert this repo to the pnpm workspace above; move the PWA to `apps/web`
+- [ ] Add `packages/domain`, `packages/integrations` (calls, scoring, signals), `packages/database`
+- [ ] Move `lib/order.ts` into `packages/domain`
+
 ### 2. Call data
-Classify a post into asset + direction, bind X handles to wallets, and score calls at expiry (`directional-return-v1`, hypothetical returns, not wallet returns).
-- [ ] Classifier + scoring in `packages/core`
+- [ ] Wire the imported classifier + scoring into the desk and bot
 - [ ] Market list: Base tokens tradable on Flash
 - [ ] Price each call at post time and store it: post id, handle, asset, direction, price, time
 - [ ] "After market" card: hit rate, median return, last N calls with outcomes
@@ -74,17 +93,19 @@ Classify a post into asset + direction, bind X handles to wallets, and score cal
 - [ ] Push alerts: filled, TP hit, SL hit (this is the "we call you back"; voice call via Twilio is a stretch goal)
 
 ### 5. Chrome extension
-- [ ] MV3 content script on x.com: detect calls in the timeline, show an after market badge
-- [ ] Popup: copy with one click, opens the PWA to sign
-- [ ] Reuse the PWA's design tokens and `packages/core`
+- [ ] Add `apps/extension`: detects cashtags/ticker cards, shows creator reputation
+- [ ] Flash ticket on each call (amount + TP/SL)
+- [ ] Load unpacked for the demo
 
 ### 6. Agent + payments
 - [ ] Agent loop: watch new calls from followed KOLs, apply user rules (max size, only KOLs with hit rate > X), place orders through Flash within a pre-approved budget
 - [ ] Payments with x402: the agent pays per request for call data and scoring, and KOLs can charge for premium calls
 - [ ] Session keys / spend limits on the embedded wallet so the agent can't drain it
 
-### 7. "Archive" integration
-- [ ] **To confirm:** which sponsor/tool is this? (Arkiv data layer for storing calls permanently? Something else?)
+### 7. Post archive
+- [ ] Deploy `PostArchive.sol` on Base
+- [ ] Bot archives every call it's tagged under (text hash + public oEmbed snapshot), so a deleted call still has a record
+- [ ] After market card links each call to its archive transaction
 
 ### 8. Chainlink CRE (last)
 - [ ] CRE workflow that scores calls at expiry using Chainlink price feeds and writes the result on-chain, so track records are verifiable, not just our database
