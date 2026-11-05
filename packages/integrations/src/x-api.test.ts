@@ -29,8 +29,8 @@ describe("xClient.mentions", () => {
       expect(url).toContain("since_id=100");
       return Response.json({
         data: [
-          { id: "300", text: "@AfterMarkets copy $2", author_id: "7", referenced_tweets: [{ type: "replied_to", id: "200" }] },
-          { id: "250", text: "@AfterMarkets hi", author_id: "8" },
+          { id: "300", text: "@Kallr copy $2", author_id: "7", referenced_tweets: [{ type: "replied_to", id: "200" }] },
+          { id: "250", text: "@Kallr hi", author_id: "8" },
         ],
         includes: {
           tweets: [{ id: "200", text: "Buying $ETH here 🚀", author_id: "9" }],

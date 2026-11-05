@@ -1,5 +1,5 @@
 /**
- * Builds every AfterMarkets brand asset from docs/brand/logo-source.png (white mark on black):
+ * Builds every Kallr brand asset from docs/brand/logo-source.png (white mark on black):
  * the transparent mark, web favicons / PWA / Apple icons, the share card, and the extension icons.
  * Run after changing the logo:  npm run brand
  */
@@ -52,7 +52,7 @@ const out = async (path, buf) => {
 };
 
 // Web app (light, navy-ink brand)
-const web = `${REPO}/apps/web/public`;
+const web = `${REPO}/kallr-webapp/public`;
 await out(`${web}/brand/mark.png`, await markAt(256));
 await out(`${web}/icons/icon-192.png`, await tile(192, { frac: 0.68 }));
 await out(`${web}/icons/icon-512.png`, await tile(512, { frac: 0.68 }));
@@ -62,7 +62,7 @@ await out(`${web}/icons/favicon-32.png`, await tile(32, { frac: 0.78, radius: 0.
 await out(`${web}/icons/favicon-16.png`, await tile(16, { frac: 0.84, radius: 0.2 }));
 
 // Extension: toolbar/store icons, and the bare mark the cards tint with CSS.
-const ext = `${REPO}/apps/extension/public`;
+const ext = `${REPO}/kallr-extension/public`;
 for (const s of [16, 32, 48, 128]) await out(`${ext}/icons/icon-${s}.png`, await tile(s, { frac: s <= 16 ? 0.84 : s <= 32 ? 0.78 : 0.7, radius: 0.22 }));
 await out(`${ext}/brand/mark.png`, await markAt(128));
 
@@ -77,14 +77,14 @@ const bg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" hei
     </radialGradient>
   </defs>
   <rect width="${W}" height="${H}" fill="url(#g)"/>
-  <text x="142" y="142" fill="#ffffff" font-family="${font}" font-size="40" font-weight="700" letter-spacing="-0.5">AfterMarkets</text>
+  <text x="142" y="142" fill="#ffffff" font-family="${font}" font-size="40" font-weight="700" letter-spacing="-0.5">Kallr</text>
   <text x="80" y="300" fill="#ffffff" font-family="${font}" font-size="76" font-weight="700" letter-spacing="-2.5">Every call on X</text>
   <text x="80" y="388" fill="#ffffff" font-family="${font}" font-size="76" font-weight="700" letter-spacing="-2.5">has an after market.</text>
   <text x="80" y="470" fill="#b9c3d6" font-family="${font}" font-size="28" letter-spacing="-0.2">Priced at posting. Copy it with TP/SL on Base.</text>
-  <text x="80" y="560" fill="#f2a93b" font-family="${font}" font-size="24" font-weight="600">Tag @AfterMarkets under any call</text>
+  <text x="80" y="560" fill="#f2a93b" font-family="${font}" font-size="24" font-weight="600">Tag @Kallr under any call</text>
 </svg>`);
-const mark = await sharp(`${REPO}/apps/web/public/brand/mark.png`).resize(360, 360).png().toBuffer();
-const markSmall = await sharp(`${REPO}/apps/web/public/brand/mark.png`).resize(48, 48).png().toBuffer();
+const mark = await sharp(`${REPO}/kallr-webapp/public/brand/mark.png`).resize(360, 360).png().toBuffer();
+const markSmall = await sharp(`${REPO}/kallr-webapp/public/brand/mark.png`).resize(48, 48).png().toBuffer();
 // Faint large mark on the right, small mark beside the name.
 const faint = await sharp(mark).ensureAlpha().composite([{ input: Buffer.from([255, 255, 255, 235]), raw: { width: 1, height: 1, channels: 4 }, tile: true, blend: "dest-in" }]).png().toBuffer();
 await sharp(bg)
@@ -93,6 +93,6 @@ await sharp(bg)
     { input: markSmall, left: 80, top: 104 },
   ])
   .png({ compressionLevel: 9 })
-  .toFile(`${REPO}/apps/web/public/brand/og.png`);
-console.log("apps/web/public/brand/og.png  1200x630");
+  .toFile(`${REPO}/kallr-webapp/public/brand/og.png`);
+console.log("kallr-webapp/public/brand/og.png  1200x630");
 }

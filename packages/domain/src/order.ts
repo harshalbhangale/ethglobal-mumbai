@@ -1,5 +1,5 @@
 /**
- * Parses plain-language orders, the same text a user types in the desk or replies to @AfterMarkets on X:
+ * Parses plain-language orders, the same text a user types in the desk or replies to @Kallr on X:
  *   "copy $2 of ETH, TP 10%, SL 5%"
  *   "buy $5 of ETH if it dips to 2,900"
  *   "sell my ETH at 4,000"
@@ -28,7 +28,7 @@ export type ParseResult = { ok: true; order: ParsedOrder } | { ok: false; error:
 const num = (s: string) => Number(s.replace(/,/g, ""));
 
 export function parseOrder(input: string): ParseResult {
-  const text = input.trim().toLowerCase().replace(/^@aftermarkets\s+/, "");
+  const text = input.trim().toLowerCase().replace(/^@kallr\s+/, "");
   if (!text) return { ok: false, error: "Type an order, like “copy $2 of ETH, TP 10%, SL 5%”." };
 
   const sideMatch = text.match(/^(copy|buy|long|sell|short)\b/);

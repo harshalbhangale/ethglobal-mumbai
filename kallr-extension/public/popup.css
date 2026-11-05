@@ -1,0 +1,93 @@
+/* Toolbar popup layout on the Kallr brand surface. */
+body {
+  width: 300px;
+  margin: 0;
+  background: #0d110f;
+  color: #e6ebe3;
+  font: 14px / 1.55 Inter, system-ui, -apple-system, sans-serif;
+}
+main {
+  padding: 22px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+.mark {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+}
+.wordmark {
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+.label {
+  margin: 0;
+  color: #8b978d;
+  font: 10px ui-monospace, monospace;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+h1 {
+  font-size: 25px;
+  line-height: 1.1;
+  margin: 14px 0 8px;
+}
+p {
+  color: #b8c2b7;
+}
+strong {
+  color: #e6ebe3;
+}
+a {
+  display: block;
+  padding: 12px;
+  background: #d8f58a;
+  color: #17210c;
+  border-radius: 7px;
+  text-decoration: none;
+  font-weight: 700;
+  text-align: center;
+}
+a:focus-visible {
+  outline: 2px solid #c6f25a;
+  outline-offset: 2px;
+}
+.note {
+  font-size: 11px;
+  color: #8b978d;
+}
+#status {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  font-size: 12px;
+}
+#status li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid #1e2621;
+}
+#status span {
+  color: #8b978d;
+}
+#status b {
+  text-align: right;
+  font-weight: 600;
+}
+#status b.ok {
+  color: #8ad97c;
+}
+#status b.off {
+  color: #ff8a7a;
+}
+#status b.pending {
+  color: #8b978d;
+  font-weight: 500;
+}

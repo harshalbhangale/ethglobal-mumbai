@@ -1,16 +1,16 @@
 # Arkiv schema
 
 Network: Arkiv testnet **Rabdi**, chain `7794095`, RPC `https://rpc.rabdi.db-chain.testnet.arkiv.network`.
-Writer wallet: `0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53` (the AfterMarkets server; pays the gas).
+Writer wallet: `0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53` (the Kallr server; pays the gas).
 Schemas are defined in [`packages/integrations/src/arkiv.ts`](../packages/integrations/src/arkiv.ts) with `defineSchema`,
 so every entity carries an indexed `arkiv.schema` tag.
 
 Anyone can write an entity with our tags, so every read we make adds `$creator = addr(<writer>)`
 (`.createdBy(writer)` in the SDK). That one filter is what makes these records trustworthy.
 
-## `aftermarkets.trades`: a Flash order placed through AfterMarkets
+## `kallr.trades`: a Flash order placed through Kallr
 
-Written by `apps/web/app/api/flash/order` after Definitive Flash accepts the order on Base mainnet.
+Written by `kallr-webapp/app/api/flash/order` after Definitive Flash accepts the order on Base mainnet.
 
 | Column | Type | Indexed | Meaning |
 | --- | --- | --- | --- |
@@ -31,7 +31,7 @@ Written by `apps/web/app/api/flash/order` after Definitive Flash accepts the ord
 - **Expires:** `ExpirationTime.max()` (~182 days). The trader can extend it.
 - **Queried by:** `trader` (Yours), `$creator` (Everyone), sorted by `placedAt`.
 
-## `aftermarkets.calls`: a call on X while it is open
+## `kallr.calls`: a call on X while it is open
 
 Written the first time we price a call (`/api/after-market` from the extension, `/api/keyboard` from the keyboard).
 
@@ -50,7 +50,7 @@ Written the first time we price a call (`/api/after-market` from the extension, 
 - **Expires:** at `deadline` + 48h scoring window (`ExpirationTime.atDate`), capped at 181 days. Arkiv drops it on its own.
 - **Queried by:** `deadline > now` (open calls), `deadline <= now` (due for scoring), `postId` (write once).
 
-## `aftermarkets.call-results`: how a call ended
+## `kallr.call-results`: how a call ended
 
 Written when a call settles, by the same routes or by `/api/arkiv/score`, which prices the exit from Chainlink at the deadline.
 
@@ -71,6 +71,6 @@ Written when a call settles, by the same routes or by `/api/arkiv/score`, which 
 ## Queries you can run
 
 ```
-arkiv.schema = str('aftermarkets.trades') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)
-arkiv.schema = str('aftermarkets.call-results') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53) AND caller = str('<handle>')
+arkiv.schema = str('kallr.trades') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)
+arkiv.schema = str('kallr.call-results') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53) AND caller = str('<handle>')
 ```

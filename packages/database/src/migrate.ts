@@ -6,7 +6,7 @@ let connection: ReturnType<typeof createDatabase> | undefined;
 try {
   connection = createDatabase(
     process.env.DATABASE_URL ??
-      "postgresql://aftermarkets:aftermarkets_local@localhost:5433/aftermarkets",
+      "postgresql://kallr:kallr_local@localhost:5433/kallr",
   );
   await migrate(connection.db, {
     migrationsFolder: fileURLToPath(new URL("../migrations", import.meta.url)),

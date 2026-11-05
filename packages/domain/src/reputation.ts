@@ -20,7 +20,7 @@ export const creatorFeeBpsSchema = z.union([
 export const reputationTiers = [
   {
     id: "pro",
-    name: "AfterMarkets Pro",
+    name: "Kallr Pro",
     feeBps: 50,
     minScored: 5,
     minHitBps: 5000,
@@ -28,7 +28,7 @@ export const reputationTiers = [
   },
   {
     id: "max",
-    name: "AfterMarkets Max",
+    name: "Kallr Max",
     feeBps: 100,
     minScored: 15,
     minHitBps: 6000,
@@ -36,7 +36,7 @@ export const reputationTiers = [
   },
   {
     id: "ultra",
-    name: "AfterMarkets Ultra",
+    name: "Kallr Ultra",
     feeBps: 200,
     minScored: 30,
     minHitBps: 6500,

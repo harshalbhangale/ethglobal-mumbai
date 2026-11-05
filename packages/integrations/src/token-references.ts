@@ -1,4 +1,4 @@
-import type { PostSignal } from "@aftermarkets/domain";
+import type { PostSignal } from "@kallr/domain";
 
 const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function solanaAddress(value: string) {

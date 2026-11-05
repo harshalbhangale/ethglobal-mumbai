@@ -30,5 +30,5 @@ When each expires:
 - `atDate` expiry → open calls drop off the board on their own, with no cleanup job.
 - `permissionlessExtension` → a caller's record can't be quietly lost.
 - Indexed `trader`, `caller`, `source`, `deadline` → the Yours/Everyone tabs, per-surface counts, caller board and scoring queue.
-- Browser reads (`arkivPublic` in `apps/web/app/trades/page.tsx`) → the dashboard works without our server.
+- Browser reads (`arkivPublic` in `kallr-webapp/app/trades/page.tsx`) → the dashboard works without our server.
   Live order status still comes from Flash.

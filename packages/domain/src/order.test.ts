@@ -30,7 +30,7 @@ test("sell everything at a price", () => {
 });
 
 test("X reply with handle and cashtag", () => {
-  const o = ok("@AfterMarkets copy $10 of $DEGEN tp 25% sl 10%");
+  const o = ok("@Kallr copy $10 of $DEGEN tp 25% sl 10%");
   assert.equal(o.asset, "DEGEN");
   assert.equal(o.takeProfitPct, 0.25);
 });

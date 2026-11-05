@@ -4,7 +4,7 @@
 
 - **Checking without asking us.** A caller's record decides whether people copy their trades with real money. In
   Postgres only we can read it, and users take our word for it. On Arkiv anyone can run
-  `arkiv.schema = str('aftermarkets.call-results') AND caller = str('<handle>')` against a public node. `/trades`
+  `arkiv.schema = str('kallr.call-results') AND caller = str('<handle>')` against a public node. `/trades`
   does exactly that from the browser.
 - **Records nobody can quietly edit.** Results are `readonly`, so a bad call stays a miss, and we couldn't fix it in a
   database console either.

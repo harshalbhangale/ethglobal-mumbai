@@ -7,7 +7,7 @@ describe("wallet ownership proof", () => {
     const owner = privateKeyToAccount(generatePrivateKey());
     const other = privateKeyToAccount(generatePrivateKey());
     const input = {
-      origin: "https://aftermarkets.example",
+      origin: "https://kallr.example",
       wallet: owner.address,
       xUserId: "12345",
       privyUserId: "did:privy:test",

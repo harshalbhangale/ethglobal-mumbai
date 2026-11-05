@@ -1,6 +1,6 @@
 # Arkiv friction
 
-What got in our way building AfterMarkets on Arkiv (SDK `@arkiv-network/sdk` 1.0.1, testnet Rabdi), and how to reproduce it.
+What got in our way building Kallr on Arkiv (SDK `@arkiv-network/sdk` 1.0.1, testnet Rabdi), and how to reproduce it.
 
 ## 1. Anyone can write entities with my schema's tag
 **Expected:** `select().from(Trades)` returns my app's trades.
@@ -37,7 +37,7 @@ The docs say lifetimes are counted in blocks (2s on Rabdi), while the getting-st
 
 ## 7. One write at a time per account
 Concurrent creates from one server key would race the nonce, so we queue writes in-process
-(`apps/web/lib/server/arkiv.ts`). A note on concurrency, or a batching helper for "create, then hand to another owner"
+(`kallr-webapp/lib/server/arkiv.ts`). A note on concurrency, or a batching helper for "create, then hand to another owner"
 (we do `createEntity` then `changeOwnership`, two transactions), would help server-side apps.
 
 ## What worked well

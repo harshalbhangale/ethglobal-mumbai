@@ -1,4 +1,4 @@
-import type { PostAvailability } from "@aftermarkets/domain";
+import type { PostAvailability } from "@kallr/domain";
 import { z } from "zod";
 import { tokenReferences } from "./token-references";
 

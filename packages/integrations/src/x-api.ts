@@ -2,7 +2,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { z } from "zod";
 
 /**
- * X API v2 for the @AfterMarkets bot: read mentions and a caller's posts, post replies.
+ * X API v2 for the @Kallr bot: read mentions and a caller's posts, post replies.
  * Signed with OAuth 1.0a user context (the bot account's tokens), which never expire.
  * Server-only.
  */

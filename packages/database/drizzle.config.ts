@@ -3,7 +3,7 @@ import { databaseOptions } from "./src/client";
 
 const connection = databaseOptions(
   process.env.DATABASE_URL ??
-    "postgresql://aftermarkets:aftermarkets_local@localhost:5433/aftermarkets",
+    "postgresql://kallr:kallr_local@localhost:5433/kallr",
 );
 if (connection.options.ssl && process.env.DATABASE_CA_FILE) {
   Object.assign(connection.options.ssl, {

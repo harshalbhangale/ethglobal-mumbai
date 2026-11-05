@@ -7,7 +7,7 @@ import type { ScoredCall } from "./after-market";
 import type { FlashOrderInput } from "./definitive";
 
 /**
- * AfterMarkets data on Arkiv (testnet Rabdi). Trades run on Base mainnet through Flash; their
+ * Kallr data on Arkiv (testnet Rabdi). Trades run on Base mainnet through Flash; their
  * records, and every call we price, live here so anyone can read them without asking us.
  *
  * Anyone can write an entity with our schema tags, so every read is restricted to entities our
@@ -18,8 +18,8 @@ import type { FlashOrderInput } from "./definitive";
 export const ARKIV_CHAIN_ID = 7794095;
 export const ARKIV_EXPLORER = "https://rabdi.explorer.arkiv.network";
 
-/** A Flash order placed through AfterMarkets. Read-only once written; owned by the trader. */
-export const Trades = defineSchema("aftermarkets.trades", {
+/** A Flash order placed through Kallr. Read-only once written; owned by the trader. */
+export const Trades = defineSchema("kallr.trades", {
   trader: addr().indexed(),
   /** Which surface placed it: desk, extension or keyboard. */
   source: str().indexed(),
@@ -40,7 +40,7 @@ export const Trades = defineSchema("aftermarkets.trades", {
 });
 
 /** A call on X while it is open. Expires a scoring window after its deadline. */
-export const Calls = defineSchema("aftermarkets.calls", {
+export const Calls = defineSchema("kallr.calls", {
   postId: str().indexed(),
   caller: str().indexed(),
   asset: str().indexed(),
@@ -53,7 +53,7 @@ export const Calls = defineSchema("aftermarkets.calls", {
 });
 
 /** How a call ended. Anyone may extend it so a caller's record outlives Arkiv's max lifetime; nobody can edit it. */
-export const CallResults = defineSchema("aftermarkets.call-results", {
+export const CallResults = defineSchema("kallr.call-results", {
   postId: str().indexed(),
   caller: str().indexed(),
   asset: str().indexed(),

@@ -1,7 +1,7 @@
 import {
   postSignalRequestSchema,
   tradeReviewPath,
-} from "@aftermarkets/domain";
+} from "@kallr/domain";
 import { expect, it } from "vitest";
 import { deriveTradeRoute, heuristicSignal } from "./signals";
 import { tokenReferences } from "./token-references";
@@ -58,7 +58,7 @@ it("review links preserve the source and point at the Base desk", () => {
   });
   const path = tradeReviewPath(spot, deriveTradeRoute(spot), "sell") ?? "";
   expect(path.startsWith("/app?")).toBe(true);
-  const spotUrl = new URL(path, "https://aftermarkets.local");
+  const spotUrl = new URL(path, "https://kallr.local");
   expect(Object.fromEntries(spotUrl.searchParams)).toMatchObject({
     postId: "123",
     handle: "alice",

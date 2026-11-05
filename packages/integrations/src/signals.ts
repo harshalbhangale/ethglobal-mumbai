@@ -2,7 +2,7 @@ import {
   type PostSignal,
   signalMethodologyVersion,
   type TradeRoute,
-} from "@aftermarkets/domain";
+} from "@kallr/domain";
 import { hasTokenMention, tokenReferences } from "./token-references";
 
 /**
@@ -116,7 +116,7 @@ export function deriveTradeRoute(signal: PostSignal): TradeRoute {
   if (signal.instrument === "perp")
     return {
       status: "unavailable",
-      reason: `Perp call on ${signal.asset}. AfterMarkets trades spot on Base; no spot substitute is made.`,
+      reason: `Perp call on ${signal.asset}. Kallr trades spot on Base; no spot substitute is made.`,
     };
   const spot = baseSpotAssets[signal.asset];
   if (!spot)

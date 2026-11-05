@@ -1,10 +1,10 @@
-<p align="center"><img src="apps/web/public/icons/icon-512.png" width="96" height="96" alt="AfterMarkets logo" /></p>
+<p align="center"><img src="kallr-webapp/public/icons/icon-512.png" width="96" height="96" alt="Kallr logo" /></p>
 
-# AfterMarkets
+# Kallr
 
 Every call on X has an after market.
 
-Crypto Twitter runs on calls, and nobody keeps score. AfterMarkets prices every call at the minute it was posted, scores it when its timeframe ends, and lets you copy it with one tap: a real order on Base through Definitive Flash with take-profit and stop-loss attached. You sign in your own wallet; nothing trades without you.
+Crypto Twitter runs on calls, and nobody keeps score. Kallr prices every call at the minute it was posted, scores it when its timeframe ends, and lets you copy it with one tap: a real order on Base through Definitive Flash with take-profit and stop-loss attached. You sign in your own wallet; nothing trades without you.
 
 Built at ETHGlobal Mumbai 2026.
 
@@ -14,8 +14,8 @@ Built at ETHGlobal Mumbai 2026.
 | --- | --- | --- |
 | **Web app** (`/app`, PWA) | Sign in with X (Privy), wallet on Base, type an order like `copy $5 of ETH tp 10% sl 5%`, sign, and it's placed on Flash with TP/SL. Open orders come back from Flash. | Works against live Flash quotes; first funded mainnet order not run yet |
 | **Chrome extension** | On x.com: a trade card under call posts and a Buy button in X's ticker cards, with live prices; the caller's record and a call-check drawer; profile cards, Follow and Following chips; token safety checks on posts that share a contract; orders signed on X with MetaMask/Rabby, or in the desk | Built; loads unpacked |
-| **@AfterMarkets on X** | Tag it under a call: replies with the caller's record and this call's after market. Reply `copy $2, TP 10%, SL 5%`: replies with a desk link to sign | Works in dry run on real posts; needs X API keys to go live |
-| **Android keyboard** (built on [FlorisBoard](https://github.com/florisboard/florisboard)) | An AfterMarkets row above the keyboard in any app: copy an X post link and see the call's after market and the caller's record; type `copy $5 tp 10% sl 5%` and get a desk link to sign | Built; debug APK, talks to the web app's `/api/keyboard` |
+| **@Kallr on X** | Tag it under a call: replies with the caller's record and this call's after market. Reply `copy $2, TP 10%, SL 5%`: replies with a desk link to sign | Works in dry run on real posts; needs X API keys to go live |
+| **Android keyboard** (built on [FlorisBoard](https://github.com/florisboard/florisboard)) | An Kallr row above the keyboard in any app: copy an X post link and see the call's after market and the caller's record; type `copy $5 tp 10% sl 5%` and get a desk link to sign | Built; debug APK, talks to the web app's `/api/keyboard` |
 | **Trades dashboard** (`/trades`) | Every order placed from the desk, the extension or the keyboard, and caller records, read in the browser straight from Arkiv | Built; reads live from Arkiv's Rabdi testnet |
 | **Safety checks** | Token: honeypot, owner powers, taxes, liquidity, age. Caller: did their wallet sell what they called? | Token checks live (no key); wallet check needs a free Etherscan key |
 
@@ -25,14 +25,14 @@ Node 20+ (the repo is tested on Node 24).
 
 ```sh
 npm install
-cp apps/web/.env.example apps/web/.env.local   # add NEXT_PUBLIC_PRIVY_APP_ID, DEFINITIVE_API_KEY
+cp kallr-webapp/.env.example kallr-webapp/.env.local   # add NEXT_PUBLIC_PRIVY_APP_ID, DEFINITIVE_API_KEY
 npm run dev                                    # http://localhost:3000
 npm test                                       # all packages
 ```
 
 In the Privy dashboard: enable **Twitter** and **Email** login, enable **embedded wallets** for Ethereum, and add `http://localhost:3000` to allowed origins.
 
-Environment (`apps/web/.env.local`):
+Environment (`kallr-webapp/.env.local`):
 
 | Variable | Needed for | Without it |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ TP/SL attach to buys only (a spot sell leaves you in USDC). Tradable today: ETH 
 
 ## Android keyboard
 
-Phones can't run extensions, but every app has a keyboard. `apps/keyboard` is a fork of
+Phones can't run extensions, but every app has a keyboard. `kallr-keyboard` is a fork of
 **[FlorisBoard](https://github.com/florisboard/florisboard)** v0.5.2 (Apache-2.0, by The
 FlorisBoard Contributors), which does all the typing. We added one row above its Smartbar:
 
@@ -64,7 +64,7 @@ FlorisBoard Contributors), which does all the typing. We added one row above its
 
 It never holds keys, sends only the post link, contract or order phrase (nothing else you type),
 and stays quiet in password fields. Build, install and what changed:
-[apps/keyboard/AFTERMARKETS.md](apps/keyboard/AFTERMARKETS.md).
+[kallr-keyboard/KALLR.md](kallr-keyboard/KALLR.md).
 
 ## Arkiv: trade records and caller records
 
@@ -74,23 +74,23 @@ browser, so anyone can check them without asking us.
 
 | Entity | Written when | Owner | Expires |
 | --- | --- | --- | --- |
-| `aftermarkets.trades` | Flash accepts an order | Created read-only by our writer, then handed to the trader's wallet | ~182 days (Arkiv's max) |
-| `aftermarkets.calls` | We first price a call | Our writer, read-only | Its timeframe plus a 48h scoring window |
-| `aftermarkets.call-results` | The call settles (hit, miss or flat) | Our writer, read-only; anyone may extend it | ~182 days, extendable by anyone |
+| `kallr.trades` | Flash accepts an order | Created read-only by our writer, then handed to the trader's wallet | ~182 days (Arkiv's max) |
+| `kallr.calls` | We first price a call | Our writer, read-only | Its timeframe plus a 48h scoring window |
+| `kallr.call-results` | The call settles (hit, miss or flat) | Our writer, read-only; anyone may extend it | ~182 days, extendable by anyone |
 
 - **Writer wallet:** `0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53`. Reads only trust entities it created.
-- **One query you can run:** `arkiv.schema = str('aftermarkets.trades') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)`
+- **One query you can run:** `arkiv.schema = str('kallr.trades') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)`
 - Details: [arkiv/schema.md](arkiv/schema.md), [why-arkiv.md](arkiv/why-arkiv.md), [how-you-use-arkiv.md](arkiv/how-you-use-arkiv.md), [reach.md](arkiv/reach.md), [friction.md](arkiv/friction.md).
-- Code: `packages/integrations/src/arkiv.ts` (schemas, reads), `apps/web/lib/server/arkiv.ts` (writes), `apps/web/app/trades/page.tsx` (dashboard), `apps/web/app/api/arkiv/score` (settles expired calls).
+- Code: `packages/integrations/src/arkiv.ts` (schemas, reads), `kallr-webapp/lib/server/arkiv.ts` (writes), `kallr-webapp/app/trades/page.tsx` (dashboard), `kallr-webapp/app/api/arkiv/score` (settles expired calls).
 
 ## Chrome extension
 
 ```sh
-npm run build -w @aftermarkets/extension                                       # for http://localhost:3000
-AFTERMARKETS_APP_ORIGIN=https://your-app.example npm run build -w @aftermarkets/extension
+npm run build -w @kallr/extension                                       # for http://localhost:3000
+KALLR_APP_ORIGIN=https://your-app.example npm run build -w @kallr/extension
 ```
 
-Then `chrome://extensions` → Developer mode → Load unpacked → `apps/extension/dist`, and open x.com with `npm run dev` running.
+Then `chrome://extensions` → Developer mode → Load unpacked → `kallr-extension/dist`, and open x.com with `npm run dev` running.
 
 What it adds to X:
 
@@ -122,15 +122,15 @@ curl -s localhost:3000/api/checks -H 'content-type: application/json' \
 
 ## The X bot
 
-Tag @AfterMarkets under a call and it replies with the caller's record and how this call played out. Reply `copy $2, TP 10%, SL 5%` and it answers with a link to the desk, where you review and sign. The bot never trades.
+Tag @Kallr under a call and it replies with the caller's record and how this call played out. Reply `copy $2, TP 10%, SL 5%` and it answers with a link to the desk, where you review and sign. The bot never trades.
 
 ```sh
 # Try a reply on any public post, no keys needed (posts nothing):
-npm run try -w @aftermarkets/x-bot -- https://x.com/<handle>/status/<id> "copy $2, TP 10%, SL 5%"
+npm run try -w @kallr/x-bot -- https://x.com/<handle>/status/<id> "copy $2, TP 10%, SL 5%"
 
 # Run the mentions loop (dry run unless X_BOT_POST=1):
-cp services/x-bot/.env.example services/x-bot/.env   # bot account keys
-node --env-file=services/x-bot/.env --import tsx services/x-bot/src/main.ts
+cp kallr-xbot/.env.example kallr-xbot/.env   # bot account keys
+node --env-file=kallr-xbot/.env --import tsx kallr-xbot/src/main.ts
 ```
 
 The X API is pay-per-use: about $0.001 per mention read, $0.005 per post read, $0.01 per bot reply ($0.20 if the reply contains a link). Run the loop on an always-on host (Railway, Fly, EC2), not a serverless platform.
@@ -141,9 +141,9 @@ The X API is pay-per-use: about $0.001 per mention read, $0.005 per post read, $
 apps/
   web/                Next.js PWA: landing (/), desk (/app), Flash + after market + checks APIs
   extension/          Chrome extension for x.com: trade cards, records, profiles, follow, safety checks
-  keyboard/           Android keyboard: FlorisBoard fork with an AfterMarkets row
+  keyboard/           Android keyboard: FlorisBoard fork with an Kallr row
 services/
-  x-bot/              @AfterMarkets on X: after market replies, copy links to the desk
+  x-bot/              @Kallr on X: after market replies, copy links to the desk
 packages/
   domain/             order parser, reputation, signals
   integrations/       call scoring, after market, Definitive Flash, Arkiv, safety checks, X API
@@ -168,8 +168,8 @@ This repo was started at the event (first commit 5 Nov 2026). What we brought in
   follow chips were ported from **Xtrading**, our earlier X trading extension (on Monad, with Kuru and Perpl). At
   the event we moved them onto Base and Definitive Flash, added token safety checks, and wired them to this app.
 - **Android keyboard:** a fork of [FlorisBoard](https://github.com/florisboard/florisboard) v0.5.2 (Apache-2.0),
-  which does all the typing. We added the AfterMarkets row; the full list of changes is in
-  [apps/keyboard/AFTERMARKETS.md](apps/keyboard/AFTERMARKETS.md).
+  which does all the typing. We added the Kallr row; the full list of changes is in
+  [kallr-keyboard/KALLR.md](kallr-keyboard/KALLR.md).
 - **jetpref:** [patrickgold/jetpref](https://github.com/patrickgold/jetpref) (Apache-2.0), vendored at the commit
   FlorisBoard v0.5.2 needs, because its snapshot has expired from Maven Central.
 
@@ -183,10 +183,10 @@ commits carry `Co-Authored-By: Claude`. The product decisions, sponsor choices a
 
 ## License
 
-[MIT](LICENSE). `apps/keyboard` (FlorisBoard) and `apps/keyboard/vendor/jetpref` keep their Apache-2.0 licenses.
+[MIT](LICENSE). `kallr-keyboard` (FlorisBoard) and `kallr-keyboard/vendor/jetpref` keep their Apache-2.0 licenses.
 
 ## Credits
 
-- [FlorisBoard](https://github.com/florisboard/florisboard) (Apache-2.0): the Android keyboard `apps/keyboard` is built on.
+- [FlorisBoard](https://github.com/florisboard/florisboard) (Apache-2.0): the Android keyboard `kallr-keyboard` is built on.
 - [jetpref](https://github.com/patrickgold/jetpref) (Apache-2.0): FlorisBoard's preferences library, vendored.
 - [Arkiv](https://arkiv.network): where trade and caller records live.
