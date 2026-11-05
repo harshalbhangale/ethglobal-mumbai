@@ -327,3 +327,123 @@ private fun WalletScreen() {
         PoweredByFlash(Modifier.padding(top = 24.dp))
     }
 }
+
+/**
+ * Share → Kallr from X or Telegram: checks the shared post or message (the caller's record, the AI's
+ * read, real or fake contract) and offers a quick buy, which opens the confirm sheet.
+ */
+class KallrShareActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() }
+        if (text == null) {
+            finish()
+            return
+        }
+        setContent { KallrTheme { ShareSheet(text, onClose = { finish() }) } }
+    }
+}
+
+@Composable
+private fun ShareSheet(text: String, onClose: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var result by remember { mutableStateOf<AmResponse?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var usd by remember { mutableStateOf("5") }
+    var exits by remember { mutableStateOf<Pair<Double, Double>?>(10.0 to 5.0) }
+    val wallet = KallrWallet.address.value
+
+    LaunchedEffect(text) {
+        result = Kallr.lookup(context, Kallr.clipboardReference(text) ?: text.trim().take(600), null)
+        result?.prefill?.let { p ->
+            p.usd?.let { usd = if (it % 1.0 == 0.0) it.toInt().toString() else "%.2f".format(it) }
+            if (p.tpPct != null && p.slPct != null) exits = p.tpPct to p.slPct
+        }
+        loading = false
+    }
+
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)).clickable { onClose() }, contentAlignment = Alignment.BottomCenter) {
+        Surface(Modifier.fillMaxWidth().clickable(enabled = false) {}, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), tonalElevation = 2.dp) {
+            Column(Modifier.padding(20.dp).navigationBarsPadding()) {
+                Text("Kallr · check this call", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(8.dp))
+                val r = result
+                when {
+                    loading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.padding(end = 12.dp).height(20.dp))
+                        Text("Reading it…")
+                    }
+                    r == null -> Text("Couldn't check that. Is the Kallr server reachable?", color = MaterialTheme.colorScheme.error)
+                    else -> {
+                        r.fake?.let {
+                            Text(
+                                "Fake \$${it.claimed} contract. The real one is ${it.real.take(6)}…${it.real.takeLast(4)}. Don't buy it.",
+                                color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium,
+                            )
+                        }
+                        (r.call?.line ?: r.ai?.summary)?.let { Text(it, fontWeight = FontWeight.Medium) }
+                        r.record?.line?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+                        r.token?.let { t ->
+                            Text(
+                                t.line,
+                                color = if (t.warnings.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                                fontSize = 13.sp,
+                            )
+                        }
+                        val trade = r.trade
+                        if (trade == null) {
+                            if (r.fake == null) {
+                                Text(
+                                    "Nothing Kallr can buy on Base for this.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp),
+                                )
+                            }
+                        } else {
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("1", "5", "20").forEach { a ->
+                                    if (usd == a) Button(onClick = {}, colors = ButtonDefaults.buttonColors(containerColor = KallrBlue)) { Text("\$$a") }
+                                    else OutlinedButton(onClick = { usd = a }) { Text("\$$a") }
+                                }
+                                val e = exits
+                                if (e != null) {
+                                    Button(onClick = { exits = null }, colors = ButtonDefaults.buttonColors(containerColor = KallrBlue)) {
+                                        Text("TP ${e.first.fmt()}% · SL ${e.second.fmt()}%")
+                                    }
+                                } else {
+                                    OutlinedButton(onClick = { exits = 10.0 to 5.0 }) { Text("No exits") }
+                                }
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            Button(
+                                onClick = {
+                                    if (wallet == null) {
+                                        KallrWalletActivity.open(context)
+                                    } else {
+                                        KallrTradeActivity.open(
+                                            context,
+                                            KeyboardOrder(
+                                                token = trade.token,
+                                                kind = "swap",
+                                                usd = usd,
+                                                tpPct = exits?.first,
+                                                slPct = exits?.second,
+                                                postId = r.post?.postId,
+                                                caller = r.post?.handle,
+                                                symbol = trade.symbol,
+                                            ),
+                                        )
+                                        onClose()
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = KallrBlue),
+                            ) { Text(if (wallet == null) "Sign in to trade" else "Buy \$$usd of ${trade.symbol}", fontSize = 16.sp) }
+                        }
+                    }
+                }
+                PoweredByFlash()
+            }
+        }
+    }
+}

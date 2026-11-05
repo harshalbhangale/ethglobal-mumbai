@@ -46,6 +46,28 @@ data class AmOrder(
 @Serializable
 data class AmTrade(val token: String, val symbol: String, val price: Double, val logo: String? = null)
 
+/** The AI's one-line read of a message. */
+@Serializable
+data class AmAi(val summary: String, val symbol: String? = null, val direction: String? = null, val timeframe: String? = null)
+
+/** A shared contract that claims a ticker but isn't the real token with it on Base. */
+@Serializable
+data class AmFake(val claimed: String, val contract: String, val real: String)
+
+/** An order the message, typed words or voice asked for. */
+@Serializable
+data class AmPrefill(
+    val kind: String? = null,
+    val usd: Double? = null,
+    val limitPct: Double? = null,
+    val twapMinutes: Int? = null,
+    val tpPct: Double? = null,
+    val slPct: Double? = null,
+)
+
+@Serializable
+data class VoiceResult(val transcript: String, val summary: String, val prefill: AmPrefill? = null, val trade: AmTrade? = null)
+
 @Serializable
 data class AmResponse(
     val post: AmPost? = null,
@@ -53,6 +75,9 @@ data class AmResponse(
     val record: AmRecord? = null,
     val token: AmToken? = null,
     val trade: AmTrade? = null,
+    val ai: AmAi? = null,
+    val fake: AmFake? = null,
+    val prefill: AmPrefill? = null,
     val order: AmOrder? = null,
 ) {
     val isEmpty get() = post == null && call == null && token == null && order == null
@@ -70,12 +95,18 @@ object Kallr {
     private val POST_LINK = Regex("""https://(?:www\.)?(?:x|twitter)\.com/[A-Za-z0-9_]{1,15}/status/[0-9]{1,20}""")
     private val EVM_ADDRESS = Regex("""(?<![A-Za-z0-9])0x[0-9a-fA-F]{40}(?![A-Za-z0-9])""")
     private val ORDER_START = Regex("""\b(copy|buy|long|sell|short)\b""", RegexOption.IGNORE_CASE)
-    private val ORDER_HAS_SIZE = Regex("""\$\s*\d|\bmy\s+\$?[a-z]""", RegexOption.IGNORE_CASE)
+    private val ORDER_HAS_SIZE = Regex("""\$\s*\d|\bmy\s+\$?[a-z]|\d+\s*(?:bucks|usd|dollars?)\b""", RegexOption.IGNORE_CASE)
+    private val CASHTAG = Regex("""(?<![A-Za-z0-9$])\$[A-Za-z][A-Za-z0-9]{1,9}\b""")
 
-    /** The only part of the clipboard we send: an X post link or a contract address. */
+    /**
+     * What we send from the clipboard or a selection: an X post link, or a message that names a coin
+     * (a $CASHTAG or a contract), e.g. a Telegram call. Anything else stays on the phone.
+     */
     fun clipboardReference(clip: String?): String? {
         if (clip.isNullOrBlank()) return null
-        return POST_LINK.find(clip)?.value ?: EVM_ADDRESS.find(clip)?.value
+        POST_LINK.find(clip)?.let { return it.value }
+        if (CASHTAG.containsMatchIn(clip) || EVM_ADDRESS.containsMatchIn(clip)) return clip.trim().take(600)
+        return null
     }
 
     /** The order phrase at the end of the line being typed, e.g. "copy $5 tp 10% sl 5%". Mirrors kallr-webapp/lib/keyboard.ts. */
@@ -112,6 +143,30 @@ object Kallr {
     suspend fun post(path: String, body: String): Result<String> = request("POST", path, body)
 
     suspend fun get(path: String): Result<String> = request("GET", path, null)
+
+    /** A spoken order: audio in, the words and the order the AI heard out. */
+    suspend fun voice(audio: ByteArray): Result<VoiceResult> = withContext(Dispatchers.IO) {
+        val connection = (URL("$origin/api/keyboard/voice").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 8_000
+            readTimeout = 40_000
+            doOutput = true
+            setRequestProperty("content-type", "audio/mp4")
+        }
+        try {
+            connection.outputStream.use { it.write(audio) }
+            val ok = connection.responseCode in 200..299
+            val text = (if (ok) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+            if (ok) Result.success(json.decodeFromString<VoiceResult>(text))
+            else Result.failure(Exception(runCatching {
+                (json.parseToJsonElement(text) as kotlinx.serialization.json.JsonObject)["error"]?.toString()?.trim('"')
+            }.getOrNull() ?: "Voice failed (${connection.responseCode})"))
+        } catch (e: Exception) {
+            Result.failure(Exception("Couldn't reach Kallr at $origin"))
+        } finally {
+            connection.disconnect()
+        }
+    }
 
     private suspend fun request(method: String, path: String, body: String?): Result<String> = withContext(Dispatchers.IO) {
         val connection = (URL("$origin$path").openConnection() as HttpURLConnection).apply {

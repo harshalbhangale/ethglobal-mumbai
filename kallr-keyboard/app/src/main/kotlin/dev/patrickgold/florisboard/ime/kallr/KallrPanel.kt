@@ -16,6 +16,7 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -44,10 +46,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -58,6 +62,7 @@ import dev.patrickgold.florisboard.ime.ImeUiMode
 import dev.patrickgold.florisboard.ime.keyboard.FlorisImeSizing
 import dev.patrickgold.florisboard.ime.theme.FlorisImeUi
 import dev.patrickgold.florisboard.keyboardManager
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -92,7 +97,31 @@ internal object KallrPanelState {
     var twapMinutes by mutableIntStateOf(60)
     var exits by mutableStateOf(EXITS[1])
 
-    val symbol: String get() = result?.trade?.takeIf { it.token == token }?.symbol ?: token
+    /** A coin the AI or voice picked that isn't the copied call's coin. */
+    var extraTrade by mutableStateOf<AmTrade?>(null)
+    /** What the AI heard or read, shown on the Swap tab. */
+    var aiNote by mutableStateOf<String?>(null)
+
+    val symbol: String get() =
+        (result?.trade?.takeIf { it.token == token } ?: extraTrade?.takeIf { it.token == token })?.symbol ?: token
+
+    /** Fill the order from what the AI read in a message, typed words or voice. */
+    fun apply(prefill: AmPrefill?, trade: AmTrade?) {
+        trade?.let {
+            if (it.token != result?.trade?.token) extraTrade = it
+            token = it.token
+        }
+        prefill ?: return
+        prefill.usd?.let { usd = if (it % 1.0 == 0.0) it.toInt().toString() else "%.2f".format(it) }
+        when (prefill.kind) {
+            "limit" -> { kind = Kind.Limit; prefill.limitPct?.let { limitPct = if (it > 0) -it else it } }
+            "twap" -> { kind = Kind.Twap; prefill.twapMinutes?.let { twapMinutes = it } }
+            "swap" -> kind = Kind.Swap
+        }
+        if (prefill.tpPct != null && prefill.slPct != null) {
+            exits = Exits("TP ${prefill.tpPct.fmt()}% · SL ${prefill.slPct.fmt()}%", prefill.tpPct, prefill.slPct)
+        }
+    }
 }
 
 internal fun Double.fmt(): String = if (this % 1.0 == 0.0) toInt().toString() else toString()
@@ -222,6 +251,16 @@ private fun SwapTab(wallet: String?) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         // The call you copied, or how to bring one in.
         Card {
+            r?.fake?.let { f ->
+                Text(
+                    "Fake \$${f.claimed} contract, not the real one (real: ${short(f.real)}). No buy for it.",
+                    color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 2,
+                )
+            }
+            if (r?.call == null) r?.ai?.summary?.let {
+                Text(it, color = themeText(), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            s.aiNote?.let { Text(it, color = Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             when {
                 r?.call != null || r?.post != null -> {
                     Text(
@@ -234,14 +273,19 @@ private fun SwapTab(wallet: String?) {
                     Text(r.token.line, color = themeText(), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     r.token.warnings.firstOrNull()?.let { Text("$it. No buy for it.", color = Danger, fontSize = 12.sp, maxLines = 2) }
                 }
+                r?.ai != null || s.aiNote != null -> {}
                 else -> Text(
-                    "Copy a call (X link or a \$TICKER message) to trade it here, or pick ETH or BTC.",
+                    "Copy a call (X link or a \$TICKER message) to trade it here, or hold the mic and say an order.",
                     color = Muted, fontSize = 12.sp,
                 )
             }
         }
+        MicButton()
         ChipRow {
             trade?.takeIf { it.token != "ETH" && it.token != "BTC" }?.let { t -> Chip("$${t.symbol}", s.token == t.token) { s.token = t.token } }
+            s.extraTrade?.takeIf { it.token != "ETH" && it.token != "BTC" && it.token != trade?.token }?.let { t ->
+                Chip("$${t.symbol}", s.token == t.token) { s.token = t.token }
+            }
             Chip("ETH", s.token == "ETH") { s.token = "ETH" }
             Chip("BTC", s.token == "BTC") { s.token = "BTC" }
             Spacer(Modifier.width(8.dp))
@@ -293,6 +337,55 @@ private fun SwapTab(wallet: String?) {
             }
         }
         FlashFooter()
+    }
+}
+
+/** Hold to speak an order ("buy twenty dollars of degen, take profit ten percent"); let go to send. */
+@Composable
+private fun MicButton() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf("Hold to say an order") }
+    var listening by remember { mutableStateOf(false) }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .background(if (listening) KallrBlue.copy(alpha = 0.18f) else themeText().copy(alpha = 0.06f), RoundedCornerShape(12.dp))
+            .pointerInput(Unit) {
+                detectTapGestures(onPress = {
+                    if (!KallrVoice.start(context)) {
+                        status = "Allow the microphone, then hold again"
+                        return@detectTapGestures
+                    }
+                    listening = true
+                    status = "Listening… let go to send"
+                    tryAwaitRelease()
+                    listening = false
+                    val audio = KallrVoice.stop()
+                    if (audio == null) {
+                        status = "Too short. Hold and speak."
+                        return@detectTapGestures
+                    }
+                    status = "Thinking…"
+                    scope.launch {
+                        Kallr.voice(audio).fold(
+                            onSuccess = { v ->
+                                KallrPanelState.apply(v.prefill, v.trade)
+                                KallrPanelState.aiNote = "You said: \"${v.transcript}\""
+                                status = "Hold to say another"
+                            },
+                            onFailure = { status = it.message ?: "Voice failed" },
+                        )
+                    }
+                })
+            }
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Mic, contentDescription = "Speak an order", tint = KallrBlue, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(status, color = themeText(), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

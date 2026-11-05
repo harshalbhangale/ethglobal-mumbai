@@ -20,6 +20,16 @@ When you copy a call (X post link, or a `$PEPE` message from Telegram), share a 
 `copy $20 of btc tp 20% sl 10%`, a slim "Trade this call" suggestion appears above the toolbar and
 opens the panel with the order filled in. A shared contract gets a token check and no Buy for it.
 
+**AI layer (server-side; the OpenAI and ElevenLabs keys never ship in the APK):**
+
+- **Check this call:** copy or share (Share → **Check with Kallr**) a post or a Telegram message. The
+  AI reads the coin, contract, direction and timeframe, the server checks the caller's record and
+  the token, and a contract that claims a ticker but isn't the main token with it on Base is shown
+  as **fake** with the real address, and gets no Buy.
+- **Plain words:** typing `buy 20 bucks of degen if it dips 10%` fills a $20 DEGEN limit at −10%.
+- **Hold to say an order** (Swap tab): ElevenLabs Scribe hears it, the AI fills the panel. The mic
+  only records while held (Android asks for the microphone once).
+
 Buy opens a confirm sheet (no browser) with what you pay, what you get, the exits and the approval
 (this order's USDC only). "Confirm and sign" signs with the embedded wallet and places the order on
 **Definitive Flash** on Base, tagged as a keyboard trade.

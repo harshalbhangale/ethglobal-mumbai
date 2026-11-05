@@ -82,7 +82,11 @@ fun KallrRow() {
         delay(400) // wait for typing to settle
         val r = Kallr.lookup(context, reference, typed)
         s.result = r
+        s.aiNote = null
+        s.extraTrade = null
         r?.trade?.let { s.token = it.token }
+        // The AI's read of the message or typed words ("buy 20 bucks of degen if it dips 10%").
+        r?.prefill?.let { s.apply(it, null) }
         typed?.let { t ->
             TYPED_USD.find(t)?.groupValues?.get(1)?.let { s.usd = it }
             TYPED_TOKEN.find(t)?.groupValues?.get(1)?.let { s.token = it.uppercase() }
@@ -93,9 +97,12 @@ fun KallrRow() {
     }
 
     val r = s.result
-    val warning = r?.token?.warnings?.firstOrNull()
+    val fake = r?.fake
+    val warning = fake?.let { "Fake \$${it.claimed} contract: not the real one. Don't buy it." } ?: r?.token?.warnings?.firstOrNull()
     val headline = when {
+        fake != null -> warning
         warning != null -> "${r?.token?.symbol ?: "Token"}: $warning"
+        r?.call == null && r?.ai != null -> "Trade it · ${r.ai.summary}"
         r?.call != null -> "Trade @${r.post?.handle ?: "this"}'s call · ${r.call.line}"
         r?.post != null && r.trade != null -> "Trade @${r.post.handle}'s $${r.trade.symbol} call"
         r?.post != null -> "@${r.post.handle}: not a call we can price"
