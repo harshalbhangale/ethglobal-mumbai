@@ -14,7 +14,13 @@ export type ScoredCall = {
   returnBps: number | null;
 };
 export type CallerRecord = { scored: number; hits: number; hitRate: number | null; medianReturnBps: number | null; open: number };
-export type Answer = { call: ScoredCall | null; record: CallerRecord; calls?: SeenCall[] };
+export type Answer = {
+  call: ScoredCall | null;
+  record: CallerRecord;
+  calls?: SeenCall[];
+  /** Safety checks on a contract the post shares (GoPlus + Dexscreener). */
+  checks?: { token: import("./token-card").TokenCheck | null };
+};
 
 export type PostRef = { handle: string; postId: string };
 

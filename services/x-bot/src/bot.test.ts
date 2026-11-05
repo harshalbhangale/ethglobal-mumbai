@@ -62,6 +62,13 @@ describe("replyFor", () => {
     expect(reply).toContain("This post isn't a call I can price");
     expect(reply).not.toContain("Copy it");
   });
+
+  it("won't copy a ticker trade from a post that shares a contract", async () => {
+    const bait = { ...call, text: "Buying $ETH here 🚀 CA: 0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed" };
+    const reply = await replyFor(tag("@kol @AfterMarkets copy $2", bait), deps);
+    expect(reply).toContain("won't copy a ticker trade");
+    expect(reply).not.toMatch(/https:\/\//);
+  });
 });
 
 describe("helpers", () => {

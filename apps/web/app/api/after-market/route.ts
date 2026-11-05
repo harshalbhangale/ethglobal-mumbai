@@ -1,5 +1,18 @@
 import { type ScoredCall, scoreCall, summarize } from "@aftermarkets/integrations/after-market";
+import { checkToken, type TokenCheck } from "@aftermarkets/integrations/safety-checks";
+import { tokenReferences } from "@aftermarkets/integrations/token-references";
 import { z } from "zod";
+
+// Token checks are cached for 10 minutes per contract.
+const tokenCache = new Map<string, { at: number; check: TokenCheck | null }>();
+async function cachedTokenCheck(address: string) {
+  const hit = tokenCache.get(address);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.check;
+  const check = await checkToken(address).catch(() => null);
+  if (tokenCache.size > 2000) tokenCache.clear();
+  tokenCache.set(address, { at: Date.now(), check });
+  return check;
+}
 
 /**
  * After market for a post on X: this call's move since posting, plus the caller's record
@@ -37,7 +50,12 @@ export async function POST(req: Request) {
   const handle = parsed.data.handle.toLowerCase();
   const now = Math.floor(Date.now() / 1000);
 
-  const call = await cachedScore(handle, current, now);
+  // A post that shares a contract address gets the token checked, call or not.
+  const evmRef = tokenReferences(current.text).find((r) => r.kind === "evm");
+  const [call, token] = await Promise.all([
+    cachedScore(handle, current, now),
+    evmRef ? cachedTokenCheck(evmRef.address) : Promise.resolve(null),
+  ]);
   const others = history.filter((h) => h.postId !== current.postId);
   const scored: ScoredCall[] = [];
   for (const h of others) {
@@ -58,5 +76,5 @@ export async function POST(req: Request) {
       postedAt,
       expiresAt,
     }));
-  return Response.json({ call, record, calls, coverage: "posts seen in this browser" });
+  return Response.json({ call, record, calls, checks: { token }, coverage: "posts seen in this browser" });
 }
