@@ -111,6 +111,7 @@ describe("flashCard", () => {
     fakeWallet(null);
     const { card, open: openPanel } = await mounted();
     openPanel();
+    q<HTMLButtonElement>(card, ".exits-toggle").click();
     const amount = q<HTMLInputElement>(card, ".swap-amount");
     amount.value = "25";
     amount.dispatchEvent(new Event("input"));
@@ -135,6 +136,7 @@ describe("flashCard", () => {
   it("refuses a lone take-profit or stop-loss, since Flash places them as a pair", async () => {
     const { card, open } = await mounted();
     open();
+    q<HTMLButtonElement>(card, ".exits-toggle").click();
     const amount = q<HTMLInputElement>(card, ".swap-amount");
     amount.value = "10";
     amount.dispatchEvent(new Event("input"));
@@ -252,6 +254,7 @@ describe("sign on X with a browser wallet", () => {
     document.body.append(made.card);
     await vi.waitFor(() => expect(made.card.querySelector(".swap-title b")?.textContent).toBe("$2,500"));
     made.open();
+    q<HTMLButtonElement>(made.card, ".exits-toggle").click();
     const amount = q<HTMLInputElement>(made.card, ".swap-amount");
     amount.value = "25";
     amount.dispatchEvent(new Event("input"));
@@ -317,5 +320,34 @@ describe("sign on X with a browser wallet", () => {
     });
     await vi.waitFor(() => expect(card.textContent).toContain("Cancelled in your wallet. Nothing was sent."));
     expect(worker.mock.calls.some(([m]) => m.type === "flash-order")).toBe(false);
+  });
+});
+
+describe("plain swap by default", () => {
+  it("starts with TP/SL off, so the order is a plain swap with the fewest steps", async () => {
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
+    fakeWallet(null);
+    const { card, open: openPanel } = await mounted();
+    openPanel();
+    expect(q(card, ".exits").hidden).toBe(true);
+    expect(q(card, ".exits-toggle").textContent).toBe("＋ Take-profit / stop-loss");
+    const amount = q<HTMLInputElement>(card, ".swap-amount");
+    amount.value = "1";
+    amount.dispatchEvent(new Event("input"));
+    expect(q(card, ".review").textContent).toContain("ExitsNone · plain swap");
+    expect(q(card, ".review").textContent).toContain("StepsApprove once (first time), sign once");
+    q<HTMLButtonElement>(card, ".swap-submit").click();
+    await vi.waitFor(() => expect(open).toHaveBeenCalled());
+    expect(new URL(open.mock.calls[0]?.[0] as string).searchParams.get("order")).toBe("copy $1 of ETH");
+  });
+
+  it("explains a missing balance in plain words", async () => {
+    stubWorker();
+    const { friendlyError } = await import("./flash-card");
+    expect(friendlyError(new Error("REASON_INSUFFICIENT_FUNDER_BALANCE"), "USDC")).toBe(
+      "Not enough USDC in this wallet on Base. Add USDC (and a little ETH for gas), then try again.",
+    );
+    expect(friendlyError({ code: 4001, message: "User rejected the request." }, "USDC")).toBe("Cancelled in your wallet. Nothing was sent.");
   });
 });

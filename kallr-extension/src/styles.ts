@@ -226,6 +226,9 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .done-card strong { color: var(--foreground); }
 
 .definitive-logo { display: block; color: var(--foreground); }
+.exits-toggle { justify-self: start; border: 0; background: none; padding: 4px 2px; color: #1d9bf0; font: 600 14px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; }
+.exits-toggle:hover { text-decoration: underline; }
+.step-error { display: block; margin-top: 2px; font-weight: 500; font-size: 13px; line-height: 1.4; color: var(--negative); }
 .card .title { gap: 12px; margin-bottom: 12px; }
 .title-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .title-sub { color: var(--muted); font: 500 12px/1.2 system-ui, sans-serif; }

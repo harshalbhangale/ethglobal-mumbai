@@ -51,6 +51,7 @@ export function stepTracker() {
   const reached = new Set<Step>();
   let current: Step | null = null;
   let failed = false;
+  let failMessage = "";
   const render = () => {
     const order = TRACK.filter((t) => !t.optional || reached.has(t.step));
     const at = current ? order.findIndex((t) => t.step === current) : -1;
@@ -61,7 +62,7 @@ export function stepTracker() {
           "li",
           { class: `step ${state}` },
           el("span", { class: "step-dot", "aria-hidden": "true" }, state === "done" ? "✓" : state === "failed" ? "!" : ""),
-          el("span", {}, t.label),
+          el("span", {}, t.label, state === "failed" && failMessage ? el("small", { class: "step-error" }, failMessage) : null),
         );
       }),
     );
@@ -75,8 +76,10 @@ export function stepTracker() {
       failed = false;
       render();
     },
-    fail() {
+    /** Marks the current step failed and says why, right under it. */
+    fail(message = "") {
       failed = true;
+      failMessage = message;
       render();
     },
     finish() {
@@ -88,6 +91,17 @@ export function stepTracker() {
       );
     },
   };
+}
+
+/** Turns wallet and Flash errors into one plain sentence the user can act on. */
+export function friendlyError(error: unknown, spending: string) {
+  if (rejected(error)) return "Cancelled in your wallet. Nothing was sent.";
+  const msg = (error as Error)?.message ?? String(error);
+  if (/insufficient|balance|exceeds balance|not enough/i.test(msg))
+    return `Not enough ${spending} in this wallet on Base. Add ${spending} (and a little ETH for gas), then try again.`;
+  if (/too small|fees would exceed|minimum notional/i.test(msg)) return "Too small for Flash: fees would eat it. Try $0.50 or more.";
+  if (/gas|intrinsic|funds for/i.test(msg)) return "Not enough ETH on Base for gas. Add about $0.10 of ETH.";
+  return msg || "The order didn't go through.";
 }
 
 export type FlashCard = { card: HTMLElement; open: () => void };
@@ -105,8 +119,10 @@ export function flashCard(input: {
   const token = TOKENS[asset] ?? asset;
   const call = input.answer?.call ?? null;
   let side: "buy" | "sell" = call?.direction === "down" ? "sell" : "buy";
-  let tp: number | null = 10;
-  let sl: number | null = 5;
+  // TP/SL is an opt-in extra: off by default keeps a first trade to approve once, sign once.
+  let tp: number | null = null;
+  let sl: number | null = null;
+  let advanced = false;
   let live: LivePrice | null = null;
   let walletOnPage: boolean | null = null;
   void hasBrowserWallet().then((v) => {
@@ -174,9 +190,10 @@ export function flashCard(input: {
   const slText = el("b", {});
   const tpChips = el("div", { class: "exit-chips tp", role: "group", "aria-label": "Take-profit" });
   const slChips = el("div", { class: "exit-chips sl", role: "group", "aria-label": "Stop-loss" });
+  const exitsToggle = el("button", { type: "button", class: "exits-toggle", "aria-expanded": "false" }, "＋ Take-profit / stop-loss");
   const exits = el(
     "div",
-    { class: "exits" },
+    { class: "exits", hidden: "" },
     el("div", { class: "exit-row" }, el("span", {}, "Take-profit ", tpText), tpChips),
     el("div", { class: "exit-row" }, el("span", {}, "Stop-loss ", slText), slChips),
   );
@@ -223,6 +240,19 @@ export function flashCard(input: {
   }
   chips(tpChips, TP_CHOICES, () => tp, (v) => (tp = v));
   chips(slChips, SL_CHOICES, () => sl, (v) => (sl = v));
+  const syncChips = () => {
+    for (const [box, v] of [[tpChips, tp], [slChips, sl]] as const)
+      for (const b of box.querySelectorAll("button"))
+        b.setAttribute("aria-pressed", String(b.textContent === (v === null ? "None" : `${v}%`)));
+  };
+  exitsToggle.addEventListener("click", () => {
+    advanced = !advanced;
+    // Opening suggests 10% / 5%; closing removes the exits entirely.
+    tp = advanced ? 10 : null;
+    sl = advanced ? 5 : null;
+    syncChips();
+    update();
+  });
 
   const price = () => (live ? Number(live.price) : Number.NaN);
 
@@ -239,7 +269,10 @@ export function flashCard(input: {
     payLabel.textContent = side === "buy" ? "You pay" : "You sell";
     payToken.replaceChildren(pill(side === "buy" ? "USDC" : token));
     receiveToken.replaceChildren(pill(side === "buy" ? token : "USDC"));
-    exits.hidden = side === "sell";
+    exitsToggle.hidden = side === "sell";
+    exits.hidden = side === "sell" || !advanced;
+    exitsToggle.setAttribute("aria-expanded", String(advanced));
+    exitsToggle.textContent = advanced ? "− Remove take-profit / stop-loss" : "＋ Take-profit / stop-loss";
     const p = price();
     const exitPrice = (pct: number, dir: 1 | -1) => formatPrice(String(p * (1 + (dir * pct) / 100)));
     const fmt = (pct: number | null, dir: 1 | -1) =>
@@ -271,6 +304,7 @@ export function flashCard(input: {
         : side === "buy"
           ? row("Exits", "None · plain swap")
           : []),
+      ...row("Steps", withExits ? "Approve twice, sign twice (first time)" : "Approve once (first time), sign once"),
       ...row("Route", "Definitive Flash · MEV-protected"),
       ...row("Network", "Base mainnet · real funds"),
       ...row("Sign in", walletOnPage === false ? "Kallr desk (Privy wallet)" : "Your browser wallet"),
@@ -352,8 +386,9 @@ export function flashCard(input: {
       );
       amount.value = "";
     } catch (error) {
-      tracker.fail();
-      status.textContent = rejected(error) ? "Cancelled in your wallet. Nothing was sent." : (error as Error).message || "The order didn't go through.";
+      const message = friendlyError(error, side === "buy" ? "USDC" : token);
+      tracker.fail(message);
+      status.textContent = message;
     } finally {
       busy = false;
       review.hidden = false;
@@ -404,6 +439,7 @@ export function flashCard(input: {
       el("div", { class: "swap-line" }, receiveAmount, receiveToken),
       receiveUsd,
     ),
+    exitsToggle,
     exits,
     review,
     progress,

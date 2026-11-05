@@ -107,8 +107,10 @@ export function TradeTicket({
   const [amount, setAmount] = useState("1");
   const [kind, setKind] = useState<"market" | "limit">("market");
   const [limit, setLimit] = useState("");
-  const [tp, setTp] = useState<number | null>(10);
-  const [sl, setSl] = useState<number | null>(5);
+  // TP/SL is opt-in: a plain swap needs one approval (first time) and one signature.
+  const [tp, setTp] = useState<number | null>(null);
+  const [sl, setSl] = useState<number | null>(null);
+  const [advanced, setAdvanced] = useState(false);
   const [typed, setTyped] = useState("");
   const [typedError, setTypedError] = useState<string | null>(null);
   const [source, setSource] = useState<{ postId: string; caller: string | null } | null>(null);
@@ -129,6 +131,7 @@ export function TradeTicket({
     setLimit(o.limitPrice === null ? "" : String(o.limitPrice));
     setTp(o.takeProfitPct === null ? null : Math.round(o.takeProfitPct * 1000) / 10);
     setSl(o.stopLossPct === null ? null : Math.round(o.stopLossPct * 1000) / 10);
+    setAdvanced(o.takeProfitPct !== null || o.stopLossPct !== null);
     return null;
   }
 
@@ -287,8 +290,35 @@ export function TradeTicket({
           </div>
         </Field>
 
-        {exitsOn ? (
-          <Field label="Exits" hint={exits && tp !== null && sl !== null ? <><span className="text-up">TP {usd(exits.takeProfit ?? 0)}</span> · <span className="text-down">SL {usd(exits.stopLoss ?? 0)}</span></> : "None"}>
+        {exitsOn && !advanced ? (
+          <button
+            type="button"
+            onClick={() => {
+              setAdvanced(true);
+              setTp(10);
+              setSl(5);
+            }}
+            className="text-sm font-semibold text-ink underline decoration-rule underline-offset-4 hover:decoration-ink"
+          >
+            ＋ Add take-profit / stop-loss
+          </button>
+        ) : exitsOn ? (
+          <Field
+            label="Exits"
+            hint={
+              <button
+                type="button"
+                onClick={() => {
+                  setAdvanced(false);
+                  setTp(null);
+                  setSl(null);
+                }}
+                className="font-semibold text-slate underline decoration-rule underline-offset-4 hover:text-ink"
+              >
+                Remove
+              </button>
+            }
+          >
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="w-24 text-sm text-slate">Take-profit</span>
@@ -351,6 +381,7 @@ export function TradeTicket({
               ["You get ≈", amountOk && entry ? (side === "buy" ? `${(amountUsd / entry).toLocaleString("en-US", { maximumSignificantDigits: 5 })} ${asset === "ETH" ? "WETH" : "cbBTC"}` : `${usd(amountUsd)} USDC`) : "—"],
               ["Entry", kind === "limit" ? (limitPrice ? `Limit ${usd(limitPrice)}` : "Set a price") : market ? `Market ≈ ${usd(market)}` : "…"],
               ["Exits", exitsOn && exits && tp !== null && sl !== null ? `TP ${usd(exits.takeProfit ?? 0)} · SL ${usd(exits.stopLoss ?? 0)}` : "None"],
+              ["Steps", exitsOn && tp !== null && sl !== null ? "Approve twice, sign twice (first time)" : "Approve once (first time), sign once"],
               ["Route", "Definitive Flash · MEV-protected"],
               ["Network", "Base mainnet · real funds"],
             ].map(([k, v]) => (
