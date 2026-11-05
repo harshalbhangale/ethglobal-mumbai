@@ -2,8 +2,10 @@ import { callInsights } from "./call-insights";
 import type { Answer, PostRef } from "./call-view";
 import { appOrigin } from "./config";
 import { assetUrl, el, openDesk, safeLink, wordmark } from "./dom";
+import { placeOnX, STEP_LABEL } from "./flash-direct";
 import { cardOrderText, COPYABLE, DECIMAL, deskOrderUrl } from "./post";
 import { ALIASES, formatPrice, type LivePrice, livePrice } from "./ticker-price";
+import { hasBrowserWallet, rejected } from "./wallet";
 
 /**
  * The post card, laid out like Xtrading's swap card: live price header, the Call check strip, then
@@ -101,6 +103,7 @@ export function flashCard(input: {
     el("div", { class: "exit-row" }, el("span", {}, "Stop-loss ", slText), slChips),
   );
   const meta = el("p", { class: "swap-meta" });
+  const walletChip = el("span", { class: "swap-wallet", hidden: "" });
   const status = el("p", { class: "inline-note", role: "status", "aria-live": "polite" });
   const submit = el("button", { type: "button", class: "inline-submit swap-submit", disabled: "" }, `Buy ${asset}`);
 
@@ -198,9 +201,52 @@ export function flashCard(input: {
   }, 30_000);
 
   amount.addEventListener("input", update);
-  submit.addEventListener("click", () => {
+
+  let busy = false;
+  /** With MetaMask / Rabby on the page: quote, approve, sign and submit right here on X. */
+  async function placeHere() {
+    busy = true;
+    submit.setAttribute("disabled", "");
+    try {
+      const result = await placeOnX(
+        {
+          asset: asset as "ETH" | "BTC",
+          side,
+          amount: amount.value,
+          tpPct: side === "buy" ? tp : null,
+          slPct: side === "buy" ? sl : null,
+          price: price(),
+          postId: post.postId,
+        },
+        (step) => {
+          status.textContent = STEP_LABEL[step];
+        },
+      );
+      walletChip.textContent = `${result.from.slice(0, 6)}…${result.from.slice(-4)}`;
+      walletChip.hidden = false;
+      status.replaceChildren(
+        `${side === "buy" ? "Bought" : "Sold"} ${asset} with Flash on Base ✓ `,
+        result.exits ? `Exits ${result.exits === "pending_activation" ? "arm on the first fill" : result.exits}. ` : "",
+        safeLink(`${appOrigin}/app#orders`, `Order ${result.orderId.slice(0, 8)}… ↗`),
+      );
+      amount.value = "";
+    } catch (error) {
+      status.textContent = rejected(error) ? "Cancelled in your wallet. Nothing was sent." : (error as Error).message || "The order didn't go through.";
+    } finally {
+      busy = false;
+      const keep = status.textContent;
+      const keepNodes = [...status.childNodes];
+      update();
+      // update() rewrites the hint; keep the result line the user needs to see.
+      if (keep) status.replaceChildren(...keepNodes);
+    }
+  }
+
+  submit.addEventListener("click", async () => {
+    if (busy) return;
     const usd = usdValue();
     if (usd === null || !Number.isFinite(usd)) return;
+    if (await hasBrowserWallet()) return placeHere();
     const text = cardOrderText({
       side,
       asset,
@@ -211,7 +257,7 @@ export function flashCard(input: {
     if (!text) return;
     const url = deskOrderUrl(appOrigin, text, post);
     openDesk(url);
-    status.replaceChildren("Review the quote and sign in the AfterMarkets desk. ", safeLink(url, "Open desk ↗"));
+    status.replaceChildren("No browser wallet here: review the quote and sign in the AfterMarkets desk. ", safeLink(url, "Open desk ↗"));
   });
 
   panel.append(
@@ -219,7 +265,7 @@ export function flashCard(input: {
       "div",
       { class: "swap-row" },
       sides,
-      el("span", { class: "swap-row-end" }, el("span", { class: "swap-chain-pill" }, el("span", { class: "swap-chain", "aria-hidden": "true" }), "Base mainnet")),
+      el("span", { class: "swap-row-end" }, walletChip, el("span", { class: "swap-chain-pill" }, el("span", { class: "swap-chain", "aria-hidden": "true" }), "Base mainnet")),
     ),
     el(
       "label",

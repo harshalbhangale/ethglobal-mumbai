@@ -12,7 +12,7 @@ const post = { handle: "kol", postId: "2", text: "$ETH to 3k, longing" };
 
 /** The worker: Chainlink prices and the after market for a post. */
 function stubWorker(after: Answer | null = answer()) {
-  const sendMessage = vi.fn(async (m: { type: string }) => {
+  const sendMessage = vi.fn(async (m: { type: string }): Promise<unknown> => {
     if (m.type === "prices") return { prices: [{ asset: "ETH", price: "2500", source: "chainlink-base" }] };
     if (m.type === "after-market") return after;
     if (m.type === "watchlist") return { entries: [] };
@@ -22,9 +22,40 @@ function stubWorker(after: Answer | null = answer()) {
   return sendMessage;
 }
 
+/**
+ * Stands in for wallet-bridge.ts in X's page: answers the content script's wallet requests.
+ * `wallet: null` means no MetaMask / Rabby installed.
+ */
+type WalletImpl = Record<string, (params: unknown[]) => unknown>;
+let walletListener: ((e: MessageEvent) => void) | null = null;
+function fakeWallet(wallet: WalletImpl | null) {
+  const calls: Array<{ method: string; params: unknown[] }> = [];
+  walletListener = (event: MessageEvent) => {
+    const d = event.data as { type?: string; id?: string; method?: string; params?: unknown[] };
+    if (d?.type !== "aftermarkets-wallet-request" || !d.id || !d.method) return;
+    calls.push({ method: d.method, params: d.params ?? [] });
+    const reply = (body: Record<string, unknown>) =>
+      window.dispatchEvent(
+        new MessageEvent("message", { data: { type: "aftermarkets-wallet-response", id: d.id, ...body }, origin: location.origin, source: window }),
+      );
+    if (d.method === "aftermarkets_ping") return void queueMicrotask(() => reply({ result: wallet !== null }));
+    const impl = wallet?.[d.method];
+    queueMicrotask(() =>
+      impl ? Promise.resolve(impl(d.params ?? [])).then((result) => reply({ result }), (e) => reply({ error: e })) : reply({ error: { code: 4200, message: "nope" } }),
+    );
+  };
+  window.addEventListener("message", walletListener);
+  // happy-dom's postMessage doesn't set source/origin; route requests straight to the fake bridge.
+  vi.spyOn(window, "postMessage").mockImplementation((data: unknown) => walletListener?.({ data } as MessageEvent));
+  return calls;
+}
+
 beforeEach(() => vi.stubGlobal("AFTERMARKETS_APP_ORIGIN", "https://aftermarkets.test"));
 afterEach(() => {
   document.body.innerHTML = "";
+  if (walletListener) window.removeEventListener("message", walletListener);
+  walletListener = null;
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.resetModules();
 });
@@ -72,6 +103,7 @@ describe("flashCard", () => {
   it("copies a buy with TP/SL into the desk, sized in USD", async () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
+    fakeWallet(null);
     const { card, open: openPanel } = await mounted();
     openPanel();
     const amount = q<HTMLInputElement>(card, ".swap-amount");
@@ -84,6 +116,8 @@ describe("flashCard", () => {
     const submit = q<HTMLButtonElement>(card, ".swap-submit");
     expect(submit.textContent).toBe("Buy ETH");
     submit.click();
+    await vi.waitFor(() => expect(open).toHaveBeenCalled());
+    expect(card.textContent).toContain("No browser wallet here");
     const url = new URL(open.mock.calls[0]?.[0] as string);
     expect(url.origin + url.pathname).toBe("https://aftermarkets.test/app");
     expect(url.searchParams.get("order")).toBe("copy $25 of ETH tp 10% sl 5%");
@@ -107,6 +141,7 @@ describe("flashCard", () => {
   it("starts on Sell for a bearish call and sells a USD value", async () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
+    fakeWallet(null);
     const { card, open: openPanel } = await mounted(answer("down"));
     openPanel();
     expect(buttons(card, ".seg button").find((b) => b.getAttribute("aria-pressed") === "true")?.textContent).toBe("Sell");
@@ -115,6 +150,7 @@ describe("flashCard", () => {
     amount.value = "0.01";
     amount.dispatchEvent(new Event("input"));
     q<HTMLButtonElement>(card, ".swap-submit").click();
+    await vi.waitFor(() => expect(open).toHaveBeenCalled());
     expect(new URL(open.mock.calls[0]?.[0] as string).searchParams.get("order")).toBe("sell $25.00 of ETH");
   });
 
@@ -176,5 +212,102 @@ describe("decorate", () => {
     await decorate(document.querySelector("article") as HTMLElement);
     expect(document.querySelector(".aftermarkets-host")).toBeNull();
     expect(sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: "after-market" }));
+  });
+});
+
+describe("sign on X with a browser wallet", () => {
+  const typed = (name: string) => JSON.stringify({ primaryType: name, domain: { chainId: "8453" }, types: {}, message: {} });
+  const quote = {
+    quoteId: "q1",
+    from: { amount: "25" },
+    to: { amount: "0.0099" },
+    evm: { approveTx: { to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", data: "0x095ea7b3" }, permitTypedData: "", orderTypedData: typed("FlashOrder") },
+    attachedBracket: {
+      evm: { approveTx: null, permitTypedData: null, orderTypedData: typed("Bracket") },
+      salt: "0x1",
+      deadline: "281474976710655",
+      signedMaxFromAmount: "0.0104",
+    },
+  };
+  const from = "0x00000000000000000000000000000000000000a1";
+
+  async function place(wallet: WalletImpl) {
+    const calls = fakeWallet(wallet);
+    const worker = stubWorker();
+    worker.mockImplementation(async (m: { type: string }): Promise<unknown> => {
+      if (m.type === "prices") return { prices: [{ asset: "ETH", price: "2500", source: "chainlink-base" }] };
+      if (m.type === "flash-quote") return { quote };
+      if (m.type === "flash-order") return { orderId: "887ccf13-aaaa-bbbb-cccc-000000000000", attachedBracket: { status: "pending_activation" } };
+      return null;
+    });
+    const { flashCard } = await import("./flash-card");
+    const made = flashCard({ post, asset: "ETH", answer: answer() });
+    document.body.append(made.card);
+    await vi.waitFor(() => expect(made.card.querySelector(".swap-title b")?.textContent).toBe("$2,500"));
+    made.open();
+    const amount = q<HTMLInputElement>(made.card, ".swap-amount");
+    amount.value = "25";
+    amount.dispatchEvent(new Event("input"));
+    q<HTMLButtonElement>(made.card, ".swap-submit").click();
+    return { card: made.card, calls, worker };
+  }
+
+  it("connects, switches to Base, approves, signs order and exits, then submits", async () => {
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
+    let chain = "0x1";
+    const { card, calls, worker } = await place({
+      eth_requestAccounts: () => [from],
+      eth_chainId: () => chain,
+      wallet_switchEthereumChain: () => {
+        chain = "0x2105";
+        return null;
+      },
+      eth_sendTransaction: () => "0xhash",
+      eth_getTransactionReceipt: () => ({ status: "0x1" }),
+      eth_signTypedData_v4: (p) => (String(p[1]).includes("Bracket") ? "0xb2" : "0xa1"),
+    });
+    await vi.waitFor(() => expect(card.textContent).toContain("Bought ETH with Flash on Base ✓"));
+    expect(open).not.toHaveBeenCalled();
+    expect(calls.map((c) => c.method)).toEqual([
+      "aftermarkets_ping",
+      "eth_requestAccounts",
+      "eth_chainId",
+      "wallet_switchEthereumChain",
+      "eth_sendTransaction",
+      "eth_getTransactionReceipt",
+      "eth_signTypedData_v4",
+      "eth_signTypedData_v4",
+    ]);
+    const quoted = worker.mock.calls.find(([m]) => m.type === "flash-quote")?.[0] as unknown as { order: Record<string, unknown> };
+    expect(quoted.order).toEqual({
+      asset: "ETH",
+      side: "buy",
+      qty: "25",
+      orderType: "market",
+      funderAddress: from,
+      takeProfit: { notionalPrice: "2750" },
+      stopLoss: { notionalPrice: "2375" },
+      sourcePostId: "2",
+    });
+    const submitted = worker.mock.calls.find(([m]) => m.type === "flash-order")?.[0] as unknown as { signatures: Record<string, unknown> };
+    expect(submitted.signatures).toEqual({
+      quoteId: "q1",
+      userSignature: "0xa1",
+      evmOrderTypedData: quote.evm.orderTypedData,
+      bracket: { userSignature: "0xb2", salt: "0x1", deadline: "281474976710655", signedMaxFromAmount: "0.0104" },
+    });
+    expect(q(card, ".swap-wallet").textContent).toBe("0x0000…00a1");
+    expect(card.textContent).toContain("Exits arm on the first fill");
+  });
+
+  it("stops cleanly when the user rejects in the wallet", async () => {
+    const { card, worker } = await place({
+      eth_requestAccounts: () => [from],
+      eth_chainId: () => "0x2105",
+      eth_sendTransaction: () => Promise.reject({ code: 4001, message: "User rejected the request." }),
+    });
+    await vi.waitFor(() => expect(card.textContent).toContain("Cancelled in your wallet. Nothing was sent."));
+    expect(worker.mock.calls.some(([m]) => m.type === "flash-order")).toBe(false);
   });
 });

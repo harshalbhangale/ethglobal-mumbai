@@ -82,6 +82,7 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .swap-chain-pill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 99px;
   padding: 5px 12px 5px 6px; background: var(--raised); font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--foreground); }
 .swap-chain { width: 22px; height: 22px; border-radius: 6px; flex: 0 0 auto; background: #0052ff; display: inline-block; }
+.swap-wallet { border: 1px solid var(--line); border-radius: 99px; padding: 7px 12px; font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--foreground); }
 .swap-box { display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--raised); border: 1px solid transparent; }
 .swap-pay { border-color: #1d9bf0; background: transparent; }
 .swap-label, .swap-usd { color: var(--muted); font-size: 13px; }
