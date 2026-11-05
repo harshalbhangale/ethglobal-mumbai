@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { keyboardLookup } from "@/lib/keyboard";
 import { recordCall } from "@/lib/server/arkiv";
+import { tradeTokenForSymbol } from "@/lib/server/keyboard-tokens";
 
 /**
  * The Kallr row on the Android keyboard (kallr-keyboard). Read-only: it prices the
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
       return call;
     },
     checkToken: (address) => checkToken(address),
+    findTradeToken: (symbol) => tradeTokenForSymbol(symbol),
   });
   return Response.json(result);
 }

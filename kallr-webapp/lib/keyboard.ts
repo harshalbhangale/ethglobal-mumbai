@@ -32,6 +32,8 @@ export type KeyboardResponse = {
   call: { line: string; status: ScoredCall["status"]; asset: string; direction: "up" | "down" } | null;
   record: { line: string; coverage: string } | null;
   token: { address: string; symbol: string | null; warnings: string[]; line: string } | null;
+  /** What the trade panel can buy for this call: ETH/BTC or a liquid, unflagged Base token. */
+  trade: { token: string; symbol: string; price: number; logo: string | null } | null;
   order:
     | { ok: true; text: string; summary: string; tradable: boolean; deskUrl: string }
     | { ok: false; error: string }
@@ -44,7 +46,14 @@ export type KeyboardDeps = {
   fetchPost: (postId: string) => Promise<{ postId: string; authorHandle: string; text: string } | null>;
   score: (post: CallPost) => Promise<ScoredCall | null>;
   checkToken: (address: string) => Promise<TokenCheck | null>;
+  /** The Base token a ticker means, or null when there's no liquid, unflagged match. */
+  findTradeToken?: (symbol: string) => Promise<{ token: string; symbol: string; price: number; logo: string | null } | null>;
 };
+
+/** The first $CASHTAG in a post, for calls on coins we can't score (no price feed) but can still trade. */
+export function firstCashtag(text: string): string | null {
+  return /(?:^|[^A-Za-z0-9$])\$([A-Za-z][A-Za-z0-9]{1,9})\b/.exec(text)?.[1]?.toUpperCase() ?? null;
+}
 
 /** Assets the desk can trade on Base today (same as the extension). */
 const TRADABLE = new Set(["ETH", "BTC"]);
@@ -89,7 +98,7 @@ export function tokenLine(t: TokenCheck): { warnings: string[]; line: string } {
 
 export async function keyboardLookup(req: KeyboardRequest, deps: KeyboardDeps): Promise<KeyboardResponse> {
   const text = req.text?.trim() ?? "";
-  const out: KeyboardResponse = { post: null, call: null, record: null, token: null, order: null };
+  const out: KeyboardResponse = { post: null, call: null, record: null, token: null, trade: null, order: null };
 
   // 1. A copied X post link: read the post, score the call, and the caller's record.
   const link = POST_LINK.exec(text)?.[0];
@@ -131,7 +140,13 @@ export async function keyboardLookup(req: KeyboardRequest, deps: KeyboardDeps): 
     if (check) out.token = { address: check.address, symbol: check.symbol, ...tokenLine(check) };
   }
 
-  // 3. An order being typed: parse it and hand back a desk link to sign.
+  // 3. What the trade panel can buy. Never next to a shared contract (that gets the token check instead).
+  const symbol = out.call?.asset ?? (postText ? firstCashtag(postText) : null);
+  if (symbol && !out.token && deps.findTradeToken) {
+    out.trade = await deps.findTradeToken(symbol).catch(() => null);
+  }
+
+  // 4. An order being typed: parse it and hand back a desk link to sign.
   const typed = req.typed ? typedOrder(req.typed) : null;
   if (typed) {
     const parsed = parseOrder(typed);

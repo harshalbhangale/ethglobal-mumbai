@@ -36,9 +36,11 @@ export const flashOrderInputSchema = z
     side: z.enum(["buy", "sell"]),
     /** USDC to spend on a buy; asset units to sell on a sell. */
     qty: decimal,
-    orderType: z.enum(["market", "limit"]),
+    orderType: z.enum(["market", "limit", "twap"]),
     /** USDC per unit of the asset. Required on limit orders. */
     limitPrice: decimal.optional(),
+    /** TWAP only: spread the order over this many seconds (Flash: 5 minutes to 30 days). */
+    durationSeconds: z.number().int().min(300).max(30 * 86_400).optional(),
     takeProfit: legSchema.optional(),
     stopLoss: legSchema.optional(),
     funderAddress: address,
@@ -54,6 +56,12 @@ export const flashOrderInputSchema = z
       ctx.addIssue({ code: "custom", message: "Limit orders need a limit price.", path: ["limitPrice"] });
     if (o.orderType === "market" && o.limitPrice)
       ctx.addIssue({ code: "custom", message: "Market orders take no limit price.", path: ["limitPrice"] });
+    if (o.orderType === "twap" && !o.durationSeconds)
+      ctx.addIssue({ code: "custom", message: "TWAP orders need a duration.", path: ["durationSeconds"] });
+    if (o.orderType === "twap" && o.limitPrice)
+      ctx.addIssue({ code: "custom", message: "TWAP orders take no limit price.", path: ["limitPrice"] });
+    if (o.orderType !== "twap" && o.durationSeconds)
+      ctx.addIssue({ code: "custom", message: "Only TWAP orders take a duration.", path: ["durationSeconds"] });
     const bracket = o.takeProfit || o.stopLoss;
     if (bracket && !(o.takeProfit && o.stopLoss))
       ctx.addIssue({ code: "custom", message: "Set both a take-profit and a stop-loss, or neither.", path: ["takeProfit"] });
@@ -72,8 +80,10 @@ export type FlashQuoteRequest = {
   contraAsset: string;
   side: "buy" | "sell";
   qty: string;
-  orderType: "market" | "limit";
+  orderType: "market" | "limit" | "twap";
   funderAddress: string;
+  /** TWAP only. */
+  durationSeconds?: number;
   /** Approvals sized to this order, never unlimited. */
   forceMinimalAllowance: true;
   limitCrossPrice?: string;
@@ -100,6 +110,7 @@ export function buildQuoteRequest(input: FlashOrderInput): FlashQuoteRequest {
   };
   // With a bracket attached, Flash rejects limitNotionalPrice; the cross price (USDC per asset) works for both.
   if (o.limitPrice) req.limitCrossPrice = o.limitPrice;
+  if (o.orderType === "twap") req.durationSeconds = o.durationSeconds;
   if (o.takeProfit && o.stopLoss) req.attachedBracket = { takeProfit: o.takeProfit, stopLoss: o.stopLoss };
   return req;
 }

@@ -156,3 +156,26 @@ describe("selling native ETH", () => {
     expect(q.wrap?.evmTx?.value).toBe("300000000000000");
   });
 });
+
+describe("TWAP", () => {
+  const twap = { asset: "ETH" as const, side: "buy" as const, qty: "10", orderType: "twap" as const, funderAddress: funder };
+
+  it("spreads a buy over its duration, and can carry a bracket", () => {
+    const req = buildQuoteRequest({ ...twap, durationSeconds: 600 });
+    expect(req).toMatchObject({ orderType: "twap", durationSeconds: 600, qty: "10" });
+    const withExits = buildQuoteRequest({ ...twap, durationSeconds: 3600, takeProfit: { notionalPrice: "2700" }, stopLoss: { notionalPrice: "2200" } });
+    expect(withExits.attachedBracket).toEqual({ takeProfit: { notionalPrice: "2700" }, stopLoss: { notionalPrice: "2200" } });
+  });
+
+  it("needs a duration within Flash's 5 minutes to 30 days, and no limit price", () => {
+    expect(flashOrderInputSchema.safeParse(twap).success).toBe(false);
+    expect(flashOrderInputSchema.safeParse({ ...twap, durationSeconds: 120 }).success).toBe(false);
+    expect(flashOrderInputSchema.safeParse({ ...twap, durationSeconds: 31 * 86_400 }).success).toBe(false);
+    expect(flashOrderInputSchema.safeParse({ ...twap, durationSeconds: 600, limitPrice: "2500" }).success).toBe(false);
+  });
+
+  it("refuses a duration on market and limit orders", () => {
+    expect(flashOrderInputSchema.safeParse({ ...copyCall, durationSeconds: 600 }).success).toBe(false);
+    expect(buildQuoteRequest(copyCall)).not.toHaveProperty("durationSeconds");
+  });
+});
