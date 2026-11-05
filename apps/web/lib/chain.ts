@@ -59,11 +59,24 @@ const aggregatorAbi = [
   },
 ] as const;
 
-export async function getEthUsd(): Promise<number> {
+/** Chainlink USD feeds on Base (8 decimals) for every asset the desk can trade. */
+export const USD_FEEDS = {
+  ETH: ETH_USD_FEED,
+  BTC: "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F",
+} as const satisfies Record<string, Address>;
+export type PricedAsset = keyof typeof USD_FEEDS;
+
+export function hasUsdFeed(asset: string): asset is PricedAsset {
+  return asset in USD_FEEDS;
+}
+
+export async function getUsdPrice(asset: PricedAsset): Promise<number> {
   const [, answer] = await publicClient.readContract({
-    address: ETH_USD_FEED,
+    address: USD_FEEDS[asset],
     abi: aggregatorAbi,
     functionName: "latestRoundData",
   });
   return Number(answer) / 1e8;
 }
+
+export const getEthUsd = () => getUsdPrice("ETH");

@@ -5,8 +5,8 @@ import { Logo, LogoMark } from "@/components/logo";
 import { SignInButton, WithSession, type Session } from "@/components/auth";
 import { InstallButton } from "@/components/install-button";
 import { WalletPanel } from "@/components/wallet-panel";
-import { OpenOrders, OrderComposer } from "@/components/order-desk";
-import { useOrders } from "@/lib/orders-store";
+import { useWallets } from "@privy-io/react-auth";
+import { OpenOrders, OrderComposer, useFlashOrders } from "@/components/order-desk";
 
 const nav = [
   { id: "desk", label: "Desk" },
@@ -52,7 +52,9 @@ function AppShell({ session }: { session: Session }) {
 
 function Desk({ session }: { session: Session }) {
   const [active, setActive] = useState("desk");
-  const store = useOrders();
+  const { wallets } = useWallets();
+  const wallet = wallets.find((w) => w.address.toLowerCase() === session.address?.toLowerCase()) ?? null;
+  const flashOrders = useFlashOrders(session.address);
 
   return (
     <div className="grid min-h-dvh lg:grid-cols-[248px_1fr]">
@@ -100,10 +102,10 @@ function Desk({ session }: { session: Session }) {
             <p className="mt-2 text-slate">Copy a call, set your exits, and let AfterMarkets watch it for you.</p>
           </div>
 
-          <OrderComposer onAdd={store.add} />
+          <OrderComposer wallet={wallet} onPlaced={flashOrders.refresh} />
 
           <div className="grid gap-8 xl:grid-cols-[1.3fr_1fr]">
-            <OpenOrders orders={store.orders} onCancel={store.cancel} />
+            <OpenOrders orders={flashOrders.orders} error={flashOrders.error} />
 
             <div id="wallet">
               {session.address ? (

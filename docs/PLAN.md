@@ -62,17 +62,20 @@ docs/
 
 ## Build order
 
-### 1. Definitive Flash execution (first)
-- [ ] Flash client: quote → build → user signs (Privy embedded wallet) → submit
-- [ ] `attachedBracket` for TP/SL on each order
-- [ ] Composer "Queue order" becomes "Place order"; open orders read from Flash, not localStorage
-- [ ] USDC approval flow and low-gas warning (wallet panel already detects it)
-- [ ] Order status: pending, filled, TP hit, SL hit, cancelled
-
 ### 0. Restructure (before anything else)
-- [ ] Convert this repo to the pnpm workspace above; move the PWA to `apps/web`
-- [ ] Add `packages/domain`, `packages/integrations` (calls, scoring, signals), `packages/database`
+- [x] Convert this repo to an npm workspace; move the PWA to `apps/web`
+- [x] Add `packages/domain`, `packages/integrations` (calls, scoring, signals), `packages/database`
 - [ ] Move `lib/order.ts` into `packages/domain`
+
+### 1. Definitive Flash execution (first)
+- [x] Flash client: quote → fund → user signs (Privy wallet) → submit (`packages/integrations/src/definitive.ts`, `/api/flash/*`)
+- [x] `attachedBracket` for TP/SL on each buy; approvals sized per order (`forceMinimalAllowance`)
+- [x] Composer places real orders; open orders read from Flash
+- [x] USDC approval flow and low-gas warning
+- [ ] First real order on Base mainnet from a funded wallet (not yet run)
+- [x] Order status: pending, working, filled, exits armed, cancelled
+- [ ] Cancel from the desk (needs a funder-signed cancel message)
+- [ ] Orders WebSocket instead of 15s polling
 
 ### 2. Call data
 - [ ] Wire the imported classifier + scoring into the desk and bot

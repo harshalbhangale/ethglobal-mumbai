@@ -1,22 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { getEthUsd } from "@/lib/chain";
-import { describeOrder, exitPrices, parseOrder, type ExitPrices, type ParsedOrder } from "@/lib/order";
-import type { StoredOrder } from "@/lib/orders-store";
+import {
+  FLASH_BASE_ASSETS,
+  type FlashOrder,
+  OPEN_STATUSES,
+} from "@aftermarkets/integrations/definitive";
+import type { ConnectedWallet } from "@privy-io/react-auth";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { getUsdPrice, hasUsdFeed, type PricedAsset } from "@/lib/chain";
+import { listFlashOrders, type PlaceStep, placeFlashOrder, stepLabel } from "@/lib/flash-client";
+import { toFlashOrder } from "@/lib/flash-order";
+import { describeOrder, type ExitPrices, exitPrices, type ParsedOrder, parseOrder } from "@/lib/order";
 
 const usd = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: n < 10 ? 4 : 2 })}`;
 
-/** Live ETH/USD from Chainlink on Base, refreshed every 30s. */
-function useEthPrice() {
-  const [price, setPrice] = useState<number | null>(null);
+/** Live USD prices from Chainlink on Base, refreshed every 30s. */
+function useUsdPrices() {
+  const [prices, setPrices] = useState<Partial<Record<PricedAsset, number>>>({});
   useEffect(() => {
     let alive = true;
     const tick = () =>
-      getEthUsd()
-        .then((p) => alive && setPrice(p))
-        .catch(() => {});
+      (["ETH", "BTC"] as const).forEach((a) =>
+        getUsdPrice(a)
+          .then((p) => alive && setPrices((prev) => ({ ...prev, [a]: p })))
+          .catch(() => {}),
+      );
     tick();
     const id = setInterval(tick, 30_000);
     return () => {
@@ -24,45 +33,69 @@ function useEthPrice() {
       clearInterval(id);
     };
   }, []);
-  return price;
+  return prices;
 }
 
-const examples = ["copy $2 of ETH, TP 10%, SL 5%", "buy $5 of ETH if it dips to 2,300", "sell my ETH at 4,000"];
+/** Flash orders for this wallet, polled every 15s and on demand. */
+export function useFlashOrders(funder: string | null) {
+  const [orders, setOrders] = useState<FlashOrder[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const refresh = useCallback(async () => {
+    if (!funder) return;
+    try {
+      setOrders(await listFlashOrders(funder));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn’t load orders");
+    }
+  }, [funder]);
+  useEffect(() => {
+    refresh();
+    const id = setInterval(refresh, 15_000);
+    return () => clearInterval(id);
+  }, [refresh]);
+  return { orders, error, refresh };
+}
 
-export function OrderComposer({
-  onAdd,
-}: {
-  onAdd: (o: { text: string; order: ParsedOrder; exits: ExitPrices }) => void;
-}) {
+const examples = ["copy $2 of ETH, TP 10%, SL 5%", "buy $5 of BTC at 75,000 tp 8% sl 4%", "sell $3 of ETH"];
+
+type Status = { kind: "idle" } | { kind: "working"; step: PlaceStep } | { kind: "done"; orderId: string } | { kind: "error"; message: string };
+
+export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | null; onPlaced: () => void }) {
   const [text, setText] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const ethPrice = useEthPrice();
+  const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const prices = useUsdPrices();
 
   const parsed = useMemo(() => (text.trim() ? parseOrder(text) : null), [text]);
   const order = parsed?.ok ? parsed.order : null;
-  // Only ETH has a live feed wired so far; other assets need a limit price to compute exits.
-  const market = order && order.asset === "ETH" ? ethPrice : null;
+  const market = order && hasUsdFeed(order.asset) ? (prices[order.asset] ?? null) : null;
   const exits = order && (order.limitPrice ?? market) ? exitPrices(order, market ?? 0) : null;
+  const flash = order && exits && wallet ? toFlashOrder(order, exits, wallet.address) : null;
+  const busy = status.kind === "working";
 
   return (
     <section aria-labelledby="composer-heading" className="rounded-2xl border border-rule bg-card p-6">
-      <div className="flex items-baseline justify-between gap-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 id="composer-heading" className="font-display text-lg font-semibold">
           New order
         </h2>
         <span className="text-sm text-slate tabular-nums">
-          ETH {ethPrice ? usd(ethPrice) : "…"} <span className="text-slate/70">· Chainlink on Base</span>
+          ETH {prices.ETH ? usd(prices.ETH) : "…"} · BTC {prices.BTC ? usd(prices.BTC) : "…"}{" "}
+          <span className="text-slate/70">· Chainlink on Base</span>
         </span>
       </div>
       <form
         className="mt-4 flex flex-col gap-3 sm:flex-row"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          setSubmitted(true);
-          if (order && exits) {
-            onAdd({ text: text.trim(), order, exits });
+          if (!flash?.ok || !wallet || busy) return;
+          try {
+            const res = await placeFlashOrder(flash.input, wallet, (step) => setStatus({ kind: "working", step }));
+            setStatus({ kind: "done", orderId: res.orderId });
             setText("");
-            setSubmitted(false);
+            onPlaced();
+          } catch (err) {
+            setStatus({ kind: "error", message: friendlyError(err) });
           }
         }}
       >
@@ -72,19 +105,20 @@ export function OrderComposer({
         <input
           id="order-text"
           value={text}
+          disabled={busy}
           onChange={(e) => {
             setText(e.target.value);
-            setSubmitted(false);
+            if (status.kind !== "working") setStatus({ kind: "idle" });
           }}
           placeholder="Type an order, like “copy $2 of ETH, TP 10%, SL 5%”"
-          className="min-w-0 flex-1 rounded-full border border-rule bg-paper px-5 py-3 text-[15px] placeholder:text-slate/80 focus:border-ink focus:outline-none"
+          className="min-w-0 flex-1 rounded-full border border-rule bg-paper px-5 py-3 text-[15px] placeholder:text-slate/80 focus:border-ink focus:outline-none disabled:opacity-60"
         />
         <button
           type="submit"
-          disabled={!order || !exits}
+          disabled={!flash?.ok || busy}
           className="rounded-full bg-ink px-6 py-3 text-[15px] font-semibold text-white disabled:opacity-40"
         >
-          Queue order
+          {busy ? "Placing…" : "Place order"}
         </button>
       </form>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -92,6 +126,7 @@ export function OrderComposer({
           <button
             key={ex}
             type="button"
+            disabled={busy}
             onClick={() => setText(ex)}
             className="rounded-full border border-rule px-3 py-1.5 text-sm text-slate hover:border-ink hover:text-ink"
           >
@@ -100,17 +135,32 @@ export function OrderComposer({
         ))}
       </div>
 
-      {parsed && !parsed.ok && (submitted || text.length > 6) && (
-        <p className="mt-4 text-sm text-down">{parsed.error}</p>
-      )}
+      {parsed && !parsed.ok && text.length > 6 && <p className="mt-4 text-sm text-down">{parsed.error}</p>}
       {order && !exits && (
         <p className="mt-4 text-sm text-slate">
-          {order.asset === "ETH" ? "Loading the ETH price…" : `No live price for ${order.asset} yet: add a price, like “at 0.01”.`}
+          {hasUsdFeed(order.asset) ? `Loading the ${order.asset} price…` : `${order.asset} isn’t tradable on Base yet. Try ETH or BTC.`}
         </p>
       )}
       {order && exits && <OrderPreview order={order} exits={exits} />}
+      {flash && !flash.ok && <p className="mt-3 text-sm text-down">{flash.error}</p>}
+      {!wallet && order && <p className="mt-3 text-sm text-slate">Your wallet is still loading.</p>}
+
+      <div aria-live="polite" className="mt-3 text-sm">
+        {status.kind === "working" && <p className="text-ink">{stepLabel[status.step]}</p>}
+        {status.kind === "done" && (
+          <p className="text-up">Order placed on Base. It shows under Open orders with its exits.</p>
+        )}
+        {status.kind === "error" && <p className="text-down">{status.message}</p>}
+      </div>
     </section>
   );
+}
+
+function friendlyError(err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/rejected|denied|cancel/i.test(msg)) return "You cancelled in your wallet. Nothing was placed.";
+  if (/insufficient|balance/i.test(msg)) return "Not enough USDC (or ETH for gas) in your wallet on Base.";
+  return msg;
 }
 
 function OrderPreview({ order, exits }: { order: ParsedOrder; exits: ExitPrices }) {
@@ -147,8 +197,35 @@ function Cell({ label, value, tone, wide }: { label: string; value: string; tone
   );
 }
 
-export function OpenOrders({ orders, onCancel }: { orders: StoredOrder[]; onCancel: (id: string) => void }) {
-  const open = orders.filter((o) => o.status !== "cancelled");
+const symbolOf = (address: string) =>
+  Object.values(FLASH_BASE_ASSETS).find((a) => a.address.toLowerCase() === address.toLowerCase())?.symbol ?? "token";
+
+const statusText: Record<string, string> = {
+  ORDER_STATUS_PENDING: "Pending",
+  ORDER_STATUS_ACCEPTED: "Working",
+  ORDER_STATUS_PARTIALLY_FILLED: "Partly filled",
+  ORDER_STATUS_FILLED: "Filled",
+  ORDER_STATUS_CANCELLED: "Cancelled",
+  ORDER_STATUS_REJECTED: "Rejected",
+  ORDER_STATUS_TERMINATED: "Ended",
+};
+
+const bracketText: Record<string, string> = {
+  pending_activation: "Exits arm on first fill",
+  active: "Exits armed",
+  never_activated: "Exits never armed",
+};
+
+function describeFlashOrder(o: FlashOrder) {
+  const symbol = symbolOf(o.targetAsset);
+  const kind = o.orderType === "bracket" ? "Exit" : o.orderType === "limit" ? "Limit" : "Market";
+  if (o.orderType === "bracket") return `${kind}: sell ${o.qty} ${symbol}`;
+  return o.side === "buy" ? `${kind} buy: $${o.qty} of ${symbol}` : `${kind} sell: ${o.qty} ${symbol}`;
+}
+
+export function OpenOrders({ orders, error }: { orders: FlashOrder[] | null; error: string | null }) {
+  const open = orders?.filter((o) => OPEN_STATUSES.includes(o.status) || o.attachedBracket?.status === "active") ?? [];
+  const recent = orders?.filter((o) => !open.includes(o)).slice(0, 5) ?? [];
 
   return (
     <section id="orders" aria-labelledby="orders-heading" className="rounded-2xl border border-rule bg-card p-6">
@@ -156,51 +233,57 @@ export function OpenOrders({ orders, onCancel }: { orders: StoredOrder[]; onCanc
         <h2 id="orders-heading" className="font-display text-lg font-semibold">
           Open orders
         </h2>
-        {open.length > 0 && <span className="text-sm text-slate">{open.length} queued</span>}
+        {open.length > 0 && <span className="text-sm text-slate">{open.length} open</span>}
       </div>
 
-      {open.length === 0 ? (
+      {error && <p className="mt-4 text-sm text-down">{error}</p>}
+      {orders === null && !error && <p className="mt-6 text-sm text-slate">Loading orders from Definitive…</p>}
+
+      {orders !== null && open.length === 0 && (
         <div className="mt-6 rounded-xl border border-dashed border-rule px-6 py-10 text-center">
-          <p className="font-semibold">No open orders yet</p>
+          <p className="font-semibold">No open orders</p>
           <p className="mx-auto mt-2 max-w-sm text-sm text-slate">
             Reply “@AfterMarkets copy $2” under a call on X, or type an order above. It shows up here with its
             take-profit and stop-loss.
           </p>
         </div>
-      ) : (
-        <ul className="mt-4 divide-y divide-rule">
-          {open.map((o) => (
-            <li key={o.id} className="flex items-start justify-between gap-4 py-4">
-              <div className="min-w-0">
-                <p className="font-semibold">{describeOrder(o.order)}</p>
-                <p className="mt-1 text-sm text-slate tabular-nums">
-                  Entry {usd(o.exits.entry)}
-                  {o.exits.takeProfit !== null && (
-                    <>
-                      {" · "}
-                      <span className="text-up">TP {usd(o.exits.takeProfit)}</span>
-                    </>
-                  )}
-                  {o.exits.stopLoss !== null && (
-                    <>
-                      {" · "}
-                      <span className="text-down">SL {usd(o.exits.stopLoss)}</span>
-                    </>
-                  )}
-                </p>
-                <p className="mt-1 text-xs text-slate/80">Queued: submits once Flash is connected</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => onCancel(o.id)}
-                className="shrink-0 rounded-full border border-rule px-3 py-1.5 text-sm text-slate hover:border-ink hover:text-ink"
-              >
-                Cancel
-              </button>
-            </li>
-          ))}
-        </ul>
+      )}
+
+      {open.length > 0 && <OrderList orders={open} />}
+      {recent.length > 0 && (
+        <>
+          <h3 className="mt-6 text-sm font-semibold text-slate">Recent</h3>
+          <OrderList orders={recent} />
+        </>
       )}
     </section>
+  );
+}
+
+function OrderList({ orders }: { orders: FlashOrder[] }) {
+  return (
+    <ul className="mt-2 divide-y divide-rule">
+      {orders.map((o) => {
+        const tp = o.attachedBracket?.takeProfit?.notionalPrice;
+        const sl = o.attachedBracket?.stopLoss?.notionalPrice;
+        return (
+          <li key={o.orderId} className="flex items-start justify-between gap-4 py-3">
+            <div className="min-w-0">
+              <p className="font-semibold">{describeFlashOrder(o)}</p>
+              <p className="mt-1 text-sm text-slate tabular-nums">
+                {o.limitCrossPrice && <>Limit {usd(Number(o.limitCrossPrice))} · </>}
+                {tp && <span className="text-up">TP {usd(Number(tp))}</span>}
+                {tp && sl && " · "}
+                {sl && <span className="text-down">SL {usd(Number(sl))}</span>}
+                {o.attachedBracket && <> · {bracketText[o.attachedBracket.status] ?? o.attachedBracket.status}</>}
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full border border-rule px-3 py-1 text-sm text-slate">
+              {statusText[o.status] ?? o.status}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
