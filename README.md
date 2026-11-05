@@ -110,7 +110,23 @@ browser, so anyone can check them without asking us.
 | @cryptocred | [`0x058ee232…`](https://rabdi.explorer.arkiv.network/tx/0x058ee2322fbc3771d1e022c04862a45b5b1323967cd50c16cda81f81e9032218) | `0x98af8f9c…8b01ca` |
 | @inmortalcrypto | [`0xecda7fb9…`](https://rabdi.explorer.arkiv.network/tx/0xecda7fb9ce2c9cadba37bb14036548d76222f5e4ab859ff7e39f8676536eb897) | `0x2edb0f13…1f895d` |
 
-Full entity keys: run the query above. Call, result and trade transactions are added here as they land.
+Full entity keys: run the query above.
+
+**Real calls from X** (each sent through `/api/after-market` exactly as the extension sends a post it sees;
+open calls carry a [Swarm](https://www.ethswarm.org) snapshot of the post in `swarmRef`):
+
+| Post on X | Read as | Arkiv transaction | Swarm snapshot |
+| --- | --- | --- | --- |
+| [@CryptoKaleo: "$ETH … BE MORE BULLISH"](https://x.com/CryptoKaleo/status/2118378232730828998) | ETH up · open (`kallr.calls`) | [`0x1023e8a9…`](https://rabdi.explorer.arkiv.network/tx/0x1023e8a92a926aa7be40c767f2cda73349581ef796e2064262cdd9ce6f0952e5) | [`0399be1f…`](https://api.gateway.ethswarm.org/bzz/0399be1fbfd84eff4957cc1dfb41d28ff89ce44d05469d9c8cbeeedd1dca94dc/) |
+| [@CryptoKaleo: "Buy more Bitcoin."](https://x.com/CryptoKaleo/status/2118301291923329528) | BTC up · open (`kallr.calls`) | [`0x6277fe4a…`](https://rabdi.explorer.arkiv.network/tx/0x6277fe4ad3d91f45d6932829e3b75ff2eb3b2dad828584ae31de453fbac38cbc) | [`ead89c2a…`](https://api.gateway.ethswarm.org/bzz/ead89c2aeed4dbcf16a7d65094692e1a4ad4d70a95a380832867a286d101de3e/) |
+| [@AltcoinSherpa: "Time to pump $SOL"](https://x.com/AltcoinSherpa/status/2117629619637809255) | SOL up · hit +1.20% (`kallr.call-results`) | [`0x4b9dcd3b…`](https://rabdi.explorer.arkiv.network/tx/0x4b9dcd3bce0f23436abd1de694048e7beb93a848718be564c481ca7760b40ed1) | settled before we saw it |
+| [@inmortalcrypto: "accumulate … $BTC"](https://x.com/inmortalcrypto/status/2112240301758964212) | BTC up · hit +1.23% (`kallr.call-results`) | [`0xf597d7db…`](https://rabdi.explorer.arkiv.network/tx/0xf597d7db8fef9635721523a6894b33b17927fce93439b3a97177d736a0d90a57) | settled before we saw it |
+| [@inmortalcrypto: "below it, but not for long $BTC"](https://x.com/inmortalcrypto/status/2107186308346974251) | BTC up · miss −0.07% (`kallr.call-results`) | [`0xe685ce07…`](https://rabdi.explorer.arkiv.network/tx/0xe685ce075cd42513251fc2b3f59d11127fafafc8c7be4fe4c98b43fa77719a99) | settled before we saw it |
+
+One write was wrong and is deleted: @AltcoinSherpa's "Looking decent for $BTC in the short term" was read as a short
+because of "short term" (fixed in `packages/integrations/src/signals.ts`; deletion
+[`0xf44153ff…`](https://rabdi.explorer.arkiv.network/tx/0xf44153ff5a8915142f65b56596908f2cf37a5c9948b8d3082fda444379169802)).
+Trade transactions are added here as they land.
 - Details: [arkiv/schema.md](arkiv/schema.md), [why-arkiv.md](arkiv/why-arkiv.md), [how-you-use-arkiv.md](arkiv/how-you-use-arkiv.md), [reach.md](arkiv/reach.md), [friction.md](arkiv/friction.md).
 - Code: `packages/integrations/src/arkiv.ts` (schemas, reads), `kallr-webapp/lib/server/arkiv.ts` (writes), `kallr-webapp/app/trades/page.tsx` (dashboard), `kallr-webapp/app/api/arkiv/score` (settles expired calls, daily Vercel cron).
 
