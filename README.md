@@ -27,14 +27,31 @@ In the Privy dashboard: enable **Twitter** and **Email** login, enable **embedde
 
 The service worker only registers in production builds: `npm run build && npm start` to test install.
 
+## The X bot
+
+Tag @AfterMarkets under a call and it replies with the caller's record and how this call played out. Reply `copy $2, TP 10%, SL 5%` and it answers with a link to the desk, where you review and sign the order in your own wallet. The bot never trades.
+
+```sh
+# Try a reply on any public post, no keys needed (posts nothing):
+npm run try -w @aftermarkets/x-bot -- https://x.com/<handle>/status/<id> "copy $2, TP 10%, SL 5%"
+
+# Run the mentions loop (dry run unless X_BOT_POST=1):
+cp services/x-bot/.env.example services/x-bot/.env   # bot account keys
+node --env-file=services/x-bot/.env --import tsx services/x-bot/src/main.ts
+```
+
+The mentions loop needs an X API plan that includes reading mentions and user posts (Basic or higher).
+
 ## Structure
 
 ```
 apps/
   web/                Next.js PWA: landing (/), desk (/app), Privy, PWA manifest + service worker
+services/
+  x-bot/              @AfterMarkets on X: after market replies, copy links to the desk
 packages/
-  domain/             reputation, signals, view models
-  integrations/       call classification, scoring, price data
+  domain/             reputation, signals, order parser
+  integrations/       call scoring, after market, Definitive Flash, X API
   database/           Postgres schema, X ID ↔ wallet identity
 docs/PLAN.md          what we are building and in what order
 ```

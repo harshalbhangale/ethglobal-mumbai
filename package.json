@@ -5,14 +5,16 @@
   "description": "AfterMarkets: tag @AfterMarkets under any crypto call on X to see its after market, copy it with one reply, and get a call back when your exits hit.",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "services/*"
   ],
   "scripts": {
     "dev": "npm run dev -w @aftermarkets/web",
     "build": "npm run build -w @aftermarkets/web",
     "start": "npm run start -w @aftermarkets/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "vitest run"
+    "test": "vitest run",
+    "x-bot": "npm start -w @aftermarkets/x-bot"
   },
   "devDependencies": {
     "@types/node": "^22",

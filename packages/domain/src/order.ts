@@ -19,6 +19,8 @@ export type ParsedOrder = {
   stopLossPct: number | null;
   /** True when the text started with "copy" (copying a call from a post). */
   copy: boolean;
+  /** False when the text named no asset and ETH was assumed. A copy then takes the call's asset. */
+  assetStated: boolean;
 };
 
 export type ParseResult = { ok: true; order: ParsedOrder } | { ok: false; error: string };
@@ -35,7 +37,7 @@ export function parseOrder(input: string): ParseResult {
   const side: Side = verb === "sell" || verb === "short" ? "sell" : "buy";
 
   const amountMatch = text.match(/\$\s*([\d,]+(?:\.\d+)?)/);
-  const amountUsd = amountMatch ? num(amountMatch[1]) : null;
+  const amountUsd = amountMatch ? num(amountMatch[1] ?? "") : null;
 
   // Asset: "$2 of eth", "my eth", "buy eth", or a $TICKER cashtag.
   const assetMatch =
@@ -46,12 +48,12 @@ export function parseOrder(input: string): ParseResult {
   const asset = (assetMatch?.[1] ?? "eth").toUpperCase();
 
   const limitMatch = text.match(/\b(?:at|to|below|above|under|over)\s+\$?([\d,]+(?:\.\d+)?)(?!\s*%)/);
-  const limitPrice = limitMatch ? num(limitMatch[1]) : null;
+  const limitPrice = limitMatch ? num(limitMatch[1] ?? "") : null;
 
   const tpMatch = text.match(/\b(?:tp|take[\s-]?profit)\s*:?\s*\+?([\d.]+)\s*%/);
   const slMatch = text.match(/\b(?:sl|stop[\s-]?loss|stop)\s*:?\s*-?([\d.]+)\s*%/);
-  const takeProfitPct = tpMatch ? num(tpMatch[1]) / 100 : null;
-  const stopLossPct = slMatch ? num(slMatch[1]) / 100 : null;
+  const takeProfitPct = tpMatch ? num(tpMatch[1] ?? "") / 100 : null;
+  const stopLossPct = slMatch ? num(slMatch[1] ?? "") / 100 : null;
 
   if (side === "buy" && amountUsd === null) return { ok: false, error: "Say how much, like “$5”." };
   if (amountUsd !== null && !(amountUsd > 0)) return { ok: false, error: "Amount must be more than $0." };
@@ -59,8 +61,26 @@ export function parseOrder(input: string): ParseResult {
 
   return {
     ok: true,
-    order: { side, asset, amountUsd, limitPrice, takeProfitPct, stopLossPct, copy: verb === "copy" },
+    order: {
+      side,
+      asset,
+      amountUsd,
+      limitPrice,
+      takeProfitPct,
+      stopLossPct,
+      copy: verb === "copy",
+      assetStated: assetMatch !== null,
+    },
   };
+}
+
+/**
+ * Applies a copy order to the call it replies to: "copy $2, TP 10%" under a $BTC call buys BTC.
+ * An asset the reply names itself always wins.
+ */
+export function withCallAsset(order: ParsedOrder, callAsset: string | null): ParsedOrder {
+  if (!order.copy || order.assetStated || !callAsset) return order;
+  return { ...order, asset: callAsset.toUpperCase() };
 }
 
 export type ExitPrices = { entry: number; takeProfit: number | null; stopLoss: number | null };

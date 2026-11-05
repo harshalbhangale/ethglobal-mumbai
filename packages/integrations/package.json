@@ -8,7 +8,9 @@
     "./call-evaluation": "./src/call-evaluation.ts",
     "./signals": "./src/signals.ts",
     "./token-references": "./src/token-references.ts",
-    "./definitive": "./src/definitive.ts"
+    "./definitive": "./src/definitive.ts",
+    "./after-market": "./src/after-market.ts",
+    "./x-api": "./src/x-api.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

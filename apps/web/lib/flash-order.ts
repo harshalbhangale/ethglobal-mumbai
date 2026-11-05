@@ -1,5 +1,5 @@
 import { FLASH_BASE_ASSETS, type FlashAsset, type FlashOrderInput } from "@aftermarkets/integrations/definitive";
-import type { ExitPrices, ParsedOrder } from "./order";
+import type { ExitPrices, ParsedOrder } from "@aftermarkets/domain/order";
 
 export type FlashOrderResult = { ok: true; input: FlashOrderInput } | { ok: false; error: string };
 

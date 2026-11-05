@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getUsdPrice, hasUsdFeed, type PricedAsset } from "@/lib/chain";
 import { listFlashOrders, type PlaceStep, placeFlashOrder, stepLabel } from "@/lib/flash-client";
 import { toFlashOrder } from "@/lib/flash-order";
-import { describeOrder, type ExitPrices, exitPrices, type ParsedOrder, parseOrder } from "@/lib/order";
+import { describeOrder, type ExitPrices, exitPrices, type ParsedOrder, parseOrder } from "@aftermarkets/domain/order";
 
 const usd = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: n < 10 ? 4 : 2 })}`;
@@ -63,21 +63,49 @@ type Status = { kind: "idle" } | { kind: "working"; step: PlaceStep } | { kind: 
 
 export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | null; onPlaced: () => void }) {
   const [text, setText] = useState("");
+  const [source, setSource] = useState<{ postId: string; caller: string | null } | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const prices = useUsdPrices();
+
+  // Links from the @AfterMarkets bot open the desk with the copied order filled in:
+  // /app?order=copy+$2+of+BTC+tp+10%+sl+5%&post=123&caller=kol
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const fromLink = q.get("order");
+    if (fromLink) setText(fromLink.slice(0, 200));
+    const post = q.get("post");
+    if (post && /^[0-9]{1,30}$/.test(post)) {
+      const caller = q.get("caller");
+      setSource({ postId: post, caller: caller && /^[A-Za-z0-9_]{1,15}$/.test(caller) ? caller : null });
+    }
+  }, []);
 
   const parsed = useMemo(() => (text.trim() ? parseOrder(text) : null), [text]);
   const order = parsed?.ok ? parsed.order : null;
   const market = order && hasUsdFeed(order.asset) ? (prices[order.asset] ?? null) : null;
   const exits = order && (order.limitPrice ?? market) ? exitPrices(order, market ?? 0) : null;
-  const flash = order && exits && wallet ? toFlashOrder(order, exits, wallet.address) : null;
+  const flash = order && exits && wallet ? toFlashOrder(order, exits, wallet.address, source?.postId) : null;
   const busy = status.kind === "working";
 
   return (
     <section aria-labelledby="composer-heading" className="rounded-2xl border border-rule bg-card p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 id="composer-heading" className="font-display text-lg font-semibold">
-          New order
+          {source ? (
+            <>
+              Copy{" "}
+              <a
+                href={`https://x.com/${source.caller ?? "i"}/status/${source.postId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="underline decoration-rule underline-offset-4 hover:decoration-ink"
+              >
+                {source.caller ? `@${source.caller}’s call` : "this call"}
+              </a>
+            </>
+          ) : (
+            "New order"
+          )}
         </h2>
         <span className="text-sm text-slate tabular-nums">
           ETH {prices.ETH ? usd(prices.ETH) : "…"} · BTC {prices.BTC ? usd(prices.BTC) : "…"}{" "}

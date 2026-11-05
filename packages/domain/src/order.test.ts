@@ -1,6 +1,6 @@
-import { test } from "vitest";
+import { expect, test } from "vitest";
 import assert from "node:assert/strict";
-import { exitPrices, parseOrder, type ParsedOrder } from "./order.ts";
+import { exitPrices, parseOrder, type ParsedOrder, withCallAsset } from "./order";
 
 function ok(text: string): ParsedOrder {
   const r = parseOrder(text);
@@ -11,7 +11,7 @@ function ok(text: string): ParsedOrder {
 test("copy with TP and SL", () => {
   const o = ok("copy $2 of ETH, TP 10%, SL 5%");
   assert.deepEqual(o, {
-    side: "buy", asset: "ETH", amountUsd: 2, limitPrice: null, takeProfitPct: 0.1, stopLossPct: 0.05, copy: true,
+    side: "buy", asset: "ETH", amountUsd: 2, limitPrice: null, takeProfitPct: 0.1, stopLossPct: 0.05, copy: true, assetStated: true,
   });
 });
 
@@ -49,4 +49,13 @@ test("exit prices for buy and sell", () => {
   assert.equal(sell.entry, 4000);
   assert.ok(Math.abs(sell.takeProfit! - 3600) < 1e-9);
   assert.ok(Math.abs(sell.stopLoss! - 4200) < 1e-9);
+});
+
+test("a bare copy takes the asset of the call it replies to", () => {
+  const bare = ok("copy $2, TP 10%, SL 5%");
+  expect(bare.assetStated).toBe(false);
+  expect(withCallAsset(bare, "btc").asset).toBe("BTC");
+  const named = ok("copy $2 of ETH");
+  expect(withCallAsset(named, "BTC").asset).toBe("ETH");
+  expect(withCallAsset(ok("buy $2"), "BTC").asset).toBe("ETH");
 });

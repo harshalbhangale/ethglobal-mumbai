@@ -20,7 +20,8 @@
     "viem": "^2.57.16",
     "@aftermarkets/integrations": "*",
     "server-only": "^0.0.1",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "@aftermarkets/domain": "*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.4",

@@ -65,7 +65,7 @@ docs/
 ### 0. Restructure (before anything else)
 - [x] Convert this repo to an npm workspace; move the PWA to `apps/web`
 - [x] Add `packages/domain`, `packages/integrations` (calls, scoring, signals), `packages/database`
-- [ ] Move `lib/order.ts` into `packages/domain`
+- [x] Move `lib/order.ts` into `packages/domain`
 
 ### 1. Definitive Flash execution (first)
 - [x] Flash client: quote → fund → user signs (Privy wallet) → submit (`packages/integrations/src/definitive.ts`, `/api/flash/*`)
@@ -85,10 +85,14 @@ docs/
 - [ ] Keep identity, call outcomes and wallet returns as separate signals; never blend into one score
 
 ### 3. X bot
-- [ ] X API access: mentions + post replies need a paid tier; budget for it. Scraping X breaks their terms and gets accounts banned: use the API for the bot, scraping only for offline backfill if at all
-- [ ] Poll mentions → parse the parent post (call) → reply with the after market card (image or text)
-- [ ] `copy …` replies → parse with `parseOrder` → link X user to their Privy wallet (sign in with X already does this) → confirm link to approve in the PWA
-- [ ] Never trade without an explicit signature from the user's wallet
+- [ ] X API access for the bot account (Basic tier or higher for mentions + user posts); keys go in `services/x-bot/.env`. Scraping X breaks their terms and gets accounts banned: use the API for the bot, scraping only for offline backfill if at all
+- [x] Poll mentions → parse the parent post (call) → reply with the after market (text; `services/x-bot`)
+- [x] Caller record scored on the fly from their recent posts (`after-market.ts`); move to the database once it is live
+- [ ] After market card as an image
+- [x] `copy …` replies → parse with `parseOrder`, take the call's asset → link that opens the desk prefilled to review and sign
+- [x] Never trade without an explicit signature from the user's wallet
+- [ ] First live run with the bot account (dry run first, then X_BOT_POST=1)
+- [ ] Archive each call the bot sees (post archive step)
 
 ### 4. Telegram bot
 - [ ] `/link` to connect a Telegram chat to the AfterMarkets account

@@ -1,7 +1,7 @@
 import { flashOrderInputSchema } from "@aftermarkets/integrations/definitive";
 import { describe, expect, it } from "vitest";
 import { toDecimal, toFlashOrder } from "./flash-order.ts";
-import { exitPrices, parseOrder, type ParsedOrder } from "./order.ts";
+import { exitPrices, parseOrder, type ParsedOrder } from "@aftermarkets/domain/order";
 
 const funder = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 
