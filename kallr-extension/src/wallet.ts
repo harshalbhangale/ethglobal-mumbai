@@ -71,13 +71,15 @@ export async function ensureBase() {
 }
 
 /** Sends a transaction and waits for it to land, polling the wallet's own RPC. */
-export async function sendAndWait(from: string, tx: { to: string; data: string }, pollMs = 2000, maxMs = 180_000) {
-  const hash = await walletRequest<string>("eth_sendTransaction", [{ from, to: tx.to, data: tx.data, value: "0x0" }]);
+export async function sendAndWait(from: string, tx: { to: string; data: string; value?: string }, pollMs = 2000, maxMs = 180_000) {
+  // value is wei as a decimal string (e.g. a WETH deposit); the wallet takes hex.
+  const value = `0x${BigInt(tx.value ?? "0").toString(16)}`;
+  const hash = await walletRequest<string>("eth_sendTransaction", [{ from, to: tx.to, data: tx.data, value }]);
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     const receipt = await walletRequest<{ status?: string } | null>("eth_getTransactionReceipt", [hash], 15_000).catch(() => null);
     if (receipt) {
-      if (receipt.status !== "0x1") throw new WalletError(-1, "The approval transaction failed on Base.");
+      if (receipt.status !== "0x1") throw new WalletError(-1, "The transaction failed on Base.");
       return hash;
     }
     await new Promise((r) => setTimeout(r, pollMs));

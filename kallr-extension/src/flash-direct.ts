@@ -37,6 +37,8 @@ export type CardOrder = {
   postId?: string;
   /** The caller whose post this card sits under, for the trades dashboard. */
   caller?: string;
+  /** Sell the wallet's native ETH (wrapped to WETH first) instead of WETH it already holds. */
+  native?: boolean;
 };
 
 /** The order the server will quote, or a reason it can't be placed. */
@@ -44,6 +46,7 @@ export function toFlashInput(o: CardOrder, funderAddress: string): { ok: true; i
   const max = o.side === "buy" ? 6 : 8; // USDC has 6 decimals; cap asset amounts at 8
   if (decimalsOf(o.amount) > max) return { ok: false, error: `Use at most ${max} decimals.` };
   const input: FlashOrderInput = { asset: o.asset, side: o.side, qty: o.amount, orderType: "market", funderAddress };
+  if (o.native && o.asset === "ETH" && o.side === "sell") input.native = true;
   if (o.side === "buy" && o.tpPct !== null && o.slPct !== null) {
     if (!(o.price > 0)) return { ok: false, error: "Waiting for a price to set the exits." };
     input.takeProfit = { notionalPrice: toDecimal(o.price * (1 + o.tpPct / 100), 2) };
@@ -54,9 +57,10 @@ export function toFlashInput(o: CardOrder, funderAddress: string): { ok: true; i
   return parsed.success ? { ok: true, input: parsed.data } : { ok: false, error: parsed.error.issues.map((i) => i.message).join(" ") };
 }
 
-export type Step = "connecting" | "quoting" | "approving" | "approving-exits" | "signing" | "signing-exits" | "submitting";
+export type Step = "connecting" | "quoting" | "wrapping" | "approving" | "approving-exits" | "signing" | "signing-exits" | "submitting";
 export const STEP_LABEL: Record<Step, string> = {
   connecting: "Connect your wallet…",
+  wrapping: "Wrap ETH to WETH in your wallet…",
   quoting: "Getting a Flash quote…",
   approving: "Approve the spend in your wallet (one-time, sized to this order)…",
   "approving-exits": "Approve the take-profit / stop-loss in your wallet…",
@@ -86,6 +90,11 @@ export async function placeOnX(o: CardOrder, onStep: (step: Step) => void) {
   if (!parsed.success) throw new Error("Flash returned a quote we couldn't read. Try again.");
   const quote: FlashQuote = parsed.data;
 
+  // Selling native ETH: turn exactly the order amount into WETH first (one deposit transaction).
+  if (quote.wrap?.evmTx) {
+    onStep("wrapping");
+    await sendAndWait(from, quote.wrap.evmTx);
+  }
   if (quote.evm.approveTx) {
     onStep("approving");
     await sendAndWait(from, quote.evm.approveTx);

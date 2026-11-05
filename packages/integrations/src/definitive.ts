@@ -19,6 +19,8 @@ export const FLASH_BASE_ASSETS = {
   BTC: { address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", symbol: "cbBTC", decimals: 8 },
 } as const;
 export type FlashAsset = keyof typeof FLASH_BASE_ASSETS;
+/** Flash's address for a chain's native gas asset (ETH on Base). Quote-only: orders submit the wrapped token. */
+export const NATIVE_ASSET = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 /** Positive decimal string, no exponent. Flash takes human units ("2" USDC, "0.05" WETH). */
@@ -40,9 +42,13 @@ export const flashOrderInputSchema = z
     stopLoss: legSchema.optional(),
     funderAddress: address,
     sourcePostId: z.string().regex(/^[0-9]{1,30}$/).optional(),
+    /** Sell the wallet's native ETH: Flash returns a wrap transaction, then the order spends WETH. */
+    native: z.boolean().optional(),
   })
   .strict()
   .superRefine((o, ctx) => {
+    if (o.native && !(o.asset === "ETH" && o.side === "sell"))
+      ctx.addIssue({ code: "custom", message: "Native ETH can only be spent on an ETH sell.", path: ["native"] });
     if (o.orderType === "limit" && !o.limitPrice)
       ctx.addIssue({ code: "custom", message: "Limit orders need a limit price.", path: ["limitPrice"] });
     if (o.orderType === "market" && o.limitPrice)
@@ -78,7 +84,7 @@ export function buildQuoteRequest(input: FlashOrderInput): FlashQuoteRequest {
   const req: FlashQuoteRequest = {
     targetChain: "base",
     contraChain: "base",
-    targetAsset: FLASH_BASE_ASSETS[o.asset].address,
+    targetAsset: o.native ? NATIVE_ASSET : FLASH_BASE_ASSETS[o.asset].address,
     contraAsset: BASE_USDC,
     side: o.side,
     qty: o.qty,
@@ -96,6 +102,14 @@ const approveTxSchema = z.object({ to: address, data: z.string().regex(/^0x[0-9a
 /** The parts of a quote the browser needs to fund and sign. */
 export const flashQuoteSchema = z.object({
   quoteId: z.string().min(1),
+  /** Present when the quote spends native ETH: send this deposit() from the funder before signing. */
+  wrap: z
+    .object({
+      wrappedAsset: address,
+      evmTx: z.object({ to: address, data: z.string().regex(/^0x[0-9a-fA-F]*$/), value: z.string().regex(/^[0-9]+$/) }).nullable(),
+    })
+    .nullable()
+    .optional(),
   from: z.object({ amount: z.string(), notional: z.string().nullable().optional() }),
   to: z.object({ amount: z.string(), notional: z.string().nullable().optional() }),
   estimatedPriceImpact: z.string().nullable().optional(),
@@ -151,6 +165,8 @@ export function buildSubmitRequest(quoteRequest: FlashQuoteRequest, sig: FlashSi
     throw new Error("Bracket signature does not match the quoted order.");
   const body: Record<string, unknown> = {
     ...quoteRequest,
+    // Flash rejects the native address on submit: the order spends the WETH the wrap produced.
+    targetAsset: quoteRequest.targetAsset === NATIVE_ASSET ? FLASH_BASE_ASSETS.ETH.address : quoteRequest.targetAsset,
     quoteId: s.quoteId,
     userSignature: s.userSignature,
     evmOrderTypedData: s.evmOrderTypedData,

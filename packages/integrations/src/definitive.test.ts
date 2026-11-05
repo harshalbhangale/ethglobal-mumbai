@@ -7,6 +7,7 @@ import {
   flashClient,
   flashOrderInputSchema,
   flashQuoteSchema,
+  NATIVE_ASSET,
 } from "./definitive";
 
 const funder = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
@@ -129,5 +130,29 @@ describe("flashClient", () => {
     const client = flashClient({ apiKey: "k_test", fetcher });
     await expect(client.quote(buildQuoteRequest(copyCall))).rejects.toThrow("insufficient balance");
     expect(seen[0]).toEqual({ url: "https://flash.definitive.fi/v1/quote", key: "k_test" });
+  });
+});
+
+describe("selling native ETH", () => {
+  const seller = "0x94d3d3466ED0a6299D9384190eF461bb171e140D";
+  it("quotes the native asset and submits the wrapped one", () => {
+    const req = buildQuoteRequest({ asset: "ETH", side: "sell", qty: "0.0003", orderType: "market", funderAddress: seller, native: true });
+    expect(req.targetAsset).toBe(NATIVE_ASSET);
+    const body = buildSubmitRequest(req, { quoteId: "q", userSignature: "0xab", evmOrderTypedData: "{}" });
+    expect(body.targetAsset).toBe(FLASH_BASE_ASSETS.ETH.address);
+  });
+  it("refuses native ETH anywhere but an ETH sell", () => {
+    expect(() => buildQuoteRequest({ asset: "ETH", side: "buy", qty: "1", orderType: "market", funderAddress: seller, native: true })).toThrow();
+    expect(() => buildQuoteRequest({ asset: "BTC", side: "sell", qty: "0.0001", orderType: "market", funderAddress: seller, native: true })).toThrow();
+  });
+  it("reads the wrap action from a quote", () => {
+    const q = flashQuoteSchema.parse({
+      quoteId: "q",
+      from: { amount: "0.0003" },
+      to: { amount: "0.57" },
+      wrap: { wrappedAsset: FLASH_BASE_ASSETS.ETH.address, evmTx: { to: FLASH_BASE_ASSETS.ETH.address, data: "0xd0e30db0", value: "300000000000000" } },
+      evm: { approveTx: null, permitTypedData: "", orderTypedData: "{}" },
+    });
+    expect(q.wrap?.evmTx?.value).toBe("300000000000000");
   });
 });

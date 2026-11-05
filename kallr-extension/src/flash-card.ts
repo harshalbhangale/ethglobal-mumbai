@@ -38,6 +38,7 @@ const money = (value: number) =>
 const TRACK: Array<{ step: Step; label: string; optional?: boolean }> = [
   { step: "connecting", label: "Connect wallet · Base" },
   { step: "quoting", label: "Get a Flash quote" },
+  { step: "wrapping", label: "Wrap ETH to WETH", optional: true },
   { step: "approving", label: "Approve USDC (sized to this order)", optional: true },
   { step: "approving-exits", label: "Approve the TP/SL exit", optional: true },
   { step: "signing", label: "Sign the order" },
@@ -267,7 +268,7 @@ export function flashCard(input: {
 
   function update() {
     payLabel.textContent = side === "buy" ? "You pay" : "You sell";
-    payToken.replaceChildren(pill(side === "buy" ? "USDC" : token));
+    payToken.replaceChildren(pill(side === "buy" ? "USDC" : asset === "ETH" ? "ETH" : token));
     receiveToken.replaceChildren(pill(side === "buy" ? token : "USDC"));
     exitsToggle.hidden = side === "sell";
     exits.hidden = side === "sell" || !advanced;
@@ -365,6 +366,8 @@ export function flashCard(input: {
           price: price(),
           postId: post.postId,
           caller: post.handle,
+          // Selling ETH spends the wallet's native ETH: most wallets hold ETH, not WETH.
+          native: side === "sell" && asset === "ETH",
         },
         (step) => tracker.to(step),
       );
@@ -386,7 +389,7 @@ export function flashCard(input: {
       );
       amount.value = "";
     } catch (error) {
-      const message = friendlyError(error, side === "buy" ? "USDC" : token);
+      const message = friendlyError(error, side === "buy" ? "USDC" : asset === "ETH" ? "ETH" : token);
       tracker.fail(message);
       status.textContent = message;
     } finally {
