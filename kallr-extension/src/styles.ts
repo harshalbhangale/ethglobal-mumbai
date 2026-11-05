@@ -232,4 +232,30 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .card .title { gap: 12px; margin-bottom: 12px; }
 .title-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .title-sub { color: var(--muted); font: 500 12px/1.2 system-ui, sans-serif; }
+
+/* Token picker (over the trade panel) */
+.picker-slot { position: relative; }
+.picker { display: grid; gap: 10px; padding: 14px; border-radius: 16px; border: 1px solid var(--line-strong); background: var(--surface);
+  box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+.picker-head { display: flex; align-items: center; justify-content: space-between; color: var(--foreground); font-size: 15px; }
+.picker-close { border: 0; background: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+.picker-search { width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--raised);
+  color: var(--foreground); font: 500 15px -apple-system, BlinkMacSystemFont, sans-serif; outline: none; }
+.picker-search:focus { border-color: #1d9bf0; }
+.picker-list { display: grid; gap: 2px; max-height: 300px; overflow-y: auto; overscroll-behavior: contain; }
+.picker-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 12px; background: transparent;
+  color: var(--foreground); text-align: left; cursor: pointer; font: 14px -apple-system, BlinkMacSystemFont, sans-serif; }
+.picker-row:hover { background: var(--raised); }
+.picker-row.risky { opacity: .55; cursor: not-allowed; }
+.picker-id { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.picker-id small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.picker-right { color: var(--foreground); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.picker-right small { color: var(--muted); font-weight: 500; }
+.risk-badge { padding: 2px 8px; border-radius: 99px; background: color-mix(in srgb, var(--negative) 15%, transparent); color: var(--negative); font-size: 12px; }
+.picker-note { margin: 0; color: var(--muted); font-size: 12px; }
+.picker-note:empty { display: none; }
+.pick-token { cursor: pointer; background: transparent; color: var(--foreground); font: 700 15px -apple-system, BlinkMacSystemFont, sans-serif; }
+.pick-token:hover { border-color: var(--foreground); }
+.pick-caret { color: var(--muted); font-size: 11px; }
+.head-icon { display: inline-grid; flex: 0 0 auto; }
 `;

@@ -31,7 +31,8 @@ const legSchema = z.object({ notionalPrice: decimal }).strict();
 /** What the desk asks for. Validated on the server before anything reaches Flash. */
 export const flashOrderInputSchema = z
   .object({
-    asset: z.enum(Object.keys(FLASH_BASE_ASSETS) as [FlashAsset, ...FlashAsset[]]),
+    /** ETH / BTC, or any ERC-20 on Base by contract address (from token search). */
+    asset: z.union([z.enum(Object.keys(FLASH_BASE_ASSETS) as [FlashAsset, ...FlashAsset[]]), address]),
     side: z.enum(["buy", "sell"]),
     /** USDC to spend on a buy; asset units to sell on a sell. */
     qty: decimal,
@@ -79,12 +80,17 @@ export type FlashQuoteRequest = {
   attachedBracket?: { takeProfit: { notionalPrice: string }; stopLoss: { notionalPrice: string } };
 };
 
+/** Contract address for a known asset key, or the address itself for any other Base token. */
+export function tokenAddress(asset: FlashAsset | string): string {
+  return asset in FLASH_BASE_ASSETS ? FLASH_BASE_ASSETS[asset as FlashAsset].address : address.parse(asset);
+}
+
 export function buildQuoteRequest(input: FlashOrderInput): FlashQuoteRequest {
   const o = flashOrderInputSchema.parse(input);
   const req: FlashQuoteRequest = {
     targetChain: "base",
     contraChain: "base",
-    targetAsset: o.native ? NATIVE_ASSET : FLASH_BASE_ASSETS[o.asset].address,
+    targetAsset: o.native ? NATIVE_ASSET : tokenAddress(o.asset),
     contraAsset: BASE_USDC,
     side: o.side,
     qty: o.qty,
@@ -231,6 +237,24 @@ export class FlashError extends Error {
   }
 }
 
+/** A tradable token from Flash search. Prices are USD decimal strings; risk is Definitive's flag. */
+export const flashTokenSchema = z
+  .object({
+    chain: z.string(),
+    address,
+    symbol: z.string(),
+    name: z.string().nullable().optional(),
+    decimals: z.number().int().min(0).max(36),
+    price: z.string().nullable().optional(),
+    liquidity: z.string().nullable().optional(),
+    marketCap: z.string().nullable().optional(),
+    priceChange24h: z.string().nullable().optional(),
+    imageUrl: z.string().nullable().optional(),
+    riskFlagged: z.boolean().nullable().optional(),
+  })
+  .passthrough();
+export type FlashToken = z.infer<typeof flashTokenSchema>;
+
 export function flashClient(options: { apiKey?: string; fetcher?: typeof fetch } = {}) {
   const apiKey = options.apiKey || FLASH_PUBLIC_DEV_KEY;
   const fetcher = options.fetcher ?? fetch;
@@ -267,6 +291,12 @@ export function flashClient(options: { apiKey?: string; fetcher?: typeof fetch }
         .object({ orderId: z.string(), attachedBracket: z.object({ status: z.string() }).nullable().optional() })
         .passthrough()
         .parse(await call("/order", { method: "POST", body }));
+    },
+    /** Tradable tokens on Base by symbol, name or pasted contract address, most relevant first. */
+    async search(query: string, limit = 8): Promise<FlashToken[]> {
+      const q = new URLSearchParams({ query: query.slice(0, 64), chain: "base", limit: String(Math.min(limit, 25)) });
+      const res = z.object({ assets: z.array(flashTokenSchema) }).passthrough().parse(await call(`/search?${q}`));
+      return res.assets.filter((a) => a.chain === "base");
     },
     async listOrders(funderAddress: string, pageSize = 25): Promise<FlashOrder[]> {
       const q = new URLSearchParams({ funderAddress: String(address.parse(funderAddress)), pageSize: String(pageSize) });

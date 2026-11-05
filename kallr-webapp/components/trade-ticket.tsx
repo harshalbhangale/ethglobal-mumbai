@@ -1,10 +1,11 @@
 "use client";
 
-import { type ParsedOrder, exitPrices, parseOrder } from "@kallr/domain/order";
+import { type ExitPrices, type ParsedOrder, exitPrices, parseOrder } from "@kallr/domain/order";
+import type { FlashOrderInput } from "@kallr/integrations/definitive";
 import type { ConnectedWallet } from "@privy-io/react-auth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type OrderContext, type PlaceStep, placeFlashOrder } from "@/lib/flash-client";
-import { toFlashOrder } from "@/lib/flash-order";
+import { toDecimal, toFlashOrder } from "@/lib/flash-order";
 import { useUsdPrices } from "./order-desk";
 
 /**
@@ -103,6 +104,8 @@ export function TradeTicket({
 }) {
   const prices = useUsdPrices();
   const [asset, setAsset] = useState<Asset>("ETH");
+  // Any other Base token, picked from search; overrides the ETH/BTC choice while set.
+  const [custom, setCustom] = useState<TokenHit | null>(null);
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("1");
   const [kind, setKind] = useState<"market" | "limit">("market");
@@ -150,7 +153,9 @@ export function TradeTicket({
     // Runs once on load: apply only reads the link.
   }, []);
 
-  const market = prices[asset] ?? null;
+  const customPrice = custom?.price ? Number(custom.price) : null;
+  const market = custom ? (customPrice && Number.isFinite(customPrice) ? customPrice : null) : (prices[asset] ?? null);
+  const symbol = custom ? custom.symbol : asset;
   const amountUsd = Number(amount);
   const amountOk = /^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(amount) && amountUsd > 0;
   const limitPrice = kind === "limit" && /^[0-9]+(\.[0-9]+)?$/.test(limit) && Number(limit) > 0 ? Number(limit) : null;
@@ -171,7 +176,12 @@ export function TradeTicket({
     : null;
   const entry = limitPrice ?? market;
   const exits = order && entry ? exitPrices(order, market ?? entry) : null;
-  const flash = order && exits && wallet && !pairBroken && !(kind === "limit" && !limitPrice) ? toFlashOrder(order, exits, wallet.address, source?.postId) : null;
+  const flash =
+    order && exits && wallet && !pairBroken && !(kind === "limit" && !limitPrice)
+      ? custom
+        ? customFlashOrder(custom, order, exits, wallet.address, source?.postId)
+        : toFlashOrder(order, exits, wallet.address, source?.postId)
+      : null;
   const busy = run.kind === "working";
 
   const problem = useMemo(() => {
@@ -194,8 +204,8 @@ export function TradeTicket({
     let at: PlaceStep | null = null;
     const summary =
       kind === "limit" && limitPrice
-        ? `Limit ${side} placed: ${usd(amountUsd)} of ${asset} at ${usd(limitPrice)}`
-        : `${side === "buy" ? "Bought" : "Sold"} ${usd(amountUsd)} of ${asset}`;
+        ? `Limit ${side} placed: ${usd(amountUsd)} of ${symbol} at ${usd(limitPrice)}`
+        : `${side === "buy" ? "Bought" : "Sold"} ${usd(amountUsd)} of ${symbol}`;
     try {
       const res = await placeFlashOrder(
         flash.input,
@@ -243,9 +253,12 @@ export function TradeTicket({
               <button
                 key={a}
                 type="button"
-                aria-pressed={asset === a}
-                onClick={() => setAsset(a)}
-                className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${asset === a ? "border-ink ring-1 ring-ink" : "border-rule hover:border-slate"}`}
+                aria-pressed={!custom && asset === a}
+                onClick={() => {
+                  setAsset(a);
+                  setCustom(null);
+                }}
+                className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${!custom && asset === a ? "border-ink ring-1 ring-ink" : "border-rule hover:border-slate"}`}
               >
                 <span>
                   <span className="block font-semibold">{a}</span>
@@ -255,6 +268,7 @@ export function TradeTicket({
               </button>
             ))}
           </div>
+          <TokenSearch selected={custom} onPick={setCustom} />
         </Field>
 
         <Field label={side === "buy" ? "Spend (USDC)" : "Sell (in USD)"} hint={amountOk && amountUsd < MIN_USD ? <span className="text-down">Under $0.50 Flash may refuse it</span> : undefined}>
@@ -377,8 +391,8 @@ export function TradeTicket({
           <h2 id="summary-heading" className="font-display text-lg font-semibold">Order summary</h2>
           <dl className="space-y-2.5 text-sm">
             {[
-              ["You " + (side === "buy" ? "spend" : "sell"), amountOk ? usd(amountUsd) + (side === "buy" ? " USDC" : ` of ${asset}`) : "—"],
-              ["You get ≈", amountOk && entry ? (side === "buy" ? `${(amountUsd / entry).toLocaleString("en-US", { maximumSignificantDigits: 5 })} ${asset === "ETH" ? "WETH" : "cbBTC"}` : `${usd(amountUsd)} USDC`) : "—"],
+              ["You " + (side === "buy" ? "spend" : "sell"), amountOk ? usd(amountUsd) + (side === "buy" ? " USDC" : ` of ${symbol}`) : "—"],
+              ["You get ≈", amountOk && entry ? (side === "buy" ? `${(amountUsd / entry).toLocaleString("en-US", { maximumSignificantDigits: 5 })} ${custom ? custom.symbol : asset === "ETH" ? "WETH" : "cbBTC"}` : `${usd(amountUsd)} USDC`) : "—"],
               ["Entry", kind === "limit" ? (limitPrice ? `Limit ${usd(limitPrice)}` : "Set a price") : market ? `Market ≈ ${usd(market)}` : "…"],
               ["Exits", exitsOn && exits && tp !== null && sl !== null ? `TP ${usd(exits.takeProfit ?? 0)} · SL ${usd(exits.stopLoss ?? 0)}` : "None"],
               ["Steps", exitsOn && tp !== null && sl !== null ? "Approve twice, sign twice (first time)" : "Approve once (first time), sign once"],
@@ -400,7 +414,7 @@ export function TradeTicket({
                 disabled={!flash?.ok || busy}
                 className="w-full rounded-full bg-ink px-6 py-3.5 text-[15px] font-semibold text-white transition-opacity disabled:opacity-40"
               >
-                {side === "buy" ? "Buy" : "Sell"} {asset}
+                {side === "buy" ? "Buy" : "Sell"} {symbol}
                 {amountOk ? ` · ${usd(amountUsd)}` : ""}
               </button>
               <p className="min-h-5 text-sm text-slate" aria-live="polite">
@@ -454,6 +468,130 @@ export function TradeTicket({
           You sign every step in your own wallet. Kallr never holds your keys or funds.
         </p>
       </div>
+    </div>
+  );
+}
+
+/** A token from /api/tokens/search. */
+export type TokenHit = {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  price: string | null;
+  liquidity: string | null;
+  change24h: string | null;
+  imageUrl: string | null;
+  riskFlagged: boolean;
+};
+
+const compactUsd = (v: string | null) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? `$${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n)}` : "—";
+};
+
+/** Flash order input for a token picked from search: the contract address is the asset. */
+export function customFlashOrder(
+  token: TokenHit,
+  order: ParsedOrder,
+  exits: ExitPrices,
+  funderAddress: string,
+  sourcePostId?: string,
+): { ok: true; input: FlashOrderInput } | { ok: false; error: string } {
+  if (token.riskFlagged) return { ok: false, error: `${token.symbol} is flagged as risky by Definitive.` };
+  if (order.amountUsd === null) return { ok: false, error: "Enter an amount." };
+  const price = order.limitPrice ?? exits.entry;
+  if (!(price > 0)) return { ok: false, error: `No price for ${token.symbol} yet.` };
+  const qty = order.side === "buy" ? toDecimal(order.amountUsd, 6) : toDecimal(order.amountUsd / price, Math.min(token.decimals, 8));
+  if (qty === "0") return { ok: false, error: "Amount is too small." };
+  // Prices of long-tail tokens can be tiny (0.0008 USDC): keep enough decimals.
+  const p = (n: number) => toDecimal(n, 12);
+  const input: FlashOrderInput = { asset: token.address, side: order.side, qty, orderType: order.limitPrice === null ? "market" : "limit", funderAddress };
+  if (order.limitPrice !== null) input.limitPrice = p(order.limitPrice);
+  if (exits.takeProfit !== null && exits.stopLoss !== null) {
+    input.takeProfit = { notionalPrice: p(exits.takeProfit) };
+    input.stopLoss = { notionalPrice: p(exits.stopLoss) };
+  }
+  if (sourcePostId) input.sourcePostId = sourcePostId;
+  return { ok: true, input };
+}
+
+/** "Other token": search Base by name, symbol or contract address. Flagged tokens can't be picked. */
+function TokenSearch({ selected, onPick }: { selected: TokenHit | null; onPick: (t: TokenHit | null) => void }) {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<TokenHit[] | null>(null);
+  useEffect(() => {
+    const query = q.trim();
+    if (!query) {
+      setHits(null);
+      return;
+    }
+    let alive = true;
+    const t = setTimeout(async () => {
+      const res = await fetch(`/api/tokens/search?q=${encodeURIComponent(query)}`)
+        .then((r) => r.json())
+        .catch(() => ({ tokens: [] }));
+      if (alive) setHits((res as { tokens?: TokenHit[] }).tokens ?? []);
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [q]);
+
+  if (selected)
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-ink px-4 py-3 ring-1 ring-ink">
+        <span className="min-w-0">
+          <span className="block font-semibold">{selected.symbol}</span>
+          <span className="block truncate text-sm text-slate">
+            {selected.name} · {selected.address.slice(0, 6)}…{selected.address.slice(-4)} · {compactUsd(selected.liquidity)} liquidity
+          </span>
+        </span>
+        <button type="button" onClick={() => onPick(null)} className="shrink-0 text-sm font-semibold text-slate underline underline-offset-4 hover:text-ink">
+          Change
+        </button>
+      </div>
+    );
+
+  return (
+    <div className="space-y-2">
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Other token: search a name or paste a contract address"
+        aria-label="Search tokens on Base"
+        className="w-full rounded-xl border border-rule bg-paper px-4 py-2.5 text-[15px] placeholder:text-slate/70 focus:border-ink focus:outline-none"
+      />
+      {hits && (
+        <ul className="max-h-64 divide-y divide-rule overflow-y-auto overscroll-contain rounded-xl border border-rule">
+          {hits.length === 0 && <li className="px-4 py-3 text-sm text-slate">Nothing tradable on Base matches.</li>}
+          {hits.map((t) => (
+            <li key={t.address}>
+              <button
+                type="button"
+                disabled={t.riskFlagged}
+                onClick={() => {
+                  onPick(t);
+                  setQ("");
+                }}
+                className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span className="min-w-0">
+                  <span className="block font-semibold">{t.symbol}</span>
+                  <span className="block truncate text-sm text-slate">
+                    {t.name} · {t.address.slice(0, 6)}…{t.address.slice(-4)}
+                  </span>
+                </span>
+                <span className="shrink-0 text-sm font-semibold tabular-nums">
+                  {t.riskFlagged ? <span className="text-down">Flagged</span> : `${compactUsd(t.liquidity)} liq`}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {hits && hits.length > 0 && <p className="text-xs text-slate">Symbols aren’t unique: check the contract and liquidity.</p>}
     </div>
   );
 }

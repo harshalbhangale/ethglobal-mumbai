@@ -4,7 +4,7 @@ export type LivePrice = {
   /** Exact decimal string, never parsed into a float until formatting. */
   price: string;
   change24hPct: string | null;
-  source: "x" | "chainlink-base";
+  source: "x" | "chainlink-base" | "flash";
 };
 
 /** Wrapped and bridged symbols X may show for the same asset. */

@@ -163,11 +163,95 @@ describe("flashCard", () => {
     expect(new URL(open.mock.calls[0]?.[0] as string).searchParams.get("order")).toBe("sell $25.00 of ETH");
   });
 
-  it("shows the record but no trade panel for assets Base can't trade", async () => {
+  it("shows the record but no trade for a coin with no liquid token on Base", async () => {
     const { card } = await mounted(answer("up", "SOL"), "SOL", "price unavailable");
     expect(q(card, ".inline-buy").hidden).toBe(true);
-    expect(card.querySelector(".inline-panel")).toBeNull();
-    expect(card.textContent).toContain("$SOL isn't tradable on Base yet");
+    expect(q(card, ".inline-panel").hidden).toBe(true);
+    await vi.waitFor(() => expect(card.textContent).toContain("$SOL has no liquid, unflagged token on Base"));
+  });
+});
+
+const DEGEN = {
+  address: "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed",
+  symbol: "DEGEN",
+  name: "Degen",
+  decimals: 18,
+  price: "8.15e-4",
+  liquidity: "231680",
+  change24h: "-0.02",
+  imageUrl: null,
+  riskFlagged: false,
+};
+const FAKE = { ...DEGEN, address: "0x22f9ec77961e9a17721e940d52cbb30adc68ce08", liquidity: "3", riskFlagged: true };
+
+describe("any Base token", () => {
+  function worker(tokens: unknown[]) {
+    const sendMessage = stubWorker(answer("up", "DEGEN"));
+    const base = sendMessage.getMockImplementation();
+    sendMessage.mockImplementation(async (m: { type: string }): Promise<unknown> => {
+      if (m.type === "token-search") return { tokens };
+      return base?.(m);
+    });
+    return sendMessage;
+  }
+
+  it("makes a $DEGEN call tradable when an unflagged, liquid DEGEN exists on Base", async () => {
+    worker([DEGEN, FAKE]);
+    const { flashCard } = await import("./flash-card");
+    const made = flashCard({ post, asset: "DEGEN", answer: answer("up", "DEGEN") });
+    document.body.append(made.card);
+    await vi.waitFor(() => expect(q(made.card, ".inline-buy").hidden).toBe(false));
+    expect(q(made.card, ".swap-title strong").textContent).toBe("Degen");
+    await vi.waitFor(() => expect(q(made.card, ".swap-title b").textContent).toBe("$0.000815"));
+  });
+
+  it("never maps a cashtag to a flagged or illiquid look-alike", async () => {
+    worker([FAKE]);
+    const { flashCard } = await import("./flash-card");
+    const made = flashCard({ post, asset: "DEGEN", answer: answer("up", "DEGEN") });
+    document.body.append(made.card);
+    await vi.waitFor(() => expect(made.card.textContent).toContain("$DEGEN has no liquid, unflagged token on Base"));
+    expect(q(made.card, ".inline-buy").hidden).toBe(true);
+  });
+
+  it("picks any token from search and orders it by contract address", async () => {
+    const sendMessage = worker([DEGEN, FAKE]);
+    const calls = fakeWallet({
+      eth_requestAccounts: () => ["0x00000000000000000000000000000000000000a1"],
+      eth_chainId: () => "0x2105",
+      eth_signTypedData_v4: () => "0xa1",
+    });
+    sendMessage.mockImplementation(async (m: { type: string }): Promise<unknown> => {
+      if (m.type === "prices") return { prices: [{ asset: "ETH", price: "2500", source: "chainlink-base" }] };
+      if (m.type === "token-search") return { tokens: [DEGEN, FAKE] };
+      if (m.type === "flash-quote") return { quote: { quoteId: "q", from: { amount: "1" }, to: { amount: "1124" }, evm: { approveTx: null, permitTypedData: "", orderTypedData: "{}" } } };
+      if (m.type === "flash-order") return { orderId: "11111111-2222-3333-4444-555555555555" };
+      return null;
+    });
+    const { flashCard } = await import("./flash-card");
+    const made = flashCard({ post, asset: "ETH", answer: answer() });
+    document.body.append(made.card);
+    made.open();
+    (made.card.querySelector(".swap-box:not(.swap-pay) .pick-token") as HTMLElement).click();
+    const search = q<HTMLInputElement>(made.card, ".picker-search");
+    search.value = "degen";
+    search.dispatchEvent(new Event("input"));
+    await vi.waitFor(() => expect(made.card.querySelector(".picker-row")?.textContent).toContain("DEGEN"));
+    const rows = [...made.card.querySelectorAll<HTMLButtonElement>(".picker-row")];
+    expect(rows[1]?.disabled).toBe(true);
+    expect(rows[1]?.textContent).toContain("Flagged");
+    rows[0]?.click();
+    expect(q(made.card, ".picker-slot").hidden).toBe(true);
+    expect(q(made.card, ".swap-title strong").textContent).toBe("Degen");
+    const amount = q<HTMLInputElement>(made.card, ".swap-amount");
+    amount.value = "1";
+    amount.dispatchEvent(new Event("input"));
+    await vi.waitFor(() => expect(q<HTMLButtonElement>(made.card, ".swap-submit").disabled).toBe(false));
+    q<HTMLButtonElement>(made.card, ".swap-submit").click();
+    await vi.waitFor(() => expect(made.card.textContent).toContain("Bought DEGEN with $1.00 ✓"));
+    const quoted = sendMessage.mock.calls.find(([m]) => m.type === "flash-quote")?.[0] as unknown as { order: Record<string, unknown> };
+    expect(quoted.order.asset).toBe(DEGEN.address);
+    expect(calls.map((c) => c.method)).toContain("eth_signTypedData_v4");
   });
 });
 

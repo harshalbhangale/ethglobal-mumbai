@@ -8,6 +8,7 @@ import { followButton } from "./follows";
 import { definitiveLogo, tokenIcon } from "./logos";
 import { cardOrderText, COPYABLE, DECIMAL, deskOrderUrl } from "./post";
 import { ALIASES, formatPrice, type LivePrice, livePrice } from "./ticker-price";
+import { type Choice, choiceIcon, plainPrice, searchTokens, tokenPicker } from "./token-picker";
 import { hasBrowserWallet, rejected } from "./wallet";
 
 export { tokenIcon } from "./logos";
@@ -30,6 +31,8 @@ export const AMOUNT_PRESETS = [0.5, 1, 5, 10] as const;
  * quotes but returns ~$0.08; from ~$0.50 the fill is close to the amount. Checked 5 Nov 2026.
  */
 export const MIN_SENSIBLE_USD = 0.5;
+/** A cashtag only maps to a Base token with at least this much liquidity (and no risk flag). */
+export const MIN_LIQUIDITY_USD = 50_000;
 
 const money = (value: number) =>
   Number.isFinite(value) ? `$${value.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}` : "";
@@ -115,9 +118,14 @@ export function flashCard(input: {
   /** Under X's own ticker card: X already shows the header, so start hidden. */
   attached?: boolean;
 }): FlashCard {
-  const { post, asset } = input;
-  const tradable = COPYABLE.has(asset);
-  const token = TOKENS[asset] ?? asset;
+  const { post } = input;
+  // What's traded: ETH / BTC built-ins, or any Base token picked from search (or found for a cashtag).
+  let choice: Choice | null = COPYABLE.has(input.asset) ? { kind: "known", key: input.asset as "ETH" | "BTC" } : null;
+  const sym = () => (choice?.kind === "token" ? choice.token.symbol : choice?.kind === "known" ? choice.key : input.asset);
+  /** The token actually moved on Base: WETH for ETH, cbBTC for BTC, else the token itself. */
+  const tokenSym = () => (choice?.kind === "token" ? choice.token.symbol : (TOKENS[sym()] ?? sym()));
+  const nameOf = () => (choice?.kind === "token" ? choice.token.name : (NAMES[sym()] ?? sym()));
+  let tradable = choice !== null;
   const call = input.answer?.call ?? null;
   let side: "buy" | "sell" = call?.direction === "down" ? "sell" : "buy";
   // TP/SL is an opt-in extra: off by default keeps a first trade to approve once, sign once.
@@ -133,7 +141,7 @@ export function flashCard(input: {
 
   const card = el("section", {
     class: `inline-card swap-card${input.attached ? " inline-attached" : ""}`,
-    "aria-label": `Trade ${asset} with Kallr`,
+    "aria-label": `Trade ${input.asset} with Kallr`,
   });
   const priceText = el("b", {}, "…");
   const changeText = el("em", {});
@@ -201,10 +209,25 @@ export function flashCard(input: {
   const review = el("dl", { class: "review" });
   const walletChip = el("span", { class: "swap-wallet", hidden: "" });
   const status = el("p", { class: "inline-note", role: "status", "aria-live": "polite" });
-  const submit = el("button", { type: "button", class: "inline-submit swap-submit", disabled: "" }, `Buy ${asset}`);
+  const submit = el("button", { type: "button", class: "inline-submit swap-submit", disabled: "" }, `Buy ${sym()}`);
   const progress = el("div", { class: "progress", hidden: "" });
 
-  const pill = (symbol: string) => el("span", { class: "swap-pill" }, tokenIcon(symbol === "USDC" ? "USDC" : symbol, 22), symbol);
+  const pill = (symbol: string) => el("span", { class: "swap-pill" }, tokenIcon(symbol, 22), symbol);
+  /** The traded token's pill is a button: it opens the token picker. */
+  const pickPill = (label: string) => {
+    const b = el(
+      "button",
+      { type: "button", class: "swap-pill pick-token", "aria-label": `Change token (now ${label})` },
+      choice ? choiceIcon(choice, 22) : tokenIcon(label, 22),
+      label,
+      el("span", { class: "pick-caret", "aria-hidden": "true" }, "▾"),
+    );
+    b.addEventListener("click", (e) => {
+      e.preventDefault();
+      openPicker();
+    });
+    return b;
+  };
 
   for (const value of ["buy", "sell"] as const) {
     const button = el("button", { type: "button", "aria-pressed": String(value === side) }, value === "buy" ? "Buy" : "Sell");
@@ -268,8 +291,8 @@ export function flashCard(input: {
 
   function update() {
     payLabel.textContent = side === "buy" ? "You pay" : "You sell";
-    payToken.replaceChildren(pill(side === "buy" ? "USDC" : asset === "ETH" ? "ETH" : token));
-    receiveToken.replaceChildren(pill(side === "buy" ? token : "USDC"));
+    payToken.replaceChildren(side === "buy" ? pill("USDC") : pickPill(sym() === "ETH" && choice?.kind === "known" ? "ETH" : tokenSym()));
+    receiveToken.replaceChildren(side === "buy" ? pickPill(tokenSym()) : pill("USDC"));
     exitsToggle.hidden = side === "sell";
     exits.hidden = side === "sell" || !advanced;
     exitsToggle.setAttribute("aria-expanded", String(advanced));
@@ -299,7 +322,8 @@ export function flashCard(input: {
     // Review: everything the order will do, before any wallet prompt.
     const withExits = side === "buy" && tp !== null && sl !== null;
     review.replaceChildren(
-      ...row("Rate", Number.isFinite(p) ? `1 ${asset} ≈ ${formatPrice(live?.price ?? "0").slice(1)} USDC` : "Price unavailable"),
+      ...row("Rate", Number.isFinite(p) ? `1 ${sym()} ≈ ${formatPrice(live?.price ?? "0").slice(1)} USDC` : "Price unavailable"),
+      ...(choice?.kind === "token" ? row("Contract", `${choice.token.address.slice(0, 6)}…${choice.token.address.slice(-4)}`) : []),
       ...(withExits && Number.isFinite(p)
         ? row("Exits", el("span", {}, el("span", { class: "up" }, `TP ${exitPrice(tp as number, 1)}`), " · ", el("span", { class: "down" }, `SL ${exitPrice(sl as number, -1)}`)))
         : side === "buy"
@@ -318,13 +342,20 @@ export function flashCard(input: {
       status.textContent = `Under $${MIN_SENSIBLE_USD}, fees eat most of the order and Flash may refuse it. $0.50–$1 is the cheapest real test.`;
     else status.textContent = "";
     const ready = ok && !pairBroken && usd !== null && Number.isFinite(usd);
-    submit.textContent = `${side === "buy" ? "Buy" : "Sell"} ${asset}${ready && usd !== null ? ` · ${money(usd)}` : ""}`;
+    submit.textContent = `${side === "buy" ? "Buy" : "Sell"} ${sym()}${ready && usd !== null ? ` · ${money(usd)}` : ""}`;
     if (ready) submit.removeAttribute("disabled");
     else submit.setAttribute("disabled", "");
   }
 
   async function refreshPrice() {
-    live = await livePrice(input.article ?? document.body, asset, ALIASES[asset as keyof typeof ALIASES] ?? []);
+    if (choice?.kind === "token") {
+      // Any other token: Flash's price for this exact contract.
+      const fresh = (await searchTokens(choice.token.address)).find((t) => t.address.toLowerCase() === (choice as { token: { address: string } }).token.address.toLowerCase());
+      if (fresh && choice?.kind === "token") choice = { kind: "token", token: fresh };
+      const price = plainPrice(choice?.kind === "token" ? choice.token.price : null);
+      const change = choice?.kind === "token" && choice.token.change24h !== null ? String(Number(choice.token.change24h) * 100) : null;
+      live = price ? { price, change24hPct: change, source: "flash" } : null;
+    } else live = await livePrice(input.article ?? document.body, sym(), ALIASES[sym() as keyof typeof ALIASES] ?? []);
     if (!live) {
       priceText.textContent = "price unavailable";
       changeText.textContent = "";
@@ -354,11 +385,12 @@ export function flashCard(input: {
     progress.hidden = false;
     review.hidden = true;
     status.textContent = "";
-    const spent = side === "buy" ? money(Number(amount.value)) : `${amount.value} ${token}`;
+    const spent = side === "buy" ? money(Number(amount.value)) : `${amount.value} ${tokenSym()}`;
     try {
       const result = await placeOnX(
         {
-          asset: asset as "ETH" | "BTC",
+          asset: choice?.kind === "token" ? choice.token.address : (sym() as "ETH" | "BTC"),
+          decimals: choice?.kind === "token" ? choice.token.decimals : undefined,
           side,
           amount: amount.value,
           tpPct: side === "buy" ? tp : null,
@@ -367,7 +399,7 @@ export function flashCard(input: {
           postId: post.postId,
           caller: post.handle,
           // Selling ETH spends the wallet's native ETH: most wallets hold ETH, not WETH.
-          native: side === "sell" && asset === "ETH",
+          native: side === "sell" && choice?.kind === "known" && choice.key === "ETH",
         },
         (step) => tracker.to(step),
       );
@@ -378,7 +410,7 @@ export function flashCard(input: {
         el(
           "div",
           { class: "done-card" },
-          el("strong", {}, `${side === "buy" ? "Bought" : "Sold"} ${asset} with ${spent} ✓`),
+          el("strong", {}, `${side === "buy" ? "Bought" : "Sold"} ${sym()} with ${spent} ✓`),
           el(
             "span",
             {},
@@ -389,7 +421,7 @@ export function flashCard(input: {
       );
       amount.value = "";
     } catch (error) {
-      const message = friendlyError(error, side === "buy" ? "USDC" : asset === "ETH" ? "ETH" : token);
+      const message = friendlyError(error, side === "buy" ? "USDC" : choice?.kind === "known" && choice.key === "ETH" ? "ETH" : tokenSym());
       tracker.fail(message);
       status.textContent = message;
     } finally {
@@ -407,9 +439,14 @@ export function flashCard(input: {
     const usd = usdValue();
     if (usd === null || !Number.isFinite(usd)) return;
     if (await hasBrowserWallet()) return placeHere();
+    if (choice?.kind === "token") {
+      // The desk's typed orders only know ETH and BTC; other tokens trade with a wallet on the page.
+      status.textContent = `Trading ${sym()} needs MetaMask or Rabby in this browser.`;
+      return;
+    }
     const text = cardOrderText({
       side,
-      asset,
+      asset: sym(),
       usd: side === "buy" ? amount.value : usd.toFixed(2),
       tpPct: side === "buy" ? tp : null,
       slPct: side === "buy" ? sl : null,
@@ -420,7 +457,30 @@ export function flashCard(input: {
     status.replaceChildren("No browser wallet here: review the quote and sign in the Kallr desk. ", safeLink(url, "Open desk ↗"));
   });
 
+  // --- token picker, shown over the trade panel ---
+  const pickerSlot = el("div", { class: "picker-slot", hidden: "" });
+  function closePicker() {
+    pickerSlot.hidden = true;
+    pickerSlot.replaceChildren();
+  }
+  function openPicker() {
+    const picker = tokenPicker((next) => {
+      choice = next;
+      tradable = true;
+      amount.value = "";
+      closePicker();
+      renderHead();
+      live = null;
+      void refreshPrice();
+      update();
+    }, closePicker);
+    pickerSlot.replaceChildren(picker.root);
+    pickerSlot.hidden = false;
+    picker.focus();
+  }
+
   panel.append(
+    pickerSlot,
     el(
       "div",
       { class: "swap-row" },
@@ -484,29 +544,63 @@ export function flashCard(input: {
   card.addEventListener("click", (event) => event.stopPropagation());
 
   const insights = input.answer ? callInsights({ post, answer: input.answer, live: () => live }) : null;
+  const headIcon = el("span", { class: "head-icon" });
+  const headName = el("strong", {});
+  const headSym = el("span", {});
+  const attachedTitle = el("strong", {});
+  const attachedIcon = el("span", { class: "head-icon" });
+  /** Header follows the chosen token. */
+  function renderHead() {
+    headIcon.replaceChildren(choice ? choiceIcon(choice, 40) : tokenIcon(sym(), 40));
+    attachedIcon.replaceChildren(choice ? choiceIcon(choice, 28) : tokenIcon(sym(), 28));
+    headName.textContent = nameOf();
+    headSym.textContent = `${sym()} `;
+    attachedTitle.textContent = `Trade ${sym()} with Kallr`;
+  }
+  renderHead();
   const header = el(
     "header",
     { class: "swap-head" },
-    tokenIcon(asset),
-    el("div", { class: "swap-title" }, el("strong", {}, NAMES[asset] ?? asset), el("span", {}, `${asset} `, priceText, " ", changeText)),
+    headIcon,
+    el("div", { class: "swap-title" }, headName, el("span", {}, headSym, priceText, " ", changeText)),
     el("span", { class: "swap-spark" }),
     buy,
     close,
   );
+  const untradable = el("p", { class: "inline-note untradable", style: "padding: 0 16px" }, `Looking up $${input.asset} on Base…`);
   if (input.attached) {
     card.hidden = true;
     card.append(
-      el("header", { class: "swap-head" }, tokenIcon(asset, 28), el("div", { class: "swap-title" }, el("strong", {}, `Trade ${asset} with Kallr`)), close),
+      el("header", { class: "swap-head" }, attachedIcon, el("div", { class: "swap-title" }, attachedTitle), close),
       ...(insights ? [insights] : []),
       panel,
       el("div", { style: "padding: 0 16px 12px" }, footer),
     );
   } else {
-    card.append(header, callerStrip, ...(insights ? [insights] : []));
-    if (tradable) card.append(panel);
-    else card.append(el("p", { class: "inline-note", style: "padding: 0 16px" }, `$${asset} isn't tradable on Base yet. The record above still counts.`));
+    card.append(header, callerStrip, ...(insights ? [insights] : []), panel);
+    if (!tradable) card.append(untradable);
     card.append(el("div", { style: "padding: 0 16px 12px" }, footer));
   }
   update();
+
+  // A call on a coin beyond ETH/BTC: find it on Base. Only an exact symbol with real liquidity and no
+  // risk flag counts; anything else stays untradable rather than guessing among look-alikes.
+  if (!tradable) {
+    void searchTokens(input.asset).then((tokens) => {
+      const match = tokens.find(
+        (t) => t.symbol.toUpperCase() === input.asset.toUpperCase() && !t.riskFlagged && Number(t.liquidity) >= MIN_LIQUIDITY_USD,
+      );
+      if (!match) {
+        untradable.textContent = `$${input.asset} has no liquid, unflagged token on Base. The record above still counts.`;
+        return;
+      }
+      choice = { kind: "token", token: match };
+      tradable = true;
+      untradable.hidden = true;
+      buy.hidden = !panel.hidden;
+      renderHead();
+      void refreshPrice();
+    });
+  }
   return { card, open: () => tradable && toggle(true) };
 }

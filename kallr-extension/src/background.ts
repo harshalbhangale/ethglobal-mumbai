@@ -23,7 +23,8 @@ type Request =
   | { type: "observe-follows"; viewer: string; observations: Array<{ handle: string; following: boolean }> }
   | { type: "mirror"; enabled?: boolean }
   | { type: "flash-quote"; order: unknown }
-  | { type: "flash-order"; order: unknown; signatures: unknown; context?: unknown };
+  | { type: "flash-order"; order: unknown; signatures: unknown; context?: unknown }
+  | { type: "token-search"; query: unknown };
 
 const HANDLE = /^[a-z0-9_]{1,15}$/;
 
@@ -102,6 +103,15 @@ chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
   } else if (message?.type === "prices") {
     job = inflight.get("prices") ?? prices().finally(() => inflight.delete("prices"));
     inflight.set("prices", job);
+  } else if (message?.type === "token-search" && typeof message.query === "string" && fromX) {
+    const q = message.query.trim().slice(0, 64);
+    const key = `search:${q.toLowerCase()}`;
+    job =
+      inflight.get(key) ??
+      fetch(`${appOrigin}/api/tokens/search?q=${encodeURIComponent(q)}`)
+        .then((r) => (r.ok ? r.json() : { tokens: [] }))
+        .finally(() => inflight.delete(key));
+    inflight.set(key, job);
   } else if (message?.type === "caller-record" && HANDLE.test(message.handle)) {
     const key = `record:${message.handle}`;
     job = inflight.get(key) ?? callerRecord(message.handle).finally(() => inflight.delete(key));

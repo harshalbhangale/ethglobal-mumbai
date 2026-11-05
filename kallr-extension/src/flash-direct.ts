@@ -25,7 +25,10 @@ export function toDecimal(n: number, dp: number): string {
 const decimalsOf = (s: string) => (s.includes(".") ? (s.split(".")[1]?.length ?? 0) : 0);
 
 export type CardOrder = {
-  asset: "ETH" | "BTC";
+  /** ETH / BTC, or any Base token by contract address (from the token picker). */
+  asset: "ETH" | "BTC" | `0x${string}` | string;
+  /** Token decimals, for a picked token; caps how many decimals a sell amount may have. */
+  decimals?: number;
   side: "buy" | "sell";
   /** As typed: USDC on a buy, asset units on a sell. */
   amount: string;
@@ -43,7 +46,8 @@ export type CardOrder = {
 
 /** The order the server will quote, or a reason it can't be placed. */
 export function toFlashInput(o: CardOrder, funderAddress: string): { ok: true; input: FlashOrderInput } | { ok: false; error: string } {
-  const max = o.side === "buy" ? 6 : 8; // USDC has 6 decimals; cap asset amounts at 8
+  // USDC has 6 decimals; a sold token takes up to its own decimals, capped at 8 for sane input.
+  const max = o.side === "buy" ? 6 : Math.min(o.decimals ?? 8, 8);
   if (decimalsOf(o.amount) > max) return { ok: false, error: `Use at most ${max} decimals.` };
   const input: FlashOrderInput = { asset: o.asset, side: o.side, qty: o.amount, orderType: "market", funderAddress };
   if (o.native && o.asset === "ETH" && o.side === "sell") input.native = true;
