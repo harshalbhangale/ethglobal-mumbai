@@ -90,9 +90,27 @@ browser, so anyone can check them without asking us.
 | `kallr.trades` | Flash accepts an order | Created read-only by our writer, then handed to the trader's wallet | ~182 days (Arkiv's max) |
 | `kallr.calls` | We first price a call | Our writer, read-only | Its timeframe plus a 48h scoring window |
 | `kallr.call-results` | The call settles (hit, miss or flat) | Our writer, read-only; anyone may extend it | ~182 days, extendable by anyone |
+| `kallr.tracked-callers` | `npm run arkiv:callers -w kallr-webapp` | Our writer, read-only | ~182 days; re-run to refresh |
 
 - **Writer wallet:** `0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53`. Reads only trust entities it created.
 - **One query you can run:** `arkiv.schema = str('kallr.trades') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)`
+- **Callers Kallr follows** (read by `/kol` and the home sidebar): `arkiv.schema = str('kallr.tracked-callers') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)`
+
+**On-chain writes so far** (Arkiv Rabdi, block `0x4015f`, one `createEntity` per caller):
+
+| Caller | Transaction | Entity key |
+| --- | --- | --- |
+| @rektcapital | [`0xd2b96140…`](https://rabdi.explorer.arkiv.network/tx/0xd2b961407f1163a441764757b423315950c858559dcddc7920dc77b5f8194d14) | `0x712eb8bc…07ea0a` |
+| @pentosh1 | [`0x5bf7e43a…`](https://rabdi.explorer.arkiv.network/tx/0x5bf7e43a59f28f825a9afb1d256ea4248cdd6697fc47b3db30a1c6fc29acf768) | `0x45a354ed…26bd41` |
+| @cryptokaleo | [`0x7738ebcb…`](https://rabdi.explorer.arkiv.network/tx/0x7738ebcbd2897b4c7b40ed7efaa0dc4df39a7eae8375ba942fb4e3e55ecca924) | `0xef7a1ff4…cf31e9` |
+| @cryptodonalt | [`0xf6f721c8…`](https://rabdi.explorer.arkiv.network/tx/0xf6f721c8b58b87d9129125305f40c3621613c716f63a3b932f393766ca3c1f56) | `0x573c3896…61e9d3` |
+| @hsakatrades | [`0xebd165e0…`](https://rabdi.explorer.arkiv.network/tx/0xebd165e0f5383e98d471999fc3d67ebb28f99bdd42e1099f65271087664f1c5a) | `0x4ef7fced…f50413` |
+| @smartcontracter | [`0xa356a934…`](https://rabdi.explorer.arkiv.network/tx/0xa356a934249af49e96ae5ec7c31be5081b20e3e354b3dbe8b97df85d5675ca94) | `0x77c075b6…8667d8` |
+| @altcoinsherpa | [`0xe4e56127…`](https://rabdi.explorer.arkiv.network/tx/0xe4e561279ccc1da30cd965157299b777aefacaf4b738d09caf429b92d2272e70) | `0x35b8b617…ab84db` |
+| @cryptocred | [`0x058ee232…`](https://rabdi.explorer.arkiv.network/tx/0x058ee2322fbc3771d1e022c04862a45b5b1323967cd50c16cda81f81e9032218) | `0x98af8f9c…8b01ca` |
+| @inmortalcrypto | [`0xecda7fb9…`](https://rabdi.explorer.arkiv.network/tx/0xecda7fb9ce2c9cadba37bb14036548d76222f5e4ab859ff7e39f8676536eb897) | `0x2edb0f13…1f895d` |
+
+Full entity keys: run the query above. Call, result and trade transactions are added here as they land.
 - Details: [arkiv/schema.md](arkiv/schema.md), [why-arkiv.md](arkiv/why-arkiv.md), [how-you-use-arkiv.md](arkiv/how-you-use-arkiv.md), [reach.md](arkiv/reach.md), [friction.md](arkiv/friction.md).
 - Code: `packages/integrations/src/arkiv.ts` (schemas, reads), `kallr-webapp/lib/server/arkiv.ts` (writes), `kallr-webapp/app/trades/page.tsx` (dashboard), `kallr-webapp/app/api/arkiv/score` (settles expired calls, daily Vercel cron).
 
