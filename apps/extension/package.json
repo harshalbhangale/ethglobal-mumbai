@@ -8,11 +8,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aftermarkets/integrations": "*",
-    "@aftermarkets/domain": "*"
+    "@aftermarkets/domain": "*",
+    "@aftermarkets/integrations": "*"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.24",
-    "esbuild": "^0.25.10"
+    "esbuild": "^0.25.10",
+    "happy-dom": "^20.14.6"
   }
 }

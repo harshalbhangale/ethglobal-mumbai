@@ -11,7 +11,7 @@ Built at ETHGlobal Mumbai 2026.
 | Surface | What it does | Status |
 | --- | --- | --- |
 | **Web app** (`/app`, PWA) | Sign in with X (Privy), wallet on Base, type an order like `copy $5 of ETH tp 10% sl 5%`, sign, and it's placed on Flash with TP/SL. Open orders come back from Flash. | Works against live Flash quotes; first funded mainnet order not run yet |
-| **Chrome extension** | On x.com, call posts get a card: the caller's record, this call's move since posting, token safety checks, and Copy buttons that open the desk prefilled | Built; loads unpacked |
+| **Chrome extension** | On x.com: a trade card under call posts and a Buy button in X's ticker cards, with live prices; the caller's record and a call-check drawer; profile cards, Follow and Following chips; token safety checks on posts that share a contract; orders signed on X with MetaMask/Rabby, or in the desk | Built; loads unpacked |
 | **@AfterMarkets on X** | Tag it under a call: replies with the caller's record and this call's after market. Reply `copy $2, TP 10%, SL 5%`: replies with a desk link to sign | Works in dry run on real posts; needs X API keys to go live |
 | **Safety checks** | Token: honeypot, owner powers, taxes, liquidity, age. Caller: did their wallet sell what they called? | Token checks live (no key); wallet check needs a free Etherscan key |
 
@@ -57,7 +57,16 @@ AFTERMARKETS_APP_ORIGIN=https://your-app.example npm run build -w @aftermarkets/
 
 Then `chrome://extensions` → Developer mode → Load unpacked → `apps/extension/dist`, and open x.com with `npm run dev` running.
 
-It reads only what's on screen: no X API, no cookies. The caller's record counts the calls from that caller this browser has seen. The content script is about 6 KB; the server classifies and scores.
+What it adds to X:
+
+- **Under call posts:** the caller's record (calls seen in this browser), this call's move since posting, and a trade ticket (amount, TP/SL) that places a Flash order.
+- **In X's own ticker cards:** a "⇄ Buy" button with the live price.
+- **On profiles:** a profile card with the caller's record and a Follow button; Following chips on bylines. Follows are shared with the desk's Following list.
+- **Posts that share a contract address:** a token check card (GoPlus + Dexscreener) and no trade, so a ticker copy is never offered next to a possibly fake token.
+- **Signing:** with MetaMask or Rabby right on X, or in the desk popup (Privy) as a fallback.
+- **Toolbar popup:** connection status.
+
+It reads only what's on screen: no X API, no cookies. The server classifies and scores.
 
 ## Safety checks
 
@@ -96,7 +105,7 @@ The X API is pay-per-use: about $0.001 per mention read, $0.005 per post read, $
 ```
 apps/
   web/                Next.js PWA: landing (/), desk (/app), Flash + after market + checks APIs
-  extension/          Chrome extension for x.com: after market cards, safety checks, copy buttons
+  extension/          Chrome extension for x.com: trade cards, records, profiles, follow, safety checks
 services/
   x-bot/              @AfterMarkets on X: after market replies, copy links to the desk
 packages/
@@ -110,6 +119,6 @@ docs/PLAN.md          what we are building and in what order
 
 - First funded order on Base mainnet (needs a Privy app ID and a few USDC on Base)
 - Cancel orders from the desk; live orders stream instead of 15s polling
-- Calls stored on a server (Arkiv), creator pages, follow
+- Calls and follows stored on a server (Arkiv); today they live in each browser. Creator pages
 - Chainlink CRE workflow that scores expired calls
 - Android keyboard
