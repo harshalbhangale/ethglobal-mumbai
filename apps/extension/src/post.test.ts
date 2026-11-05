@@ -54,4 +54,5 @@ it("mightBeCall pre-filters posts worth asking about", () => {
   expect(mightBeCall("bitcoin to 100k")).toBe(true);
   expect(mightBeCall("gm frens, coffee time")).toBe(false);
   expect(mightBeCall("this costs $5")).toBe(false);
+  expect(mightBeCall("new gem CA: 0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed")).toBe(true);
 });

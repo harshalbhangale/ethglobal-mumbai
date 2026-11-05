@@ -16,11 +16,15 @@ export function identityFromHref(href: string): { handle: string; postId: string
 }
 
 /**
- * Cheap pre-check before asking the API: a cashtag or a coin we can price. The API's
- * classifier makes the real call/not-a-call decision.
+ * Cheap pre-check before asking the API: a cashtag, a coin we can price, or a contract
+ * address (which gets token safety checks). The API makes the real decision.
  */
 export function mightBeCall(text: string) {
-  return /\$[A-Za-z][A-Za-z0-9]{1,9}\b/.test(text) || /\b(btc|bitcoin|eth|ether|ethereum|sol|solana|mon|monad)\b/i.test(text);
+  return (
+    /\$[A-Za-z][A-Za-z0-9]{1,9}\b/.test(text) ||
+    /\b(btc|bitcoin|eth|ether|ethereum|sol|solana|mon|monad)\b/i.test(text) ||
+    /0x[0-9a-fA-F]{40}/.test(text)
+  );
 }
 
 /** Assets the desk can trade on Base today. Other calls get the after market but no copy button. */

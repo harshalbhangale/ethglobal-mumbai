@@ -18,7 +18,17 @@ type ScoredCall = {
   returnBps: number | null;
 };
 type Record = { scored: number; hits: number; hitRate: number | null; medianReturnBps: number | null; open: number };
-type Answer = { call: ScoredCall | null; record: Record } | { error: string } | null;
+type Flag = { kind: string; severity: "danger" | "warning" | "info"; text: string };
+type TokenCheck = {
+  symbol: string | null;
+  flags: Flag[];
+  liquidityUsd: number | null;
+  sources: { goplus: string; dexscreener: string };
+};
+type Answer =
+  | { call: ScoredCall | null; record: Record; checks?: { token: TokenCheck | null } }
+  | { error: string }
+  | null;
 
 const CSS = `
 :host { all: initial; display: block; margin-top: 10px; }
@@ -28,14 +38,15 @@ const CSS = `
 .brand { font-weight: 700; font-size: 13px; letter-spacing: -0.01em; }
 .muted { color: var(--muted); font-size: 13px; }
 .line { margin-top: 6px; }
-.up { color: #12935f; } .down { color: #d93f45; }
+.up { color: #12935f; } .down { color: #d93f45; } .warn { color: #c77700; }
+.flags { margin-top: 6px; padding: 6px 8px; border-radius: 10px; background: var(--tint); font-size: 13px; }
 .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 button { font: 600 13px/1 inherit; font-family: inherit; border-radius: 999px; padding: 8px 12px; cursor: pointer;
   border: 1px solid var(--rule); background: transparent; color: var(--ink); }
 button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 button:hover { border-color: var(--ink); }
-.light { --bg: #ffffff; --ink: #14213d; --muted: #5b6b82; --rule: #d9dfe8; }
-.dark { --bg: #16181c; --ink: #e7e9ea; --muted: #8b98a5; --rule: #2f3336; }
+.light { --bg: #ffffff; --ink: #14213d; --muted: #5b6b82; --rule: #d9dfe8; --tint: #f3f5f8; }
+.dark { --bg: #16181c; --ink: #e7e9ea; --muted: #8b98a5; --rule: #2f3336; --tint: #202327; }
 `;
 
 const handled = new WeakMap<HTMLElement, string>();
@@ -115,6 +126,26 @@ function recordLine(handle: string, r: Record | null) {
   );
 }
 
+/** GoPlus + Dexscreener findings for a contract in the post. Missing sources are said, never hidden. */
+function tokenLines(t: TokenCheck) {
+  const name = t.symbol ? `$${t.symbol}` : "This token";
+  const serious = t.flags.filter((f) => f.severity !== "info");
+  const box = h("div", { class: "flags" });
+  if (serious.length) {
+    box.append(h("div", { class: serious.some((f) => f.severity === "danger") ? "down" : "warn" }, `⚠ ${name}: ${serious.map((f) => f.text).join(" · ")}`));
+  } else if (t.sources.goplus === "ok" && t.sources.dexscreener === "ok") {
+    box.append(h("div", {}, `✓ ${name}: no red flags in GoPlus or Dexscreener`));
+  } else {
+    box.append(h("div", { class: "muted" }, `${name}: safety checks unavailable right now`));
+  }
+  const info = [
+    t.liquidityUsd !== null ? `${usd(t.liquidityUsd)} liquidity` : null,
+    ...t.flags.filter((f) => f.severity === "info").map((f) => f.text),
+  ].filter(Boolean);
+  if (info.length) box.append(h("div", { class: "muted" }, info.join(" · ")));
+  return box;
+}
+
 async function decorate(article: HTMLElement) {
   const post = readPost(article);
   if (!post) return;
@@ -124,11 +155,13 @@ async function decorate(article: HTMLElement) {
   article.querySelector(".aftermarkets-host")?.remove();
 
   if (!mightBeCall(post.text)) return;
-  // The API classifies the post; only real, priceable calls get a card.
+  // The API classifies the post; priceable calls and posts sharing a contract get a card.
   const answer = await send({ type: "after-market", handle: post.handle, post: { postId: post.postId, text: post.text } });
-  if (!answer || "error" in answer || !answer.call) return;
+  if (!answer || "error" in answer) return;
+  const token = answer.checks?.token ?? null;
+  if (!answer.call && !token) return;
   if (!article.isConnected || handled.get(article) !== key) return;
-  const asset = answer.call.asset;
+  const asset = answer.call?.asset ?? token?.symbol ?? "token";
 
   const host = h("div", { class: "aftermarkets-host" });
   host.addEventListener("click", (e) => e.stopPropagation()); // don't open the post
@@ -138,7 +171,7 @@ async function decorate(article: HTMLElement) {
 
   const body = h("div", {});
   const actions = h("div", { class: "row" });
-  if (COPYABLE.has(asset)) {
+  if (answer.call && COPYABLE.has(asset)) {
     PRESETS.forEach((p, i) => {
       const b = h("button", { class: i === 0 ? "primary" : "", type: "button" }, `Copy $${p.usd} · TP ${p.tpPct}% SL ${p.slPct}%`);
       b.addEventListener("click", () => openDesk(deskUrl(AFTERMARKETS_APP_ORIGIN, asset, p, post)));
@@ -155,7 +188,8 @@ async function decorate(article: HTMLElement) {
     body,
     actions,
   );
-  body.append(recordLine(post.handle, answer.record), callLine(answer.call, asset));
+  if (answer.call) body.append(recordLine(post.handle, answer.record), callLine(answer.call, asset));
+  if (token) body.append(tokenLines(token));
   article.querySelector(".aftermarkets-host")?.remove();
   post.textNode.after(host);
 }
