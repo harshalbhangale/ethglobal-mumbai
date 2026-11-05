@@ -103,7 +103,7 @@ export type Metric = {
   group?: string;
 };
 
-/** Xtrading's compact metrics: stat tiles, boxes and rows. Empty ones collapse into one dropdown. */
+/** Compact metrics: stat tiles, boxes and rows. Empty ones collapse into one dropdown. */
 export function metricPanel() {
   const root = el("div", { class: "metrics" });
   const entries = new Map<string, Metric>();

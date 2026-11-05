@@ -4,7 +4,7 @@ import { el, metricPanel } from "./dom";
 export const RECORD_GROUP = "Seen on X · priced from post time";
 
 /**
- * A caller's record in Xtrading's metric style: stat tiles for what was seen, rows for caveats, and
+ * A caller's record as metrics: stat tiles for what was seen, rows for caveats, and
  * a "No data" dropdown for anything that can't be computed yet. Covers only calls this browser saw.
  */
 export function recordPanel(calls: SeenCall[]) {

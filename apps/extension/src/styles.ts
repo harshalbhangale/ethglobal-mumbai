@@ -1,5 +1,5 @@
 // Scoped to shadow roots so X's styles never leak in and ours never leak out.
-// Ported from the Xtrading extension so the cards look the same: X's own card style for the post
+// Card styles that sit naturally in the timeline: X's own card style for the post
 // card (following X's light/dark theme), the dark brand surface with lime accents for creator UI.
 export const css = `
 :host { all: initial; }

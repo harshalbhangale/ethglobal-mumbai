@@ -86,7 +86,7 @@ describe("tiles and caveats", () => {
 });
 
 describe("recordPanel", () => {
-  it("renders Xtrading-style stat tiles and caveat rows", () => {
+  it("renders stat tiles and caveat rows", () => {
     const panel = recordPanel(record);
     const tiles = [...panel.querySelectorAll(".stat-tile")].map((t) => [
       t.querySelector(".stat-value")?.textContent,

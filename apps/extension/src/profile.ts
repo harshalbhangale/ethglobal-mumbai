@@ -35,7 +35,7 @@ function mount(anchor: HTMLElement, host: HTMLElement) {
 type RecordAnswer = { calls?: SeenCall[]; seen?: number };
 
 /**
- * The AfterMarkets card on an X profile, laid out like Xtrading's: the caller's record as metric
+ * The AfterMarkets card on an X profile: the caller's record as metric
  * tiles, recent calls, and Open desk / Show details / Follow. From the posts this browser has seen.
  * Refreshes at most once a minute per profile.
  */

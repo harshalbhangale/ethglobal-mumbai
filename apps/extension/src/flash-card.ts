@@ -8,7 +8,7 @@ import { ALIASES, formatPrice, type LivePrice, livePrice } from "./ticker-price"
 import { hasBrowserWallet, rejected } from "./wallet";
 
 /**
- * The post card, laid out like Xtrading's swap card: live price header, the Call check strip, then
+ * The post card, laid out as a swap card: live price header, the Call check strip, then
  * a trade panel. Here it trades on Base through Definitive Flash, with take-profit / stop-loss
  * attached as one bracket. Signing happens in the AfterMarkets desk, never on X.
  */
