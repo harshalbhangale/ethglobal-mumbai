@@ -17,7 +17,12 @@ a { color: inherit; }
   --foreground: #e6ebe3; --soft: #b8c2b7; --muted: #8b978d; --line: #1e2621; --line-strong: #2c3830;
   --lime: #c6f25a; --on-lime: #0e1407; --positive: #8ad97c; --negative: #ff8a7a; --warning: #f0c766;
 }
-.wordmark { font-weight: 800; letter-spacing: -0.02em; color: var(--foreground); }
+.wordmark { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; letter-spacing: -0.02em; color: var(--foreground); }
+.brand-mark-glyph { display: inline-block; flex: 0 0 auto; background-color: currentColor;
+  -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center; }
+.card .title .wordmark { font: 800 15px/1 Inter, system-ui, sans-serif; gap: 8px; }
+.swap-powered .wordmark { gap: 5px; }
 .powered { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; color: var(--muted); font: 600 11px system-ui, sans-serif; }
 .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
 .up { color: var(--positive); } .down { color: var(--negative); }

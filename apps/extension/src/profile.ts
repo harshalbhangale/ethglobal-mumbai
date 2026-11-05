@@ -1,7 +1,7 @@
 import { recentCalls } from "./call-insights";
 import type { SeenCall } from "./card-metrics";
 import { appOrigin } from "./config";
-import { el, poweredBy, safeLink, send, shadowHost } from "./dom";
+import { el, poweredBy, safeLink, send, shadowHost, wordmark } from "./dom";
 import { followButton } from "./follows";
 import { breakdown, recordPanel } from "./record-panel";
 
@@ -73,7 +73,7 @@ export async function scanProfile() {
     el(
       "div",
       { class: "card" },
-      el("div", { class: "title" }, "AfterMarkets"),
+      el("div", { class: "title" }, wordmark(20)),
       details,
       el(
         "div",

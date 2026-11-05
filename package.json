@@ -14,7 +14,8 @@
     "start": "npm run start -w @aftermarkets/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
-    "x-bot": "npm start -w @aftermarkets/x-bot"
+    "x-bot": "npm start -w @aftermarkets/x-bot",
+    "brand": "node scripts/make-brand.mjs"
   },
   "devDependencies": {
     "@types/node": "^22",

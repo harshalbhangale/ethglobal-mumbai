@@ -10,7 +10,15 @@ main {
   padding: 22px;
 }
 .brand {
-  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+.mark {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
 }
 .wordmark {
   font-weight: 800;

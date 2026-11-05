@@ -1,6 +1,6 @@
 // AfterMarkets service worker: makes the app installable and keeps the shell available offline.
 // Prices, balances and orders always come from the network.
-const CACHE = "aftermarkets-v1";
+const CACHE = "aftermarkets-v2"; // v2: new brand icons
 const SHELL = ["/app", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {

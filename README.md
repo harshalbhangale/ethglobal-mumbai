@@ -1,3 +1,5 @@
+<p align="center"><img src="apps/web/public/icons/icon-512.png" width="96" height="96" alt="AfterMarkets logo" /></p>
+
 # AfterMarkets
 
 Every call on X has an after market.

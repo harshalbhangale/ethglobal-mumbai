@@ -34,9 +34,22 @@ export function assetUrl(path: string) {
   }
 }
 
-/** The AfterMarkets wordmark. Text until the logo ships; swap in an <img> from brand/ then. */
-export function wordmark() {
-  return el("span", { class: "wordmark" }, "AfterMarkets");
+/**
+ * The AfterMarkets mark. The packaged PNG is used as a mask and filled with currentColor, so the
+ * mark is white on X's dark theme and ink on light without separate assets.
+ */
+export function brandMark(size = 16) {
+  const url = assetUrl("brand/mark.png");
+  return el("span", {
+    class: "brand-mark-glyph",
+    "aria-hidden": "true",
+    style: `width:${size}px;height:${size}px;-webkit-mask-image:url("${url}");mask-image:url("${url}")`,
+  });
+}
+
+/** The AfterMarkets lockup: mark + name. */
+export function wordmark(size = 16) {
+  return el("span", { class: "wordmark" }, brandMark(size), el("span", {}, "AfterMarkets"));
 }
 
 /** "Powered by AfterMarkets" line under brand surfaces. */
