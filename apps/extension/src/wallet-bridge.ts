@@ -2,7 +2,7 @@
  * Runs in X's page (main world), where MetaMask / Rabby inject window.ethereum. Relays a fixed set
  * of EIP-1193 calls from the AfterMarkets content script. Every transaction and signature still
  * needs the user's confirmation in their own wallet; this adds no capability the page lacks.
- * Ported from Xtrading, plus eth_signTypedData_v4 for Flash's EIP-712 order payloads.
+ * Includes eth_signTypedData_v4 for Flash's EIP-712 order payloads.
  */
 type Ethereum = { request(args: { method: string; params?: unknown[] }): Promise<unknown> };
 

@@ -42,7 +42,7 @@ function pin(link: HTMLElement, host: HTMLElement) {
 }
 
 /**
- * Puts a "⇄ Buy" button inside X's ticker card, as Xtrading does. Idempotent per card; restores
+ * Puts a "⇄ Buy" button inside X's ticker card. Idempotent per card; restores
  * itself when X re-renders the card. The button never lets the click navigate X's link.
  */
 export function mountTickerButton(card: XTickerCard, onOpen: () => void) {

@@ -73,7 +73,7 @@ const q = <T extends Element = HTMLElement>(root: ParentNode, sel: string) => ro
 const buttons = (root: ParentNode, sel: string) => [...root.querySelectorAll<HTMLButtonElement>(sel)];
 
 describe("flashCard", () => {
-  it("has Xtrading's layout: price header, Call check strip, Copy button, Powered by footer", async () => {
+  it("has the card layout: price header, Call check strip, Copy button, Powered by footer", async () => {
     const { card } = await mounted();
     expect(q(card, ".swap-title strong").textContent).toBe("Ethereum");
     expect(q(card, ".swap-icon").getAttribute("src")).toBe("chrome-extension://t/brand/tokens/eth.png");
