@@ -109,7 +109,7 @@ Source: `~/Desktop/Xtrading/apps/extension/src` (Monad/Kuru/Perpl). Port onto Ba
 - [x] 2. Ticker detection + live price: `x-ticker.ts`, `ticker-price.ts` (Chainlink/Flash, not Kuru)
 - [x] 3. Richer record: `card-metrics.ts` + `record-panel.ts` (hit rate, median, profit factor, by-asset breakdown, honest caveats). Tiers and deleted-post flags wait for server-stored calls (5b); Nansen `risk-line.ts` skipped
 - [x] 4. Call check drawer: `drawer.ts` + `call-view.ts` (post text, this call's prices and horizon, record, recent calls with links, copy buttons); renders from the card's data, no extra request
-- [ ] 5. Creator badge + profile card with Follow: `creator-badge.ts`, `profile.ts`
+- [x] 5. Profile card with Follow + Following chip on bylines: `profile.ts`, `follows.ts`, `creator-badge.ts`, `watchlist-storage.ts` (follows kept in the extension until `/api/follows`); wallet-linked badge waits for an identity API
 - [ ] 6. Watchlist synced with the web app: `watchlist-storage.ts`, `app-bridge.ts`
 - [ ] 7. X follow sync (opt-in, reads your own following list, no X API, no cookies): `follow-observer.ts`, `follow-storage.ts`
 - [ ] 8. Sign on X with MetaMask/Rabby: `wallet-bridge.ts` + a Flash ticket in place of Kuru's `swap-card.ts`; desk popup stays the fallback

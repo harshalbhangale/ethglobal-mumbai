@@ -25,6 +25,9 @@ button:hover { border-color: var(--ink); }
 .tile.good .tile-value { color: var(--up); } .tile.bad .tile-value { color: var(--down); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .chip { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); font-size: 12px; }
+.chip.following { color: var(--ink); border-color: var(--ink); font-weight: 600; font-size: 11px; line-height: 16px; }
+button[aria-pressed="true"] { border-color: var(--ink); }
+button:disabled { opacity: .5; cursor: progress; }
 .breakdown { margin-top: 8px; font-size: 13px; }
 .breakdown summary { cursor: pointer; color: var(--muted); font-weight: 600; }
 .breakdown-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-variant-numeric: tabular-nums; }

@@ -1,5 +1,7 @@
+import { watchlistCommandSchema } from "@aftermarkets/domain";
 import { appOrigin } from "./config";
 import { mergeHistory } from "./post";
+import { readWatchlist, updateWatchlist } from "./watchlist-storage";
 
 /**
  * Service worker: the only part that talks to the AfterMarkets API. It remembers the calls
@@ -8,7 +10,13 @@ import { mergeHistory } from "./post";
  */
 
 type SeenPost = { postId: string; text: string };
-type Request = { type: "after-market"; handle: string; post: SeenPost } | { type: "prices" };
+type Request =
+  | { type: "after-market"; handle: string; post: SeenPost }
+  | { type: "prices" }
+  | { type: "caller-record"; handle: string }
+  | { type: "watchlist"; command: unknown };
+
+const HANDLE = /^[a-z0-9_]{1,15}$/;
 
 async function history(handle: string, post: SeenPost) {
   const key = `seen:${handle}`;
@@ -31,6 +39,26 @@ async function afterMarket(req: Extract<Request, { type: "after-market" }>) {
   return res.json();
 }
 
+/** A caller's record from the posts this browser has seen, for their profile page. */
+async function callerRecord(handle: string) {
+  const key = `seen:${handle}`;
+  const seen = ((await chrome.storage.local.get(key))[key] as SeenPost[] | undefined) ?? [];
+  const [newest, ...rest] = seen;
+  if (!newest) return { calls: [], record: null, seen: 0 };
+  const res = await fetch(`${appOrigin}/api/after-market`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ handle, post: newest, history: rest }),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return { ...(await res.json()), seen: seen.length };
+}
+
+async function watchlist(raw: unknown) {
+  const command = watchlistCommandSchema.parse(raw);
+  return command.action === "read" ? { entries: await readWatchlist() } : updateWatchlist(command);
+}
+
 async function prices() {
   const res = await fetch(`${appOrigin}/api/prices`);
   if (!res.ok) throw new Error(`API ${res.status}`);
@@ -47,6 +75,12 @@ chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
   } else if (message?.type === "prices") {
     job = inflight.get("prices") ?? prices().finally(() => inflight.delete("prices"));
     inflight.set("prices", job);
+  } else if (message?.type === "caller-record" && HANDLE.test(message.handle)) {
+    const key = `record:${message.handle}`;
+    job = inflight.get(key) ?? callerRecord(message.handle).finally(() => inflight.delete(key));
+    inflight.set(key, job);
+  } else if (message?.type === "watchlist") {
+    job = watchlist(message.command);
   } else return;
   job.then(respond, (err: unknown) => respond({ error: err instanceof Error ? err.message : "failed" }));
   return true; // async response
