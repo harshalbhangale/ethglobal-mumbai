@@ -16,7 +16,7 @@ const usd = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: n < 10 ? 4 : 2 })}`;
 
 /** Live USD prices from Chainlink on Base, refreshed every 30s. */
-function useUsdPrices() {
+export function useUsdPrices() {
   const [prices, setPrices] = useState<Partial<Record<PricedAsset, number>>>({});
   useEffect(() => {
     let alive = true;

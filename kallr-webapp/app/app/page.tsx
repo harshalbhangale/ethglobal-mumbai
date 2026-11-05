@@ -1,17 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { OPEN_STATUSES } from "@kallr/integrations/definitive";
 import { Logo, LogoMark } from "@/components/logo";
 import { SignInButton, WithSession, type Session } from "@/components/auth";
 import { InstallButton } from "@/components/install-button";
 import { Following } from "@/components/following";
 import { WalletPanel } from "@/components/wallet-panel";
 import { useWallets } from "@privy-io/react-auth";
-import { OpenOrders, OrderComposer, useFlashOrders } from "@/components/order-desk";
+import { OpenOrders, useFlashOrders } from "@/components/order-desk";
+import { TradeTicket } from "@/components/trade-ticket";
 
 const nav = [
-  { id: "desk", label: "Desk" },
+  { id: "desk", label: "Trade" },
   { id: "orders", label: "Orders" },
   { id: "wallet", label: "Wallet" },
   { id: "following", label: "Following" },
@@ -53,29 +55,77 @@ function AppShell({ session }: { session: Session }) {
   return <Desk session={session} />;
 }
 
+type Tab = (typeof nav)[number]["id"];
+const isTab = (v: string): v is Tab => nav.some((n) => n.id === v);
+
+/** One view at a time, kept in the URL hash so links and the back button work; never a jump down a long page. */
+function useTab(): [Tab, (t: Tab) => void] {
+  const [tab, setTabState] = useState<Tab>("desk");
+  useEffect(() => {
+    const read = () => {
+      const h = window.location.hash.slice(1);
+      setTabState(isTab(h) ? h : "desk");
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+  const setTab = (t: Tab) => {
+    if (t !== tab) history.pushState(null, "", `${window.location.pathname}${window.location.search}#${t}`);
+    setTabState(t);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  return [tab, setTab];
+}
+
+const icons: Record<Tab, React.ReactNode> = {
+  desk: <path d="M4 17l6-6 4 4 6-8" />,
+  orders: <path d="M5 6h14M5 12h14M5 18h9" />,
+  wallet: <path d="M3 7h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7zm0 0V6a2 2 0 0 1 2-2h11M16 13h2" />,
+  following: <path d="M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 8v6M23 11h-6" />,
+};
+
+const Icon = ({ tab }: { tab: Tab }) => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {icons[tab]}
+  </svg>
+);
+
+const titles: Record<Tab, { title: (handle: string | null) => string; sub: string }> = {
+  desk: { title: (h) => (h ? `Hi, @${h}` : "Trade"), sub: "Copy a call, set your exits, and let Kallr watch it for you." },
+  orders: { title: () => "Orders", sub: "Live from Definitive Flash. Exits arm when an entry first fills." },
+  wallet: { title: () => "Wallet", sub: "Your wallet on Base. Funds stay here until a trade fills." },
+  following: { title: () => "Following", sub: "Callers you follow, here and from X." },
+};
+
 function Desk({ session }: { session: Session }) {
-  const [active, setActive] = useState("desk");
+  const [tab, setTab] = useTab();
   const { wallets } = useWallets();
   const wallet = wallets.find((w) => w.address.toLowerCase() === session.address?.toLowerCase()) ?? null;
   const flashOrders = useFlashOrders(session.address);
+  const openCount = flashOrders.orders?.filter((o) => OPEN_STATUSES.includes(o.status)).length ?? 0;
 
   return (
     <div className="grid min-h-dvh lg:grid-cols-[248px_1fr]">
-      <aside className="hidden flex-col border-r border-rule bg-card px-5 py-6 lg:flex">
+      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-rule bg-card px-5 py-6 lg:flex">
         <Logo href="/app" />
         <nav className="mt-10 flex flex-col gap-1" aria-label="App">
           {nav.map((item) => (
-            <a
+            <button
               key={item.id}
-              href={`#${item.id}`}
-              onClick={() => setActive(item.id)}
-              aria-current={active === item.id ? "page" : undefined}
-              className={`rounded-lg px-3 py-2 text-[15px] ${
-                active === item.id ? "bg-paper font-semibold" : "text-slate hover:text-ink"
+              type="button"
+              onClick={() => setTab(item.id)}
+              aria-current={tab === item.id ? "page" : undefined}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] transition-colors ${
+                tab === item.id ? "bg-paper font-semibold text-ink" : "text-slate hover:bg-paper/60 hover:text-ink"
               }`}
             >
-              {item.label}
-            </a>
+              <Icon tab={item.id} />
+              <span className="flex-1">{item.label}</span>
+              {item.id === "orders" && openCount > 0 && (
+                <span className="rounded-full bg-ink px-2 py-0.5 text-xs font-semibold text-white tabular-nums">{openCount}</span>
+              )}
+            </button>
           ))}
           <div className="my-2 border-t border-rule" />
           <Link href="/dashboard" className="rounded-lg px-3 py-2 text-[15px] text-slate hover:text-ink">
@@ -104,33 +154,53 @@ function Desk({ session }: { session: Session }) {
           </button>
         </header>
 
-        <main className="mx-auto max-w-5xl space-y-8 px-6 py-10 lg:px-10">
-          <div id="desk">
-            <h1 className="font-display text-4xl font-semibold tracking-[-0.03em]">
-              {session.handle ? `Hi, @${session.handle}` : "Your desk"}
-            </h1>
-            <p className="mt-2 text-slate">Copy a call, set your exits, and let Kallr watch it for you.</p>
+        <main className="mx-auto max-w-6xl px-5 pt-8 pb-28 sm:px-6 lg:px-10 lg:pt-10 lg:pb-12">
+          <div className="mb-7">
+            <h1 className="font-display text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">{titles[tab].title(session.handle)}</h1>
+            <p className="mt-2 text-slate">{titles[tab].sub}</p>
           </div>
 
-          <OrderComposer wallet={wallet} onPlaced={flashOrders.refresh} />
-
-          <div className="grid gap-8 xl:grid-cols-[1.3fr_1fr]">
+          {/* Every view stays mounted so typed input and live data survive switching tabs. */}
+          <div hidden={tab !== "desk"}>
+            <TradeTicket wallet={wallet} onPlaced={flashOrders.refresh} onViewOrders={() => setTab("orders")} />
+          </div>
+          <div hidden={tab !== "orders"}>
             <OpenOrders orders={flashOrders.orders} error={flashOrders.error} />
-
-            <div id="wallet">
-              {session.address ? (
-                <WalletPanel address={session.address} embedded={session.embedded} />
-              ) : (
-                <section className="rounded-2xl border border-rule bg-card p-6 text-sm text-slate">
-                  Setting up your wallet…
-                </section>
-              )}
-            </div>
           </div>
-
-          <Following />
+          <div hidden={tab !== "wallet"} className="max-w-xl">
+            {session.address ? (
+              <WalletPanel address={session.address} embedded={session.embedded} />
+            ) : (
+              <section className="rounded-2xl border border-rule bg-card p-6 text-sm text-slate">Setting up your wallet…</section>
+            )}
+          </div>
+          <div hidden={tab !== "following"} className="max-w-3xl">
+            <Following />
+          </div>
         </main>
       </div>
+
+      {/* Mobile: tabs at the bottom, within thumb reach. */}
+      <nav
+        aria-label="App"
+        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-rule bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+      >
+        {nav.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setTab(item.id)}
+            aria-current={tab === item.id ? "page" : undefined}
+            className={`relative flex flex-col items-center gap-1 py-2.5 text-xs font-semibold ${tab === item.id ? "text-ink" : "text-slate"}`}
+          >
+            <Icon tab={item.id} />
+            {item.label}
+            {item.id === "orders" && openCount > 0 && (
+              <span className="absolute top-1.5 right-[calc(50%-20px)] grid size-4 place-items-center rounded-full bg-ink text-[10px] text-white">{openCount}</span>
+            )}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
