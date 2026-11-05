@@ -11,13 +11,16 @@
     "./definitive": "./src/definitive.ts",
     "./after-market": "./src/after-market.ts",
     "./x-api": "./src/x-api.ts",
-    "./safety-checks": "./src/safety-checks.ts"
+    "./safety-checks": "./src/safety-checks.ts",
+    "./arkiv": "./src/arkiv.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@aftermarkets/domain": "*",
+    "@arkiv-network/sdk": "^1.0.1",
+    "viem": "^2.57.16",
     "zod": "4.6.5"
   }
 }

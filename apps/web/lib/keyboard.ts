@@ -64,7 +64,7 @@ export function typedOrder(typed: string): string | null {
 }
 
 export function deskUrl(appOrigin: string, order: string, post: CallPost | null) {
-  const q = new URLSearchParams({ order });
+  const q = new URLSearchParams({ order, src: "keyboard" });
   if (post) {
     q.set("post", post.postId);
     q.set("caller", post.handle);

@@ -42,10 +42,14 @@ export async function quoteFlashOrder(order: FlashOrderInput) {
  * Quote → fund → sign → submit with the user's own wallet. Every approval is sized to this order
  * (forceMinimalAllowance) and every signature is a wallet prompt the user can reject.
  */
+/** Which surface sent the user to the desk, and whose call they copied. Recorded on Arkiv. */
+export type OrderContext = { source: "desk" | "extension" | "keyboard"; caller?: string | null };
+
 export async function placeFlashOrder(
   order: FlashOrderInput,
   wallet: ConnectedWallet,
   onStep: (step: PlaceStep) => void,
+  context: OrderContext = { source: "desk" },
 ): Promise<{ orderId: string; bracketStatus: string | null }> {
   onStep("quoting");
   const quote = await quoteFlashOrder(order);
@@ -91,7 +95,7 @@ export async function placeFlashOrder(
   onStep("submitting");
   const res = await api<{ orderId: string; attachedBracket?: { status: string } | null }>("/api/flash/order", {
     method: "POST",
-    body: JSON.stringify({ order, signatures }),
+    body: JSON.stringify({ order, signatures, context }),
   });
   return { orderId: res.orderId, bracketStatus: res.attachedBracket?.status ?? null };
 }

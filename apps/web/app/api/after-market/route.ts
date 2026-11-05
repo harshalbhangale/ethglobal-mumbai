@@ -1,7 +1,9 @@
 import { type ScoredCall, scoreCall, summarize } from "@aftermarkets/integrations/after-market";
 import { checkToken, type TokenCheck } from "@aftermarkets/integrations/safety-checks";
 import { tokenReferences } from "@aftermarkets/integrations/token-references";
+import { after } from "next/server";
 import { z } from "zod";
+import { recordCall } from "@/lib/server/arkiv";
 
 // Token checks are cached for 10 minutes per contract.
 const tokenCache = new Map<string, { at: number; check: TokenCheck | null }>();
@@ -56,6 +58,8 @@ export async function POST(req: Request) {
     cachedScore(handle, current, now),
     evmRef ? cachedTokenCheck(evmRef.address) : Promise.resolve(null),
   ]);
+  // Every call we price goes to Arkiv once (open, then its result), after the response.
+  if (call) after(() => recordCall(call));
   const others = history.filter((h) => h.postId !== current.postId);
   const scored: ScoredCall[] = [];
   for (const h of others) {

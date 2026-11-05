@@ -217,6 +217,7 @@ export function flashCard(input: {
           slPct: side === "buy" ? sl : null,
           price: price(),
           postId: post.postId,
+          caller: post.handle,
         },
         (step) => {
           status.textContent = STEP_LABEL[step];

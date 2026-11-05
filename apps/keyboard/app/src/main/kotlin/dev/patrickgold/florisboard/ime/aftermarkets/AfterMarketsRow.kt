@@ -130,7 +130,7 @@ fun AfterMarketsRow() {
 
 private fun deskUrl(order: String, post: AmPost): String {
     fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
-    return "${AfterMarkets.origin}/app?order=${enc(order)}&post=${enc(post.postId)}&caller=${enc(post.handle)}"
+    return "${AfterMarkets.origin}/app?order=${enc(order)}&post=${enc(post.postId)}&caller=${enc(post.handle)}&src=keyboard"
 }
 
 @Composable

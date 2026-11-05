@@ -1,8 +1,10 @@
 import { scoreCall } from "@aftermarkets/integrations/after-market";
 import { fetchPublicPost } from "@aftermarkets/integrations/calls";
 import { checkToken } from "@aftermarkets/integrations/safety-checks";
+import { after } from "next/server";
 import { z } from "zod";
 import { keyboardLookup } from "@/lib/keyboard";
+import { recordCall } from "@/lib/server/arkiv";
 
 /**
  * The AfterMarkets row on the Android keyboard (apps/keyboard). Read-only: it prices the
@@ -27,10 +29,14 @@ export async function POST(req: Request) {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const result = await keyboardLookup(parsed.data, {
     // Desk links open in the phone's browser on the origin the keyboard talks to.
-    appOrigin: process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin,
+    appOrigin: process.env.NEXT_PUBLIC_SITE_URL ?? new URL(req.url).origin,
     nowSeconds,
     fetchPost: (id) => fetchPublicPost(id),
-    score: (p) => scoreCall(p, nowSeconds),
+    score: async (p) => {
+      const call = await scoreCall(p, nowSeconds);
+      if (call) after(() => recordCall(call));
+      return call;
+    },
     checkToken: (address) => checkToken(address),
   });
   return Response.json(result);
