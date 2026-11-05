@@ -38,10 +38,16 @@ function Callers({ session }: { session: Session }) {
   const [q, setQ] = useState("");
 
   const rows = useMemo(() => {
-    const names = new Set([...data.calls.map((c) => c.caller), ...data.results.map((r) => r.caller), ...follows.entries.map((e) => e.handle)]);
+    const names = new Set([
+      ...data.tracked.map((t) => t.handle),
+      ...data.calls.map((c) => c.caller),
+      ...data.results.map((r) => r.caller),
+      ...follows.entries.map((e) => e.handle),
+    ]);
     return [...names]
       .map((h) => ({
         handle: h,
+        focus: data.tracked.find((t) => t.handle === h)?.focus ?? null,
         ...callerStats(
           data.results.filter((r) => r.caller === h),
           data.calls.filter((c) => c.caller === h),
@@ -49,7 +55,7 @@ function Callers({ session }: { session: Session }) {
       }))
       .filter((r) => r.handle.includes(q.toLowerCase().replace(/^@/, "")))
       .sort((a, b) => (b.hitRate ?? -1) - (a.hitRate ?? -1) || b.settled - a.settled);
-  }, [data.calls, data.results, follows.entries, q]);
+  }, [data.calls, data.results, data.tracked, follows.entries, q]);
 
   const typed = normalize(q);
 
@@ -87,6 +93,7 @@ function Callers({ session }: { session: Session }) {
                 <Link href={`/kol/${r.handle}`} className="mt-2 block font-bold hover:underline">
                   @{r.handle}
                 </Link>
+                {r.focus && <p className="text-xs text-slate">Tracked by Kallr · {r.focus}</p>}
                 <div className="mt-2 flex gap-4 text-sm tabular-nums">
                   <span>
                     <b className="text-up">{r.hitRate === null ? "—" : `${Math.round(r.hitRate * 100)}%`}</b> <span className="text-slate">hit</span>

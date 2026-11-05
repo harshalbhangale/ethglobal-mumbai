@@ -7,6 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "arkiv:callers": "node --env-file=.env.local --import tsx scripts/arkiv-callers.mts",
     "test": "vitest run --root .. kallr-webapp"
   },
   "dependencies": {

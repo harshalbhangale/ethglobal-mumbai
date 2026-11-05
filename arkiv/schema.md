@@ -70,9 +70,25 @@ Written when a call settles, by the same routes or by `/api/arkiv/score`, which 
 - **Expires:** `ExpirationTime.max()` (~182 days), extendable by anyone.
 - **Queried by:** `caller`, `$creator`, sorted by `deadline`.
 
+## `kallr.tracked-callers`: callers Kallr follows
+
+Written by `npm run arkiv:callers -w kallr-webapp` ([`kallr-webapp/scripts/arkiv-callers.mts`](../kallr-webapp/scripts/arkiv-callers.mts))
+from `TRACKED_CALLERS`; re-running skips handles already on Arkiv.
+
+| Column | Type | Indexed | Meaning |
+| --- | --- | --- | --- |
+| `handle` | str | yes | X handle, lowercase |
+| `focus` | str | no | What they call, shown on the caller card |
+| `addedAt` | u64 | yes | Unix seconds |
+
+- **Owner:** the writer, read-only.
+- **Expires:** `ExpirationTime.max()` (~182 days); re-run the script to refresh.
+- **Queried by:** `$creator`, sorted by `addedAt`. The portal's Callers page and home sidebar start from this roster.
+
 ## Queries you can run
 
 ```
+arkiv.schema = str('kallr.tracked-callers') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)
 arkiv.schema = str('kallr.trades') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)
 arkiv.schema = str('kallr.call-results') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53) AND caller = str('<handle>')
 ```

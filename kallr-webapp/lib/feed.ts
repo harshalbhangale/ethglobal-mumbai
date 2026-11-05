@@ -1,15 +1,15 @@
 "use client";
 
 import type { WatchlistEntry } from "@kallr/domain";
-import { arkivPublic, readOpenCalls, readResults, readTrades } from "@kallr/integrations/arkiv";
+import { arkivPublic, readOpenCalls, readResults, readTrackedCallers, readTrades } from "@kallr/integrations/arkiv";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Address, Hex } from "viem";
-import { extensionFollows, extensionInstalled, readLocal, updateLocal } from "@/lib/follows";
+import { extensionFollows, extensionInstalled, readLocal, updateLocal } from "./follows";
 
 /**
  * Everything the feed and caller profiles show, read straight from Arkiv: open calls, settled
  * results, and the signed-in wallet's trades (tagged with the surface that placed them).
- * When Arkiv has nothing yet, a clearly labelled sample set fills the screen for demos.
+ * Plus the roster of callers Kallr follows (kallr.tracked-callers). Nothing here is made up.
  */
 
 export type Direction = "long" | "short";
@@ -63,6 +63,11 @@ export const itemTime = (i: FeedItem) => (i.kind === "trade" ? i.placedAt : i.ki
 
 type Config = { writer: Hex | null; accessKey: string; explorer?: string };
 
+/** Calls are stored as up/down (see callValues); older or hand-written entities may say short. */
+export const toDirection = (v: unknown): Direction => (v === "down" || v === "short" ? "short" : "long");
+
+export type TrackedCaller = { handle: string; focus: string };
+
 const num = (v: unknown) => (v === undefined || v === null || v === "" ? null : Number(v));
 
 export function useKallrData(address: Address | null) {
@@ -70,6 +75,7 @@ export function useKallrData(address: Address | null) {
   const [calls, setCalls] = useState<CallItem[] | null>(null);
   const [results, setResults] = useState<ResultItem[] | null>(null);
   const [trades, setTrades] = useState<TradeItem[] | null>(null);
+  const [tracked, setTracked] = useState<TrackedCaller[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -86,14 +92,16 @@ export function useKallrData(address: Address | null) {
       setCalls([]);
       setResults([]);
       setTrades([]);
+      setTracked([]);
       return;
     }
     const writer = config.writer;
     const now = Math.floor(Date.now() / 1000);
-    const [c, r, t] = await Promise.allSettled([
+    const [c, r, t, k] = await Promise.allSettled([
       readOpenCalls(client, writer, now),
       readResults(client, writer),
       address ? readTrades(client, writer, address) : Promise.resolve([]),
+      readTrackedCallers(client, writer),
     ]);
     if (c.status === "fulfilled")
       setCalls(
@@ -103,7 +111,7 @@ export function useKallrData(address: Address | null) {
           postId: String(e.postId.value),
           caller: String(e.caller.value),
           asset: String(e.asset.value),
-          direction: e.direction.value === "short" ? "short" : "long",
+          direction: toDirection(e.direction.value),
           postedAt: Number(e.postedAt.value),
           deadline: Number(e.deadline.value),
           entry: num(e.entry?.value),
@@ -117,7 +125,7 @@ export function useKallrData(address: Address | null) {
           postId: String(e.postId.value),
           caller: String(e.caller.value),
           asset: String(e.asset.value),
-          direction: e.direction.value === "short" ? "short" : "long",
+          direction: toDirection(e.direction.value),
           status: e.status.value === "hit" ? "hit" : e.status.value === "miss" ? "miss" : "flat",
           returnBps: Number(e.returnBps.value),
           entry: Number(e.entry.value),
@@ -143,8 +151,15 @@ export function useKallrData(address: Address | null) {
           flashOrderId: String(e.flashOrderId.value),
         })),
       );
-    const failed = [c, r, t].find((x) => x.status === "rejected") as PromiseRejectedResult | undefined;
-    setError(failed ? `Arkiv: ${failed.reason instanceof Error ? failed.reason.message : "read failed"}` : null);
+    if (k.status === "fulfilled")
+      setTracked(k.value.map((e) => ({ handle: String(e.handle.value).toLowerCase(), focus: String(e.focus.value) })));
+    // A failed read shows as empty plus an error, never an endless skeleton.
+    if (c.status === "rejected") setCalls((v) => v ?? []);
+    if (r.status === "rejected") setResults((v) => v ?? []);
+    if (t.status === "rejected") setTrades((v) => v ?? []);
+    if (k.status === "rejected") setTracked((v) => v ?? []);
+    const failed = [c, r, t, k].find((x) => x.status === "rejected") as PromiseRejectedResult | undefined;
+    setError(failed ? `Arkiv: ${failed.reason instanceof Error ? failed.reason.message.split("\n")[0] : "read failed"}` : null);
   }, [client, config, address]);
 
   useEffect(() => {
@@ -154,17 +169,17 @@ export function useKallrData(address: Address | null) {
   }, [load]);
 
   const loading = calls === null || results === null || trades === null;
-  const empty = !loading && calls.length + results.length + trades.length === 0;
-  const sample = empty ? SAMPLE : null;
 
   return {
     loading,
     error,
     explorer: config?.explorer ?? "https://rabdi.explorer.arkiv.network",
-    calls: sample?.calls ?? calls ?? [],
-    results: sample?.results ?? results ?? [],
-    trades: sample?.trades ?? trades ?? [],
-    usingSample: Boolean(sample),
+    writer: config?.writer ?? null,
+    calls: calls ?? [],
+    results: results ?? [],
+    trades: trades ?? [],
+    /** Callers Kallr follows, from Arkiv's kallr.tracked-callers. */
+    tracked: tracked ?? [],
   };
 }
 
@@ -218,33 +233,3 @@ export function callerStats(results: ResultItem[], open: CallItem[]) {
   };
 }
 
-// ---------- Sample data, only shown while Arkiv is empty ----------
-
-const now = Math.floor(Date.now() / 1000);
-const h = 3600;
-const SAMPLE_CALLERS = ["alpha_owl", "chart_kite", "quiet_bull", "base_maxi", "moon_ledger"];
-
-const SAMPLE: { calls: CallItem[]; results: ResultItem[]; trades: TradeItem[] } = {
-  calls: [
-    { kind: "call", id: "s-c1", postId: "1", caller: "alpha_owl", asset: "ETH", direction: "long", postedAt: now - 0.4 * h, deadline: now + 47 * h, entry: 2196.4, sample: true },
-    { kind: "call", id: "s-c2", postId: "2", caller: "chart_kite", asset: "BTC", direction: "long", postedAt: now - 1.6 * h, deadline: now + 70 * h, entry: 74120, sample: true },
-    { kind: "call", id: "s-c3", postId: "3", caller: "base_maxi", asset: "ETH", direction: "short", postedAt: now - 3.2 * h, deadline: now + 20 * h, entry: 2301.7, sample: true },
-    { kind: "call", id: "s-c4", postId: "4", caller: "moon_ledger", asset: "BTC", direction: "short", postedAt: now - 7 * h, deadline: now + 17 * h, entry: 76980, sample: true },
-  ],
-  results: [
-    { kind: "result", id: "s-r1", postId: "5", caller: "quiet_bull", asset: "ETH", direction: "long", status: "hit", returnBps: 812, entry: 2050, exit: 2216.5, postedAt: now - 60 * h, deadline: now - 12 * h, sample: true },
-    { kind: "result", id: "s-r2", postId: "6", caller: "alpha_owl", asset: "BTC", direction: "long", status: "hit", returnBps: 365, entry: 71200, exit: 73799, postedAt: now - 80 * h, deadline: now - 8 * h, sample: true },
-    { kind: "result", id: "s-r3", postId: "7", caller: "chart_kite", asset: "ETH", direction: "short", status: "miss", returnBps: -420, entry: 2150, exit: 2240.3, postedAt: now - 96 * h, deadline: now - 24 * h, sample: true },
-    { kind: "result", id: "s-r4", postId: "8", caller: "base_maxi", asset: "BTC", direction: "long", status: "hit", returnBps: 1190, entry: 66300, exit: 74190, postedAt: now - 200 * h, deadline: now - 30 * h, sample: true },
-    { kind: "result", id: "s-r5", postId: "9", caller: "moon_ledger", asset: "ETH", direction: "long", status: "flat", returnBps: 18, entry: 2210, exit: 2214, postedAt: now - 120 * h, deadline: now - 40 * h, sample: true },
-    { kind: "result", id: "s-r6", postId: "10", caller: "alpha_owl", asset: "ETH", direction: "long", status: "hit", returnBps: 540, entry: 2080, exit: 2192.3, postedAt: now - 150 * h, deadline: now - 60 * h, sample: true },
-  ],
-  trades: [
-    { kind: "trade", id: "s-t1", source: "extension", asset: "ETH", side: "buy", qty: "50", caller: "alpha_owl", postId: "1", takeProfit: 2420, stopLoss: 2090, placedAt: now - 0.3 * h, flashOrderId: "sample", sample: true },
-    { kind: "trade", id: "s-t2", source: "keyboard", asset: "BTC", side: "buy", qty: "25", caller: "chart_kite", postId: "2", takeProfit: 81500, stopLoss: 70400, placedAt: now - 1.5 * h, flashOrderId: "sample", sample: true },
-    { kind: "trade", id: "s-t3", source: "keyboard", asset: "ETH", side: "sell", qty: "0.01", caller: "base_maxi", postId: "3", takeProfit: null, stopLoss: null, placedAt: now - 3 * h, flashOrderId: "sample", sample: true },
-    { kind: "trade", id: "s-t4", source: "desk", asset: "ETH", side: "buy", qty: "100", caller: null, postId: null, takeProfit: 2500, stopLoss: null, placedAt: now - 20 * h, flashOrderId: "sample", sample: true },
-  ],
-};
-
-export const SAMPLE_HANDLES = SAMPLE_CALLERS;

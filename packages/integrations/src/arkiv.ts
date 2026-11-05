@@ -221,6 +221,34 @@ export async function hasCall(client: ArkivPublic, writer: Hex, postId: string) 
   return page.entities.length > 0;
 }
 
+/**
+ * Callers Kallr follows and prices: the roster the portal and the extension start from.
+ * One entity per handle, written by our writer and re-written by `npm run arkiv:callers`.
+ */
+export const TrackedCallers = defineSchema("kallr.tracked-callers", {
+  handle: str().indexed(),
+  /** Why they're tracked, shown under their name. */
+  focus: str(),
+  addedAt: u64().indexed(),
+});
+
+/** Well-known crypto callers on X who post directional calls on BTC, ETH and alts. */
+export const TRACKED_CALLERS: Array<{ handle: string; focus: string }> = [
+  { handle: "rektcapital", focus: "BTC cycle and altcoin technicals" },
+  { handle: "pentosh1", focus: "BTC, ETH and majors" },
+  { handle: "cryptokaleo", focus: "BTC and high-conviction alts" },
+  { handle: "cryptodonalt", focus: "BTC and ETH swing calls" },
+  { handle: "hsakatrades", focus: "Perps flow and majors" },
+  { handle: "smartcontracter", focus: "Elliott-wave BTC and ETH" },
+  { handle: "altcoinsherpa", focus: "Altcoin setups" },
+  { handle: "cryptocred", focus: "Technical analysis on majors" },
+  { handle: "inmortalcrypto", focus: "BTC and alt cycle calls" },
+];
+
+export async function readTrackedCallers(client: ArkivPublic, writer: Hex) {
+  return (await client.select().from(TrackedCallers).createdBy(writer).orderBy(desc("addedAt")).limit(100).fetch()).entities;
+}
+
 export async function hasResult(client: ArkivPublic, writer: Hex, postId: string) {
   const page = await client
     .select({ $key: true })

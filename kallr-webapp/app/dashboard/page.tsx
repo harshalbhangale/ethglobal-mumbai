@@ -62,7 +62,7 @@ function Home({ session }: { session: Session }) {
   };
 
   const callers = useMemo(() => {
-    const names = new Set([...data.calls.map((c) => c.caller), ...data.results.map((r) => r.caller)]);
+    const names = new Set([...data.calls.map((c) => c.caller), ...data.results.map((r) => r.caller), ...data.tracked.map((t) => t.handle)]);
     return [...names]
       .map((h) => ({
         handle: h,
@@ -71,9 +71,9 @@ function Home({ session }: { session: Session }) {
           data.calls.filter((c) => c.caller === h),
         ),
       }))
-      .sort((a, b) => (b.hitRate ?? -1) - (a.hitRate ?? -1) || b.settled - a.settled)
-      .slice(0, 5);
-  }, [data.calls, data.results]);
+      .sort((a, b) => (b.hitRate ?? -1) - (a.hitRate ?? -1) || b.settled - a.settled || b.open - a.open)
+      .slice(0, 6);
+  }, [data.calls, data.results, data.tracked]);
 
   const rail = (
     <>
@@ -123,7 +123,16 @@ function Home({ session }: { session: Session }) {
             <h1 className="font-display text-2xl font-bold tracking-tight">{session.handle ? `gm, @${session.handle}` : "Home"}</h1>
             <p className="text-sm text-slate">Calls from X, and every trade you copied from them.</p>
           </div>
-          {data.usingSample && <span className="shrink-0 rounded-full bg-amber/20 px-2.5 py-1 text-xs font-semibold">Sample data</span>}
+          {data.writer && (
+            <a
+              href={`${data.explorer}/address/${data.writer}`}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 rounded-full bg-sky/10 px-2.5 py-1 text-xs font-semibold text-sky hover:bg-sky/20"
+            >
+              Live from Arkiv ↗
+            </a>
+          )}
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
