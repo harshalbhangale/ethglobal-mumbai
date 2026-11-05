@@ -11,10 +11,12 @@ await mkdir("dist", { recursive: true });
 await cp("public", "dist", { recursive: true });
 const manifest = JSON.parse(await readFile("public/manifest.json", "utf8"));
 manifest.host_permissions = [`${origin}/*`];
+// The follow-list bridge runs only on the app this build talks to.
+manifest.content_scripts.push({ matches: [`${origin}/*`], js: ["app-bridge.js"], run_at: "document_start" });
 await writeFile("dist/manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
 
 await build({
-  entryPoints: ["src/content.ts", "src/background.ts"],
+  entryPoints: ["src/content.ts", "src/background.ts", "src/app-bridge.ts"],
   outdir: "dist",
   bundle: true,
   format: "iife",

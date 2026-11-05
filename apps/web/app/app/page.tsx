@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Logo, LogoMark } from "@/components/logo";
 import { SignInButton, WithSession, type Session } from "@/components/auth";
 import { InstallButton } from "@/components/install-button";
+import { Following } from "@/components/following";
 import { WalletPanel } from "@/components/wallet-panel";
 import { useWallets } from "@privy-io/react-auth";
 import { OpenOrders, OrderComposer, useFlashOrders } from "@/components/order-desk";
@@ -12,6 +13,7 @@ const nav = [
   { id: "desk", label: "Desk" },
   { id: "orders", label: "Orders" },
   { id: "wallet", label: "Wallet" },
+  { id: "following", label: "Following" },
 ];
 
 export default function AppPage() {
@@ -117,6 +119,8 @@ function Desk({ session }: { session: Session }) {
               )}
             </div>
           </div>
+
+          <Following />
         </main>
       </div>
     </div>
