@@ -80,3 +80,13 @@ export async function getUsdPrice(asset: PricedAsset): Promise<number> {
 }
 
 export const getEthUsd = () => getUsdPrice("ETH");
+
+/** Latest Chainlink answer as an exact decimal string, with when the feed last updated. */
+export async function getUsdPriceDecimal(asset: PricedAsset): Promise<{ price: string; updatedAt: number }> {
+  const [, answer, , updatedAt] = await publicClient.readContract({
+    address: USD_FEEDS[asset],
+    abi: aggregatorAbi,
+    functionName: "latestRoundData",
+  });
+  return { price: formatUnits(answer, 8), updatedAt: Number(updatedAt) };
+}

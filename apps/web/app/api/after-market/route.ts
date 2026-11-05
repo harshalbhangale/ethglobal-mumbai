@@ -64,5 +64,17 @@ export async function POST(req: Request) {
   }
   if (call) scored.push(call);
   const { calls: _calls, ...record } = summarize(handle, scored);
-  return Response.json({ call, record, checks: { token }, coverage: "posts seen in this browser" });
+  // Compact per-call rows for the card's stats; newest first, no post text echoed back.
+  const calls = scored
+    .sort((a, b) => b.postedAt - a.postedAt)
+    .map(({ postId, asset, direction, status, returnBps, postedAt, expiresAt }) => ({
+      postId,
+      asset,
+      direction,
+      status,
+      returnBps,
+      postedAt,
+      expiresAt,
+    }));
+  return Response.json({ call, record, calls, checks: { token }, coverage: "posts seen in this browser" });
 }
