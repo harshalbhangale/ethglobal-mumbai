@@ -2,7 +2,7 @@ import { send } from "./dom";
 
 /**
  * Reads, from what X shows on screen, whether the viewer follows the profile they're on or each
- * account on their own Following page. Ported from Xtrading. X marks its follow buttons with
+ * account on their own Following page. X marks its follow buttons with
  * data-testid "<id>-follow" / "<id>-unfollow"; buttons inside posts are ignored.
  */
 

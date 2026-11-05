@@ -7,7 +7,7 @@ import { TOKEN_CARD_CSS, tokenCheckCard } from "./token-card";
 import { findXTicker, mountTickerButton } from "./x-ticker";
 
 /**
- * One card per post, as in Xtrading: a classified call gets the full card under the post text; a
+ * One card per post: a classified call gets the full card under the post text; a
  * post that only shows X's ticker card gets a "⇄ Buy" button in that card, opening our card
  * attached beneath it. When both apply, the button opens the call's card.
  */

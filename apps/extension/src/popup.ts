@@ -1,7 +1,7 @@
 import { appOrigin } from "./config";
 
 /**
- * Toolbar popup, laid out like Xtrading's: which app this build talks to and what's live. Prices
+ * Toolbar popup: which app this build talks to and what's live. Prices
  * come from Chainlink on Base through the app; orders go to Definitive Flash on Base mainnet and
  * are signed by the user's own wallet. Nothing here holds keys or signs.
  */

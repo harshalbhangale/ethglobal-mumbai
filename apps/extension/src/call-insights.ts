@@ -6,7 +6,7 @@ import { recordPanel } from "./record-panel";
 import { formatPrice, type LivePrice } from "./ticker-price";
 
 /**
- * The Call check strip on a post card, as in Xtrading: a summary line with chips, opening to what
+ * The Call check strip on a post card: a summary line with chips, opening to what
  * the post says, how this call has moved, the creator's record and their recent calls. It renders
  * from data the card already has, so opening it makes no request.
  */
