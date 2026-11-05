@@ -1,6 +1,8 @@
 import { appOrigin } from "./config";
 import { el as h, openDesk, send, shadowHost } from "./dom";
 import { COPYABLE, deskUrl, identityFromHref, mightBeCall, PRESETS, pct, timeLeft, usd } from "./post";
+import type { SeenCall } from "./card-metrics";
+import { recordPanel } from "./record-panel";
 import { livePrice, priceLine } from "./ticker-price";
 import { ALIASES, attachToXTicker } from "./x-ticker";
 
@@ -20,7 +22,7 @@ type ScoredCall = {
   returnBps: number | null;
 };
 type Record = { scored: number; hits: number; hitRate: number | null; medianReturnBps: number | null; open: number };
-type Answer = { call: ScoredCall | null; record: Record };
+type Answer = { call: ScoredCall | null; record: Record; calls?: SeenCall[] };
 
 const handled = new WeakMap<HTMLElement, string>();
 
@@ -55,21 +57,6 @@ function callLine(call: ScoredCall | null, asset: string) {
     call.last !== null ? ` → ${usd(call.last)} ` : " ",
     moved,
     tail,
-  );
-}
-
-function recordLine(handle: string, r: Record | null) {
-  if (!r) return h("div", { class: "line muted" }, `@${handle}'s record · loading…`);
-  if (!r.scored)
-    return h("div", { class: "line muted" }, `@${handle}: no scored calls seen yet${r.open ? ` · ${r.open} open` : ""}`);
-  const rate = Math.round((r.hitRate ?? 0) * 100);
-  return h(
-    "div",
-    { class: "line" },
-    `@${handle}: ${r.hits} of ${r.scored} calls hit (${rate}%)`,
-    r.medianReturnBps !== null ? " · median " : "",
-    r.medianReturnBps !== null ? h("span", { class: r.medianReturnBps >= 0 ? "up" : "down" }, pct(r.medianReturnBps)) : null,
-    r.open ? ` · ${r.open} open` : "",
   );
 }
 
@@ -113,7 +100,7 @@ async function decorate(article: HTMLElement) {
     body,
     actions,
   );
-  body.append(recordLine(post.handle, answer.record), callLine(answer.call, asset));
+  body.append(recordPanel(post.handle, answer.calls ?? []), callLine(answer.call, asset));
   void livePrice(article, asset, ALIASES[asset as keyof typeof ALIASES] ?? []).then((live) => body.append(priceLine(asset, live)));
   article.querySelector(".aftermarkets-host")?.remove();
   post.textNode.after(host);
