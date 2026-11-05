@@ -42,6 +42,17 @@ describe("heuristicSignal", () => {
     expect(mentionsPerp("short-term $ETH bounce")).toBe(false);
     expect(mentionsPerp("bullish $MON in the long run")).toBe(false);
   });
+  it("doesn't read 'in the short term' as a short call (real @AltcoinSherpa post)", () => {
+    const s = heuristicSignal({
+      postId: "2117998152859136080",
+      handle: "altcoinsherpa",
+      text: "Looking decent for \n$BTC\n in the short term, I'm eyeing 82kish region next up.",
+    });
+    expect(s.direction).not.toBe("bearish");
+    expect(heuristicSignal({ postId: "1", handle: "a", text: "$ETH higher in the long run" }).direction).toBe("bullish");
+    expect(heuristicSignal({ postId: "1", handle: "a", text: "Shorting $ETH here" }).direction).toBe("bearish");
+  });
+
   it("keeps a bearish call without perp language on spot", () => {
     const s = heuristicSignal({ ...base, text: "Selling my $MON, top is in" });
     expect(s.instrument).toBe("spot");

@@ -56,8 +56,10 @@ export function heuristicSignal(input: {
 }): PostSignal {
   const text = input.text;
   const asset = findAsset(text);
-  const up = bullish.test(text),
-    down = bearish.test(text);
+  // "in the short term" / "long run" are horizons, not a long or short call.
+  const directional = text.replace(/\b(?:long|short)[\s-]*(?:term|run)\b/gi, " ");
+  const up = bullish.test(directional),
+    down = bearish.test(directional);
   const direction = up && !down ? "bullish" : down && !up ? "bearish" : null;
   const perp = perpCue.exec(text);
   const leverageMatch = text.match(/\b([1-9][0-9]{0,2})\s?x\b/i);
