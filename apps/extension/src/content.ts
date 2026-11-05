@@ -1,6 +1,8 @@
 import { appOrigin } from "./config";
-import { el as h, send, shadowHost } from "./dom";
+import { el as h, openDesk, send, shadowHost } from "./dom";
 import { COPYABLE, deskUrl, identityFromHref, mightBeCall, PRESETS, pct, timeLeft, usd } from "./post";
+import { livePrice, priceLine } from "./ticker-price";
+import { ALIASES, attachToXTicker } from "./x-ticker";
 
 /**
  * Content script on x.com: finds posts that are crypto calls and draws an AfterMarkets card
@@ -29,10 +31,6 @@ function readPost(article: HTMLElement) {
   const text = textNode?.innerText.trim();
   if (!id || !textNode || !text || text.length > 2000) return null;
   return { ...id, text, textNode };
-}
-
-function openDesk(url: string) {
-  window.open(url, "aftermarkets", "popup,width=480,height=820");
 }
 
 function callLine(call: ScoredCall | null, asset: string) {
@@ -83,7 +81,9 @@ async function decorate(article: HTMLElement) {
   handled.set(article, key);
   article.querySelector(".aftermarkets-host")?.remove();
 
-  if (!mightBeCall(post.text)) return;
+  // X's own ticker card names the asset outright: offer a copy button there, call or not.
+  const ticker = attachToXTicker(article, post);
+  if (!ticker && !mightBeCall(post.text)) return;
   // The API classifies the post; only real, priceable calls get a card.
   const answer = await send<Answer>({ type: "after-market", handle: post.handle, post: { postId: post.postId, text: post.text } });
   if (!answer?.call) return;
@@ -114,6 +114,7 @@ async function decorate(article: HTMLElement) {
     actions,
   );
   body.append(recordLine(post.handle, answer.record), callLine(answer.call, asset));
+  void livePrice(article, asset, ALIASES[asset as keyof typeof ALIASES] ?? []).then((live) => body.append(priceLine(asset, live)));
   article.querySelector(".aftermarkets-host")?.remove();
   post.textNode.after(host);
 }

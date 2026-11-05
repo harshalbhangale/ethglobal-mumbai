@@ -8,7 +8,7 @@ import { mergeHistory } from "./post";
  */
 
 type SeenPost = { postId: string; text: string };
-type Request = { type: "after-market"; handle: string; post: SeenPost };
+type Request = { type: "after-market"; handle: string; post: SeenPost } | { type: "prices" };
 
 async function history(handle: string, post: SeenPost) {
   const key = `seen:${handle}`;
@@ -20,7 +20,7 @@ async function history(handle: string, post: SeenPost) {
 
 const inflight = new Map<string, Promise<unknown>>();
 
-async function afterMarket(req: Request) {
+async function afterMarket(req: Extract<Request, { type: "after-market" }>) {
   const seen = await history(req.handle, req.post);
   const res = await fetch(`${appOrigin}/api/after-market`, {
     method: "POST",
@@ -31,11 +31,23 @@ async function afterMarket(req: Request) {
   return res.json();
 }
 
+async function prices() {
+  const res = await fetch(`${appOrigin}/api/prices`);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json();
+}
+
 chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
-  if (message?.type !== "after-market" || !sender.tab?.url?.match(/^https:\/\/(x|twitter)\.com\//)) return;
-  const key = message.post.postId;
-  const job = inflight.get(key) ?? afterMarket(message).finally(() => inflight.delete(key));
-  inflight.set(key, job);
+  if (!sender.tab?.url?.match(/^https:\/\/(x|twitter)\.com\//)) return;
+  let job: Promise<unknown>;
+  if (message?.type === "after-market") {
+    const key = message.post.postId;
+    job = inflight.get(key) ?? afterMarket(message).finally(() => inflight.delete(key));
+    inflight.set(key, job);
+  } else if (message?.type === "prices") {
+    job = inflight.get("prices") ?? prices().finally(() => inflight.delete("prices"));
+    inflight.set("prices", job);
+  } else return;
   job.then(respond, (err: unknown) => respond({ error: err instanceof Error ? err.message : "failed" }));
   return true; // async response
 });

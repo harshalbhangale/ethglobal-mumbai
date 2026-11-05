@@ -35,6 +35,11 @@ export function safeLink(href: string, label: string, className = "") {
   return el("a", { href: url.href, target: "_blank", rel: "noopener noreferrer", class: className }, label);
 }
 
+/** The desk in a compact window next to X, where the user reviews the order and signs. */
+export function openDesk(url: string) {
+  window.open(url, "aftermarkets", "popup,width=480,height=820");
+}
+
 /**
  * Message the service worker. After the extension reloads, the old content script keeps running in
  * open tabs and `chrome.runtime.sendMessage` throws "Extension context invalidated" synchronously,
