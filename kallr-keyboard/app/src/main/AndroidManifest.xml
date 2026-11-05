@@ -114,6 +114,40 @@
         </activity-alias>
 
         <!-- Crash Dialog Activity -->
+        <!-- Kallr: the trade confirm sheet the keyboard opens, and the wallet screen -->
+        <activity
+            android:name="dev.patrickgold.florisboard.ime.kallr.KallrTradeActivity"
+            android:theme="@style/FlorisAppTheme.Transparent"
+            android:excludeFromRecents="true"
+            android:taskAffinity="app.kallr.keyboard.trade"
+            android:exported="false"/>
+
+        <activity
+            android:name="dev.patrickgold.florisboard.ime.kallr.KallrWalletActivity"
+            android:label="Kallr Wallet"
+            android:icon="@mipmap/floris_app_icon"
+            android:theme="@style/FlorisAppTheme"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!-- Kallr: Privy's X login returns to the app through kallr:// -->
+        <activity
+            android:name="io.privy.sdk.oAuth.PrivyRedirectActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            tools:node="merge">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="kallr"/>
+            </intent-filter>
+        </activity>
+
         <activity
             android:name="dev.patrickgold.florisboard.lib.crashutility.CrashDialogActivity"
             android:icon="@mipmap/floris_app_icon"

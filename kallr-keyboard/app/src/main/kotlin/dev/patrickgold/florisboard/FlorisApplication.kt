@@ -86,6 +86,8 @@ class FlorisApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         FlorisApplicationReference = WeakReference(this)
+        // Kallr: the Privy embedded wallet the keyboard trades with (main thread, once).
+        dev.patrickgold.florisboard.ime.kallr.KallrWallet.init(this)
         try {
             Flog.install(
                 context = this,

@@ -67,7 +67,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "dev.patrickgold.florisboard"
+        // Kallr: its own app ID, which is what the Privy dashboard's Android client allows.
+        applicationId = "app.kallr.keyboard"
         minSdk = projectMinSdk.toInt()
         targetSdk = projectTargetSdk.toInt()
         versionCode = projectVersionCode.toInt()
@@ -81,6 +82,9 @@ android {
         // Kallr web app the keyboard row talks to: -PkallrOrigin=https://your-app.example
         val kallrOrigin = (findProperty("kallrOrigin") as String?) ?: "http://localhost:3000"
         buildConfigField("String", "KALLR_ORIGIN", "\"$kallrOrigin\"")
+        // Privy (embedded wallet): -PprivyAppId=… -PprivyClientId=… (App settings → Clients in the Privy dashboard)
+        buildConfigField("String", "PRIVY_APP_ID", "\"${(findProperty("privyAppId") as String?) ?: ""}\"")
+        buildConfigField("String", "PRIVY_CLIENT_ID", "\"${(findProperty("privyClientId") as String?) ?: ""}\"")
 
         sourceSets {
             maybeCreate("main").apply {
@@ -110,7 +114,6 @@ android {
 
     buildTypes {
         named("debug") {
-            applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug+${getGitCommitHash(short = true).get()}"
 
             isDebuggable = true
@@ -119,7 +122,7 @@ android {
             resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_debug")
             resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_debug_round")
             resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_debug_foreground")
-            resValue("string", "floris_app_name", "FlorisBoard Debug")
+            resValue("string", "floris_app_name", "Kallr Keyboard")
         }
 
         create("beta") {
@@ -192,6 +195,8 @@ dependencies {
     implementation(libs.androidx.collection.ktx)
     implementation(libs.androidx.compose.material.icons)
     implementation(libs.androidx.compose.material3)
+    // Kallr: Privy embedded wallet (sign in with X, sign Flash orders)
+    implementation("io.privy:privy-core:0.18.0")
     implementation(libs.androidx.compose.runtime.livedata)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)

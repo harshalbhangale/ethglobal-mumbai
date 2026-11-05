@@ -42,12 +42,17 @@ data class AmOrder(
     val error: String? = null,
 )
 
+/** What the trade panel can buy for this call: ETH, BTC or a Base token contract. */
+@Serializable
+data class AmTrade(val token: String, val symbol: String, val price: Double, val logo: String? = null)
+
 @Serializable
 data class AmResponse(
     val post: AmPost? = null,
     val call: AmCall? = null,
     val record: AmRecord? = null,
     val token: AmToken? = null,
+    val trade: AmTrade? = null,
     val order: AmOrder? = null,
 ) {
     val isEmpty get() = post == null && call == null && token == null && order == null
@@ -98,6 +103,36 @@ object Kallr {
             json.decodeFromString<AmResponse>(text).also { r -> r.post?.let { History.add(context, it) } }
         } catch (e: Exception) {
             null
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /** POST JSON to the Kallr web app; the body text on 2xx, or a Kallr error message. */
+    suspend fun post(path: String, body: String): Result<String> = request("POST", path, body)
+
+    suspend fun get(path: String): Result<String> = request("GET", path, null)
+
+    private suspend fun request(method: String, path: String, body: String?): Result<String> = withContext(Dispatchers.IO) {
+        val connection = (URL("$origin$path").openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            connectTimeout = 8_000
+            readTimeout = 30_000
+            if (body != null) {
+                doOutput = true
+                setRequestProperty("content-type", "application/json")
+            }
+        }
+        try {
+            if (body != null) connection.outputStream.use { it.write(body.toByteArray()) }
+            val ok = connection.responseCode in 200..299
+            val text = (if (ok) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+            if (ok) Result.success(text)
+            else Result.failure(Exception(runCatching {
+                json.parseToJsonElement(text).let { (it as kotlinx.serialization.json.JsonObject)["error"]?.toString()?.trim('"') }
+            }.getOrNull() ?: "Kallr server error (${connection.responseCode})"))
+        } catch (e: Exception) {
+            Result.failure(Exception("Couldn't reach Kallr at $origin"))
         } finally {
             connection.disconnect()
         }
