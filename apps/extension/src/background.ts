@@ -1,6 +1,5 @@
+import { appOrigin } from "./config";
 import { mergeHistory } from "./post";
-
-declare const AFTERMARKETS_APP_ORIGIN: string;
 
 /**
  * Service worker: the only part that talks to the AfterMarkets API. It remembers the calls
@@ -23,7 +22,7 @@ const inflight = new Map<string, Promise<unknown>>();
 
 async function afterMarket(req: Request) {
   const seen = await history(req.handle, req.post);
-  const res = await fetch(`${AFTERMARKETS_APP_ORIGIN}/api/after-market`, {
+  const res = await fetch(`${appOrigin}/api/after-market`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ handle: req.handle, post: req.post, history: seen }),
@@ -42,5 +41,5 @@ chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
 });
 
 chrome.action.onClicked.addListener(() => {
-  chrome.tabs.create({ url: `${AFTERMARKETS_APP_ORIGIN}/app` });
+  chrome.tabs.create({ url: `${appOrigin}/app` });
 });

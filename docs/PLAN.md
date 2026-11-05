@@ -105,7 +105,7 @@ docs/
 
 ### 5. Chrome extension: port Xtrading, one commit per piece
 Source: `~/Desktop/Xtrading/apps/extension/src` (Monad/Kuru/Perpl). Port onto Base + Flash; keep v0.1's card and copy links working at every step.
-- [ ] 1. Shared plumbing: `dom.ts` (messaging, shadow roots), `styles.ts`, `config.ts`; move the v0.1 card onto it
+- [x] 1. Shared plumbing: `dom.ts` (messaging, shadow roots), `styles.ts`, `config.ts`; move the v0.1 card onto it
 - [ ] 2. Ticker detection + live price: `x-ticker.ts`, `ticker-price.ts` (Chainlink/Flash, not Kuru)
 - [ ] 3. Richer record: `reputation.ts`, `card-metrics.ts`, `risk-line.ts` (tiers + red flags from `packages/domain`)
 - [ ] 4. Call check drawer: `drawer.ts`, `call-insights.ts`, `overview.ts` (caller's last calls)
