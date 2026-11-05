@@ -1,0 +1,19 @@
+{
+  "name": "@aftermarkets/integrations",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./calls": "./src/calls.ts",
+    "./call-evaluation": "./src/call-evaluation.ts",
+    "./signals": "./src/signals.ts",
+    "./token-references": "./src/token-references.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aftermarkets/domain": "*",
+    "zod": "4.6.5"
+  }
+}

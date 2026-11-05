@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --no-warnings \"lib/*.test.ts\""
+    "test": "vitest run --root ../.. apps/web"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
