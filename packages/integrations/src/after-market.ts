@@ -54,7 +54,18 @@ export async function scoreCall(
   const expiresAt = postedAt + (stated ?? DEFAULT_CALL_HORIZON_SECONDS);
   const direction = signal.direction === "bullish" ? "up" : "down";
   const base = { postId: post.postId, handle: post.handle, asset, direction, postedAt, expiresAt, horizonStated: stated !== null } as const;
+  return priceCall(base, nowSeconds, observe);
+}
 
+export type CallBase = Pick<ScoredCall, "postId" | "handle" | "asset" | "direction" | "postedAt" | "expiresAt" | "horizonStated">;
+
+/** Prices a call we already know the shape of, e.g. one stored on Arkiv, without its post text. */
+export async function priceCall(
+  base: CallBase,
+  nowSeconds: number,
+  observe: Observe = (a, t) => observePrice(a, t),
+): Promise<ScoredCall> {
+  const { asset, direction, postedAt, expiresAt } = base;
   const entry = toNumber(await observe(asset, postedAt));
   if (entry === null) return { ...base, entry: null, last: null, status: "unpriced", returnBps: null };
 

@@ -1,0 +1,195 @@
+import { createPublicClient, ExpirationTime } from "@arkiv-network/sdk";
+import { rabdi } from "@arkiv-network/sdk/chains";
+import { desc, eq, gt, lte } from "@arkiv-network/sdk/query";
+import { addr, bool, dec, defineSchema, i32, str, u64 } from "@arkiv-network/sdk/schema";
+import { type Hex, http } from "viem";
+import type { ScoredCall } from "./after-market";
+import type { FlashOrderInput } from "./definitive";
+
+/**
+ * AfterMarkets data on Arkiv (testnet Rabdi). Trades run on Base mainnet through Flash; their
+ * records, and every call we price, live here so anyone can read them without asking us.
+ *
+ * Anyone can write an entity with our schema tags, so every read is restricted to entities our
+ * writer created (`createdBy`). The writer then hands each trade to the trader's wallet: the
+ * creator proves we saw the order on Flash, the owner is the trader.
+ */
+
+export const ARKIV_CHAIN_ID = 7794095;
+export const ARKIV_EXPLORER = "https://rabdi.explorer.arkiv.network";
+
+/** A Flash order placed through AfterMarkets. Read-only once written; owned by the trader. */
+export const Trades = defineSchema("aftermarkets.trades", {
+  trader: addr().indexed(),
+  /** Which surface placed it: desk, extension or keyboard. */
+  source: str().indexed(),
+  asset: str().indexed(),
+  side: str().indexed(),
+  orderType: str(),
+  /** As sent to Flash: USDC on a buy, asset units on a sell. */
+  qty: str(),
+  limitPrice: str().optional(),
+  /** Exit trigger prices in USD, when a TP/SL bracket is attached. */
+  takeProfit: str().optional(),
+  stopLoss: str().optional(),
+  flashOrderId: str().indexed(),
+  /** The call on X this trade copied, if any. */
+  postId: str().indexed().optional(),
+  caller: str().indexed().optional(),
+  placedAt: u64().indexed(),
+});
+
+/** A call on X while it is open. Expires a scoring window after its deadline. */
+export const Calls = defineSchema("aftermarkets.calls", {
+  postId: str().indexed(),
+  caller: str().indexed(),
+  asset: str().indexed(),
+  direction: str().indexed(),
+  postedAt: u64().indexed(),
+  deadline: u64().indexed(),
+  horizonStated: bool(),
+  /** Chainlink price at the minute it was posted; absent when unpriced. */
+  entry: dec().optional(),
+});
+
+/** How a call ended. Anyone may extend it so a caller's record outlives Arkiv's max lifetime; nobody can edit it. */
+export const CallResults = defineSchema("aftermarkets.call-results", {
+  postId: str().indexed(),
+  caller: str().indexed(),
+  asset: str().indexed(),
+  direction: str(),
+  /** hit, miss or flat. */
+  status: str().indexed(),
+  /** Move in the called direction, basis points. */
+  returnBps: i32().indexed(),
+  entry: dec(),
+  exit: dec(),
+  postedAt: u64(),
+  deadline: u64().indexed(),
+});
+
+export type TradeSource = "desk" | "extension" | "keyboard";
+export type TradeContext = { source: TradeSource; caller?: string | null };
+
+/** After a call's deadline we keep it this long so the scorer can settle it, then Arkiv drops it. */
+export const SCORING_WINDOW_SECONDS = 2 * 24 * 60 * 60;
+/** Arkiv's longest lifetime is about 182.5 days; stay a day inside it. */
+const MAX_SECONDS = 181 * 24 * 60 * 60;
+
+const decimal = (n: number) => dec(n.toFixed(8).replace(/\.?0+$/, ""));
+
+export function tradeValues(input: FlashOrderInput, orderId: string, context: TradeContext, placedAt: number) {
+  return {
+    trader: addr(input.funderAddress as Hex),
+    source: context.source,
+    asset: input.asset,
+    side: input.side,
+    orderType: input.orderType,
+    qty: input.qty,
+    ...(input.limitPrice ? { limitPrice: input.limitPrice } : {}),
+    ...(input.takeProfit ? { takeProfit: input.takeProfit.notionalPrice } : {}),
+    ...(input.stopLoss ? { stopLoss: input.stopLoss.notionalPrice } : {}),
+    flashOrderId: orderId,
+    ...(input.sourcePostId ? { postId: input.sourcePostId } : {}),
+    ...(context.caller ? { caller: context.caller.toLowerCase() } : {}),
+    placedAt: u64(BigInt(placedAt)),
+  };
+}
+
+export function callValues(call: ScoredCall) {
+  return {
+    postId: call.postId,
+    caller: call.handle.toLowerCase(),
+    asset: call.asset,
+    direction: call.direction,
+    postedAt: u64(BigInt(call.postedAt)),
+    deadline: u64(BigInt(call.expiresAt)),
+    horizonStated: call.horizonStated,
+    ...(call.entry !== null ? { entry: decimal(call.entry) } : {}),
+  };
+}
+
+/** Values for a settled call, or null while it is open or unpriced. */
+export function resultValues(call: ScoredCall) {
+  if (call.status !== "hit" && call.status !== "miss" && call.status !== "flat") return null;
+  if (call.entry === null || call.last === null || call.returnBps === null) return null;
+  return {
+    postId: call.postId,
+    caller: call.handle.toLowerCase(),
+    asset: call.asset,
+    direction: call.direction,
+    status: call.status,
+    returnBps: i32(call.returnBps),
+    entry: decimal(call.entry),
+    exit: decimal(call.last),
+    postedAt: u64(BigInt(call.postedAt)),
+    deadline: u64(BigInt(call.expiresAt)),
+  };
+}
+
+/** A call lives through its timeframe plus the scoring window, capped at Arkiv's max lifetime. */
+export function callExpiration(call: Pick<ScoredCall, "expiresAt">, nowSeconds: number) {
+  const until = Math.min(call.expiresAt + SCORING_WINDOW_SECONDS, nowSeconds + MAX_SECONDS);
+  return ExpirationTime.atDate(new Date(Math.max(until, nowSeconds + 3600) * 1000));
+}
+
+// ---------- Reads (browser or server) ----------
+
+export function arkivPublic(accessKey = "") {
+  return createPublicClient({ chain: rabdi({ accessKey }), transport: http() });
+}
+export type ArkivPublic = ReturnType<typeof arkivPublic>;
+
+export async function readTrades(client: ArkivPublic, writer: Hex, trader?: Hex) {
+  const q = client.select().from(Trades).createdBy(writer);
+  const filtered = trader ? q.where(eq("trader", addr(trader))) : q;
+  return (await filtered.orderBy(desc("placedAt")).limit(100).fetch()).entities;
+}
+
+export async function readResults(client: ArkivPublic, writer: Hex, caller?: string) {
+  const q = client.select().from(CallResults).createdBy(writer);
+  const filtered = caller ? q.where(eq("caller", caller.toLowerCase())) : q;
+  return (await filtered.orderBy(desc("deadline")).limit(100).fetch()).entities;
+}
+
+export async function readOpenCalls(client: ArkivPublic, writer: Hex, nowSeconds: number) {
+  return (
+    await client
+      .select()
+      .from(Calls)
+      .createdBy(writer)
+      .where(gt("deadline", u64(BigInt(nowSeconds))))
+      .orderBy(desc("postedAt"))
+      .limit(100)
+      .fetch()
+  ).entities;
+}
+
+/** Calls past their deadline, still inside the scoring window. */
+export async function readDueCalls(client: ArkivPublic, writer: Hex, nowSeconds: number) {
+  return (
+    await client
+      .select()
+      .from(Calls)
+      .createdBy(writer)
+      .where(lte("deadline", u64(BigInt(nowSeconds))))
+      .limit(100)
+      .fetch()
+  ).entities;
+}
+
+export async function hasCall(client: ArkivPublic, writer: Hex, postId: string) {
+  const page = await client.select({ $key: true }).from(Calls).createdBy(writer).where(eq("postId", postId)).limit(1).fetch();
+  return page.entities.length > 0;
+}
+
+export async function hasResult(client: ArkivPublic, writer: Hex, postId: string) {
+  const page = await client
+    .select({ $key: true })
+    .from(CallResults)
+    .createdBy(writer)
+    .where(eq("postId", postId))
+    .limit(1)
+    .fetch();
+  return page.entities.length > 0;
+}
