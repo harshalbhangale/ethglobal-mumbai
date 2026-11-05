@@ -45,6 +45,7 @@ Written the first time we price a call (`/api/after-market` from the extension, 
 | `deadline` | u64 | yes | `postedAt` + stated timeframe (or the default horizon) |
 | `horizonStated` | bool | no | Whether the post named a timeframe |
 | `entry` | dec, optional | no | Chainlink price on Base at the minute it was posted |
+| `swarmRef` | str, optional | no | Swarm reference of the post snapshot ([swarm.md](swarm.md)) |
 
 - **Owner:** the writer, read-only.
 - **Expires:** at `deadline` + 48h scoring window (`ExpirationTime.atDate`), capped at 181 days. Arkiv drops it on its own.
@@ -63,6 +64,7 @@ Written when a call settles, by the same routes or by `/api/arkiv/score`, which 
 | `entry`, `exit` | dec | no | Prices at posting and at the deadline |
 | `postedAt` | u64 | no | |
 | `deadline` | u64 | yes | Sort key for a caller's history |
+| `swarmRef` | str, optional | no | Copied from the call, so the snapshot outlives the call entity |
 
 - **Owner:** the writer, read-only, with `permissionlessExtension`: anyone can keep a caller's record alive; nobody can edit a miss.
 - **Expires:** `ExpirationTime.max()` (~182 days), extendable by anyone.

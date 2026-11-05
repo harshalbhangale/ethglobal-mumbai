@@ -40,6 +40,23 @@ Concurrent creates from one server key would race the nonce, so we queue writes 
 (`kallr-webapp/lib/server/arkiv.ts`). A note on concurrency, or a batching helper for "create, then hand to another owner"
 (we do `createEntity` then `changeOwnership`, two transactions), would help server-side apps.
 
+## 8. No way to write once
+**Expected:** create a `kallr.calls` entity for a post only if none exists, in one call.
+**Happened:** there's no unique attribute or idempotency key, so we query `postId` first (`findCall`, `hasResult`) and
+then create. The in-process queue covers one server; two Vercel instances pricing the same post can still both write.
+**Ask:** `createEntity(..., { uniqueBy: ["postId"] })`, or an idempotency key the node rejects on repeat.
+
+## 9. A server key can't top itself up
+**Expected:** fund the writer from a script or CI.
+**Happened:** the faucet at hub.arkiv.network needs a person signed in in a browser. Our writer sat at 0 tGLM, so every
+write failed until someone did that by hand.
+**Ask:** a faucet API for testnet keys, or a balance check in the SDK that fails with "fund this address at …" instead of a gas error.
+
+## 10. "Permanent" means someone has to come back
+A caller's record is history, but the longest lifetime is ~182 days. `permissionlessExtension` lets anyone extend it,
+and nothing does unless we run a job. **Ask:** a longer maximum for small read-only entities, or a documented pattern
+(and cost) for keeping records alive.
+
 ## What worked well
 - Typed schemas with `defineSchema`: reads and writes are checked at compile time, and `where` refuses unindexed columns.
 - `readonly`, `permissionlessExtension` and `changeOwnership` map directly onto product rules ("nobody can edit a miss",

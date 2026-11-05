@@ -40,6 +40,12 @@ Environment (`kallr-webapp/.env.local`):
 | `DEFINITIVE_API_KEY` | Flash quotes and orders | Falls back to Definitive's public dev key |
 | `ETHERSCAN_API_KEY` | Caller wallet check | Wallet check reports unavailable; token checks still work |
 | `NEXT_PUBLIC_BASE_RPC_URL` | Balances and Chainlink prices | Public Base RPC |
+| `ARKIV_PRIVATE_KEY`, `ARKIV_ACCESS_KEY` | Writing trades and calls to Arkiv (writer needs tGLM) | Nothing written to Arkiv |
+| `OPENAI_API_KEY` | Keyboard AI: reading calls and plain-word orders | Keyboard falls back to links and cashtags only |
+| `ELEVENLABS_API_KEY` | Keyboard voice orders (Scribe) | OpenAI transcription, if set |
+| `SWARM_API_URL`, `SWARM_POSTAGE_BATCH_ID` | Your own Bee node and batch for snapshots | Swarm's public gateway |
+
+Hosted on Vercel (project `kallr`, root `kallr-webapp`): <https://kallr.vercel.app>, deployed on every push to `main`.
 
 The service worker only registers in production builds: `npm run build && npm start` to test install.
 
@@ -56,14 +62,21 @@ TP/SL attach to buys only (a spot sell leaves you in USDC). Tradable today: ETH 
 
 Phones can't run extensions, but every app has a keyboard. `kallr-keyboard` is a fork of
 **[FlorisBoard](https://github.com/florisboard/florisboard)** v0.5.2 (Apache-2.0, by The
-FlorisBoard Contributors), which does all the typing. We added one row above its Smartbar:
+FlorisBoard Contributors), which does all the typing. What we added:
 
-- Copy a post link in X (Share → Copy link): the call's after market, the caller's record, and a one-tap "Copy $5"
-- Type `copy $5 tp 10% sl 5%`: "Sign in desk ↗" opens the desk prefilled; you sign there
-- A shared contract address: a token check, no copy button
+- **Trade button** (blue, right end of the toolbar). Like the emoji button, it swaps the keys for the
+  Kallr panel; **ABC** goes back. Tabs: **Swap** (token, Swap / Limit / TWAP, amount, TP/SL),
+  **Positions** (your Flash orders and balances) and **Wallet**.
+- **Your wallet:** the Privy embedded wallet you get on the desk (sign in with X). Buy opens a
+  confirm sheet; "Confirm and sign" places a Flash order on Base. Keys stay with Privy.
+- **Check this call:** copy or **Share → Check with Kallr** a post or a Telegram message. The AI reads
+  coin, direction and timeframe; the caller's record and a token check come from our tools.
+- **Fake contracts:** a contract that claims `$PEPE` but isn't the main PEPE on Base is shown as fake
+  with the real address, and gets no Buy.
+- **Plain words and voice:** type `buy 20 bucks of degen if it dips 10%`, or hold the mic and say it.
 
-It never holds keys, sends only the post link, contract or order phrase (nothing else you type),
-and stays quiet in password fields. Build, install and what changed:
+It sends Kallr only a post link, a coin message, a contract or the order phrase (nothing else you
+type) and stays quiet in password fields. Build, install and what changed:
 [kallr-keyboard/KALLR.md](kallr-keyboard/KALLR.md).
 
 ## Arkiv: trade records and caller records
@@ -81,7 +94,13 @@ browser, so anyone can check them without asking us.
 - **Writer wallet:** `0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53`. Reads only trust entities it created.
 - **One query you can run:** `arkiv.schema = str('kallr.trades') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)`
 - Details: [arkiv/schema.md](arkiv/schema.md), [why-arkiv.md](arkiv/why-arkiv.md), [how-you-use-arkiv.md](arkiv/how-you-use-arkiv.md), [reach.md](arkiv/reach.md), [friction.md](arkiv/friction.md).
-- Code: `packages/integrations/src/arkiv.ts` (schemas, reads), `kallr-webapp/lib/server/arkiv.ts` (writes), `kallr-webapp/app/trades/page.tsx` (dashboard), `kallr-webapp/app/api/arkiv/score` (settles expired calls).
+- Code: `packages/integrations/src/arkiv.ts` (schemas, reads), `kallr-webapp/lib/server/arkiv.ts` (writes), `kallr-webapp/app/trades/page.tsx` (dashboard), `kallr-webapp/app/api/arkiv/score` (settles expired calls, daily Vercel cron).
+
+**Swarm:** when Kallr first prices a call, a snapshot of the post (text, link, the call it read)
+goes to [Swarm](https://www.ethswarm.org), and the call's Arkiv entity keeps the reference in
+`swarmRef`, so a deleted post stays provable. The `/trades` dashboard also exists as a static page on
+Swarm (`kallr-swarm/`, `node kallr-swarm/publish.mjs`) that reads Arkiv with no server.
+See [arkiv/swarm.md](arkiv/swarm.md).
 
 ## Chrome extension
 
@@ -154,7 +173,8 @@ docs/PLAN.md        what we are building next, and what is parked
 
 - First funded order on Base mainnet (needs a Privy app ID and a few USDC on Base)
 - The Terminal: live calls, your trades, chat rules with notify / ask-to-approve / ignore
-- Deployed web app; Android keyboard release build and a run on a real phone
+- Android keyboard: a real trade from a phone (sign-in works on the emulator); release build
+- Swarm dashboard: the public gateway serves the snapshots, but the HTML page waits for Swarm's approval or an ENS name
 
 Parked, not planned for the demo: live X bot, Telegram, agents/MCP, Postgres, Chainlink CRE. See [docs/PLAN.md](docs/PLAN.md).
 
@@ -173,6 +193,11 @@ This repo was started at the event (first commit 5 Nov 2026). What we brought in
 
 New at the event: the web app and desk, the Flash integration with TP/SL, call scoring, the X bot, the keyboard
 row and `/api/keyboard`, the Arkiv data layer and the `/trades` dashboard.
+
+## Sponsor feedback
+
+Short, specific notes from building on their stacks: [Definitive](feedback/definitive.md),
+[Arkiv](arkiv/friction.md) and [Swarm](arkiv/swarm.md#what-got-in-our-way).
 
 ## How we used AI
 
