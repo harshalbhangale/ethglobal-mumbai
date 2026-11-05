@@ -1,6 +1,7 @@
 import { watchlistCommandSchema } from "@aftermarkets/domain";
 import { appOrigin } from "./config";
 import { mergeHistory } from "./post";
+import { applyObservations, mirrorEnabled, setMirror } from "./follow-sync";
 import { readWatchlist, updateWatchlist } from "./watchlist-storage";
 
 /**
@@ -14,7 +15,9 @@ type Request =
   | { type: "after-market"; handle: string; post: SeenPost }
   | { type: "prices" }
   | { type: "caller-record"; handle: string }
-  | { type: "watchlist"; command: unknown };
+  | { type: "watchlist"; command: unknown }
+  | { type: "observe-follows"; viewer: string; observations: Array<{ handle: string; following: boolean }> }
+  | { type: "mirror"; enabled?: boolean };
 
 const HANDLE = /^[a-z0-9_]{1,15}$/;
 
@@ -69,7 +72,7 @@ chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
   const url = sender.tab?.url ?? "";
   const fromX = /^https:\/\/(x|twitter)\.com\//.test(url);
   // The app's bridge may only manage follows; everything else is for x.com tabs.
-  const fromApp = url.startsWith(`${appOrigin}/`) && message?.type === "watchlist";
+  const fromApp = url.startsWith(`${appOrigin}/`) && (message?.type === "watchlist" || message?.type === "mirror");
   if (!fromX && !fromApp) return;
   let job: Promise<unknown>;
   if (message?.type === "after-market") {
@@ -85,6 +88,13 @@ chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
     inflight.set(key, job);
   } else if (message?.type === "watchlist") {
     job = watchlist(message.command);
+  } else if (message?.type === "mirror" && fromApp) {
+    job = typeof message.enabled === "boolean" ? setMirror(message.enabled) : mirrorEnabled().then((enabled) => ({ enabled }));
+  } else if (message?.type === "observe-follows" && fromX && Array.isArray(message.observations)) {
+    const observations = message.observations.filter(
+      (o) => o && typeof o.handle === "string" && typeof o.following === "boolean",
+    );
+    job = applyObservations(String(message.viewer), observations);
   } else return;
   job.then(respond, (err: unknown) => respond({ error: err instanceof Error ? err.message : "failed" }));
   return true; // async response

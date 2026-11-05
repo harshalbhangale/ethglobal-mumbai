@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   extensionFollows,
   extensionInstalled,
+  extensionMirror,
   type FollowCommand,
   type FollowSource,
   normalize,
@@ -21,6 +22,7 @@ export function Following() {
   const [source, setSource] = useState<FollowSource | null>(null);
   const [input, setInput] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [mirror, setMirror] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +38,9 @@ export function Following() {
           if (cancelled) return;
           setEntries(list);
           setSource("extension");
+          extensionMirror()
+            .then((on) => !cancelled && setMirror(on))
+            .catch(() => {});
         })
         .catch(fallback);
     if (extensionInstalled()) start();
@@ -100,6 +105,32 @@ export function Following() {
         </button>
       </form>
       {message && <p className="mt-3 text-sm text-down">{message}</p>}
+
+      {source === "extension" && mirror !== null && (
+        <label className="mt-4 flex items-start gap-3 rounded-xl bg-paper p-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 accent-ink"
+            checked={mirror}
+            onChange={async (e) => {
+              const next = e.target.checked;
+              setMessage(null);
+              try {
+                setMirror(await extensionMirror(next));
+              } catch (err) {
+                setMessage(err instanceof Error ? err.message : "Couldn't change the setting.");
+              }
+            }}
+          />
+          <span>
+            <span className="font-semibold">Follow here when I follow on X</span>
+            <span className="block text-slate">
+              Pressing Follow on X adds the caller here. Unfollowing on X removes only callers X added; ones you
+              followed here stay. Read from X&rsquo;s buttons on screen; no X login or API.
+            </span>
+          </span>
+        </label>
+      )}
 
       {source && entries.length === 0 ? (
         <div className="mt-6 rounded-xl border border-dashed border-rule px-6 py-8 text-center">
