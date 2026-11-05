@@ -41,18 +41,37 @@ export type Observe = (asset: CallAsset, timestamp: number) => Promise<PriceObse
 const toNumber = (o: PriceObservation | null) => (o ? Number(o.price) / 10 ** o.priceDecimals : null);
 
 /** Null when the post isn't a directional call on an asset we can price. */
+/**
+ * A reader that understands the post (an LLM): whether it is a call, on what, which way. When it
+ * answers it decides; the keyword heuristic only stands in when it can't (no key, timeout, error).
+ */
+export type CallReader = (text: string) => Promise<{ isCall: boolean; symbol: string | null; direction: "up" | "down" | null } | null>;
+
+/** Asset and direction for a post: the reader's when it answers, else the keyword heuristic's. */
+export async function readDirection(post: CallPost, reader?: CallReader): Promise<{ asset: CallAsset; direction: "up" | "down" } | null> {
+  const read = reader ? await reader(post.text).catch(() => null) : null;
+  if (read) {
+    const asset = read.symbol?.toUpperCase().replace(/^W(ETH|BTC)$/, "$1").replace(/^CBBTC$/, "BTC") ?? null;
+    if (!read.isCall || !read.direction || !asset || !(asset in CALL_ASSETS)) return null;
+    return { asset: asset as CallAsset, direction: read.direction };
+  }
+  const signal = heuristicSignal({ postId: post.postId, handle: post.handle, text: post.text });
+  if (!signal.isCall || !signal.direction || !signal.asset || !(signal.asset in CALL_ASSETS)) return null;
+  return { asset: signal.asset as CallAsset, direction: signal.direction === "bullish" ? "up" : "down" };
+}
+
 export async function scoreCall(
   post: CallPost,
   nowSeconds: number,
   observe: Observe = (a, t) => observePrice(a, t),
+  reader?: CallReader,
 ): Promise<ScoredCall | null> {
-  const signal = heuristicSignal({ postId: post.postId, handle: post.handle, text: post.text });
-  if (!signal.isCall || !signal.direction || !signal.asset || !(signal.asset in CALL_ASSETS)) return null;
-  const asset = signal.asset as CallAsset;
+  const read = await readDirection(post, reader);
+  if (!read) return null;
+  const { asset, direction } = read;
   const stated = statedTimeframe(post.text);
   const postedAt = Math.floor(Number(postTimestampMs(post.postId)) / 1000);
   const expiresAt = postedAt + (stated ?? DEFAULT_CALL_HORIZON_SECONDS);
-  const direction = signal.direction === "bullish" ? "up" : "down";
   const base = { postId: post.postId, handle: post.handle, asset, direction, postedAt, expiresAt, horizonStated: stated !== null } as const;
   return priceCall(base, nowSeconds, observe);
 }

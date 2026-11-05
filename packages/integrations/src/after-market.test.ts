@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { callerRecord, describeCall, describeRecord, median, type Observe, scoreCall } from "./after-market";
+import { callerRecord, describeCall, describeRecord, median, type Observe, readDirection, scoreCall } from "./after-market";
 import { postTimestampMs } from "./calls";
 
 /** Snowflake ID for a unix time, so postTimestampMs round-trips. */
@@ -48,6 +48,31 @@ describe("scoreCall", () => {
   it("reports unpriced calls instead of inventing a number", async () => {
     const call = await scoreCall({ postId: idAt(T0), handle: "kol", text: "buy $BTC" }, T0 + 30 * DAY, async () => null);
     expect(call).toMatchObject({ status: "unpriced", returnBps: null });
+  });
+});
+
+describe("readDirection with an AI reader", () => {
+  const post = (text: string) => ({ postId: "2090209604332327087", handle: "cryptocred", text });
+  const sarcasm = "Was I long the BTC breakout?\n\nNo.";
+
+  it("lets the reader veto a keyword match (sarcasm)", async () => {
+    expect(await readDirection(post(sarcasm))).toEqual({ asset: "BTC", direction: "up" });
+    expect(await readDirection(post(sarcasm), async () => ({ isCall: false, symbol: "BTC", direction: null }))).toBeNull();
+  });
+
+  it("takes the reader's direction and maps wrapped tickers", async () => {
+    expect(await readDirection(post("eyeing 82k on $WETH"), async () => ({ isCall: true, symbol: "WETH", direction: "up" }))).toEqual({
+      asset: "ETH",
+      direction: "up",
+    });
+  });
+
+  it("skips coins we can't price, and falls back to keywords when the reader fails", async () => {
+    expect(await readDirection(post("buy $PEPE"), async () => ({ isCall: true, symbol: "PEPE", direction: "up" }))).toBeNull();
+    expect(await readDirection(post("Shorting $ETH here"), async () => Promise.reject(new Error("timeout")))).toEqual({
+      asset: "ETH",
+      direction: "down",
+    });
   });
 });
 

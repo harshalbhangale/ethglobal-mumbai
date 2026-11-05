@@ -3,6 +3,7 @@ import { checkToken, type TokenCheck } from "@kallr/integrations/safety-checks";
 import { tokenReferences } from "@kallr/integrations/token-references";
 import { after } from "next/server";
 import { z } from "zod";
+import { aiEnabled, readCall } from "@/lib/server/ai";
 import { recordCall } from "@/lib/server/arkiv";
 
 // Token checks are cached for 10 minutes per contract.
@@ -39,7 +40,8 @@ async function cachedScore(handle: string, p: z.infer<typeof post>, now: number)
   const key = `${p.postId}:${p.text.length}`;
   const hit = cache.get(key);
   if (hit && (Date.now() - hit.at < TTL_MS || (hit.call && hit.call.status !== "open"))) return hit.call;
-  const call = await scoreCall({ postId: p.postId, handle, text: p.text }, now).catch(() => null);
+  // The AI reads the post when a key is set; sarcasm, questions and commentary aren't calls.
+  const call = await scoreCall({ postId: p.postId, handle, text: p.text }, now, undefined, aiEnabled ? readCall : undefined).catch(() => null);
   if (cache.size > 5000) cache.clear();
   cache.set(key, { at: Date.now(), call });
   return call;

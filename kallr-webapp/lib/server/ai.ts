@@ -67,6 +67,12 @@ const SCHEMA = {
 const SYSTEM = `You read short crypto messages from X posts, Telegram chats or spoken orders and extract structured fields.
 Only use what the text says. Never invent a contract address, price or timeframe. Tickers are uppercase without $.
 "ape", "send it", "long", "buying", "moon" mean up; "short", "dump", "sell", "rug" mean down.
+isCall is true only when the author says which way a coin will go or tells people to buy or sell it now.
+These are NOT calls: questions and sarcasm ("Was I long the breakout? No."), looking back ("BTC dropped 50%"),
+market commentary or stats without a view ("Bitcoin is down 13%", "bids in the orderbook"), and general
+advice with no coin. "In the short term" / "long run" are timeframes, not a short or long position.
+A coin that "bounces here", is "eyeing 82k" from below, or should be accumulated is up; "lose this level and it dumps" with no stated view is not a call.
+
 Fill "order" only when the text is an instruction to trade ("buy $20 of this", "get me 50 bucks of degen if it dips 10%").
 Spoken orders come from speech-to-text, which can turn filler words into coin names ("20 dollars ADA DEGEN" was "20 dollars of a DEGEN").
 When an order names two coins, the one right before the price or condition is usually meant; never trade two coins from one order.`;
