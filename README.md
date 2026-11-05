@@ -15,6 +15,7 @@ Built at ETHGlobal Mumbai 2026.
 | **Web app** (`/app`, PWA) | Sign in with X (Privy), wallet on Base, type an order like `copy $5 of ETH tp 10% sl 5%`, sign, and it's placed on Flash with TP/SL. Open orders come back from Flash. | Works against live Flash quotes; first funded mainnet order not run yet |
 | **Chrome extension** | On x.com: a trade card under call posts and a Buy button in X's ticker cards, with live prices; the caller's record and a call-check drawer; profile cards, Follow and Following chips; token safety checks on posts that share a contract; orders signed on X with MetaMask/Rabby, or in the desk | Built; loads unpacked |
 | **@AfterMarkets on X** | Tag it under a call: replies with the caller's record and this call's after market. Reply `copy $2, TP 10%, SL 5%`: replies with a desk link to sign | Works in dry run on real posts; needs X API keys to go live |
+| **Android keyboard** (built on [FlorisBoard](https://github.com/florisboard/florisboard)) | An AfterMarkets row above the keyboard in any app: copy an X post link and see the call's after market and the caller's record; type `copy $5 tp 10% sl 5%` and get a desk link to sign | Built; debug APK, talks to the web app's `/api/keyboard` |
 | **Safety checks** | Token: honeypot, owner powers, taxes, liquidity, age. Caller: did their wallet sell what they called? | Token checks live (no key); wallet check needs a free Etherscan key |
 
 ## Run it
@@ -49,6 +50,20 @@ The service worker only registers in production builds: `npm run build && npm st
 4. `/api/flash/order` submits; the TP/SL arms on the first fill. The API key stays on the server.
 
 TP/SL attach to buys only (a spot sell leaves you in USDC). Tradable today: ETH (as WETH) and BTC (as cbBTC) against USDC on Base.
+
+## Android keyboard
+
+Phones can't run extensions, but every app has a keyboard. `apps/keyboard` is a fork of
+**[FlorisBoard](https://github.com/florisboard/florisboard)** v0.5.2 (Apache-2.0, by The
+FlorisBoard Contributors), which does all the typing. We added one row above its Smartbar:
+
+- Copy a post link in X (Share → Copy link): the call's after market, the caller's record, and a one-tap "Copy $5"
+- Type `copy $5 tp 10% sl 5%`: "Sign in desk ↗" opens the desk prefilled; you sign there
+- A shared contract address: a token check, no copy button
+
+It never holds keys, sends only the post link, contract or order phrase (nothing else you type),
+and stays quiet in password fields. Build, install and what changed:
+[apps/keyboard/AFTERMARKETS.md](apps/keyboard/AFTERMARKETS.md).
 
 ## Chrome extension
 
@@ -108,6 +123,7 @@ The X API is pay-per-use: about $0.001 per mention read, $0.005 per post read, $
 apps/
   web/                Next.js PWA: landing (/), desk (/app), Flash + after market + checks APIs
   extension/          Chrome extension for x.com: trade cards, records, profiles, follow, safety checks
+  keyboard/           Android keyboard: FlorisBoard fork with an AfterMarkets row
 services/
   x-bot/              @AfterMarkets on X: after market replies, copy links to the desk
 packages/
@@ -123,4 +139,8 @@ docs/PLAN.md          what we are building and in what order
 - Cancel orders from the desk; live orders stream instead of 15s polling
 - Calls and follows stored on a server (Arkiv); today they live in each browser. Creator pages
 - Chainlink CRE workflow that scores expired calls
-- Android keyboard
+- Android keyboard: release build and a run on a real phone with the X app
+
+## Credits
+
+- [FlorisBoard](https://github.com/florisboard/florisboard) (Apache-2.0): the Android keyboard `apps/keyboard` is built on.

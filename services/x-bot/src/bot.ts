@@ -1,4 +1,4 @@
-import { type ParsedOrder, parseOrder, withCallAsset } from "@aftermarkets/domain/order";
+import { orderText, type ParsedOrder, parseOrder, withCallAsset } from "@aftermarkets/domain/order";
 import {
   type CallerRecord,
   type CallPost,
@@ -50,15 +50,7 @@ export function commandText(text: string) {
 
 const COMMAND = /^(copy|buy|long|sell|short)\b/i;
 
-/** Order text the desk parses back to the same order, with the asset spelled out. */
-export function orderText(o: ParsedOrder) {
-  const parts = [o.copy ? "copy" : o.side];
-  parts.push(o.amountUsd === null ? `my ${o.asset}` : `$${o.amountUsd} of ${o.asset}`);
-  if (o.limitPrice !== null) parts.push(`at ${o.limitPrice}`);
-  if (o.takeProfitPct !== null) parts.push(`tp ${+(o.takeProfitPct * 100).toFixed(2)}%`);
-  if (o.stopLossPct !== null) parts.push(`sl ${+(o.stopLossPct * 100).toFixed(2)}%`);
-  return parts.join(" ");
-}
+export { orderText };
 
 export function deskLink(appUrl: string, o: ParsedOrder, parent: CallPost | null) {
   const q = new URLSearchParams({ order: orderText(o) });

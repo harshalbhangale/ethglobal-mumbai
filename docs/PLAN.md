@@ -23,7 +23,7 @@ Each surface: the idea, the product, the sponsors it uses, and what we build it 
 | Web app `/app` (PWA) | One desk on laptop and phone | Sign in with X, wallet, order composer, open orders | Definitive Flash, Base | Next.js, Privy, viem | Real Flash orders with TP/SL; cancel + live stream open |
 | Chrome extension (main) | Trade where you read the call | Card under every call on X: caller's record, this call's move, copy with TP/SL, follow the caller | Definitive Flash, Base, Chainlink | Chrome MV3 content script + service worker, Privy/desk fallback for signing | v0.1 card + copy links; full card set below |
 | Follow platform `/creators`, `/app/following` | Following someone on X means following them here | Creator pages with a priced record, a Follow button, and a feed of calls from people you follow, one tap to copy | Base, Chainlink | Postgres (follows + stored calls), extension follow sync | Not started |
-| Android keyboard (mobile) | No extensions on phones, but every app has a keyboard | Keyboard with an AfterMarkets row: caller's record for a pasted call, and "copy $5 tp 10% sl 5%" becomes a link to sign in the PWA | Definitive Flash, Base, Chainlink | Kotlin `InputMethodService`, same API; the keyboard never holds keys | Not started |
+| Android keyboard (mobile) | No extensions on phones, but every app has a keyboard | Keyboard with an AfterMarkets row: caller's record for a pasted call, and "copy $5 tp 10% sl 5%" becomes a link to sign in the PWA | Definitive Flash, Base, Chainlink | Fork of FlorisBoard (Kotlin, Apache-2.0) + `/api/keyboard`; the keyboard never holds keys | Built (debug APK) |
 | X bot @AfterMarkets (if time) | Tag it like @grok | Replies with the caller's after market; `copy …` replies get a link to approve | Definitive Flash, Base | X API, `services/x-bot` | Built; needs X API keys and a live run |
 | Telegram bot | The "we call you back" channel | Same commands in DMs/groups; fill and exit alerts | — | Telegram Bot API | Not started |
 | Agent | Copy the callers you trust, within limits | Watches followed callers, places and exits trades, pays for data with x402 | Base, x402 | Flash, session keys | Not started |
@@ -126,9 +126,9 @@ Built on Base + Flash; keep v0.1's card and copy links working at every step.
 - [ ] Extension Follow button and X follow sync write to `/api/follows` when signed in
 
 ### 5c. Android keyboard
-- [ ] `apps/keyboard`: Kotlin `InputMethodService` with an AfterMarkets suggestion row
-- [ ] Paste or select a call → caller's record from `/api/after-market`
-- [ ] Type `copy $5 tp 10% sl 5%` → opens the PWA desk prefilled to sign; the keyboard never holds keys
+- [x] `apps/keyboard`: FlorisBoard fork with an AfterMarkets row above the Smartbar
+- [x] Copy or select a post link → the call's after market and caller's record from `/api/keyboard`
+- [x] Type `copy $5 tp 10% sl 5%` → opens the PWA desk prefilled to sign; the keyboard never holds keys
 
 ### 6. Agent + payments
 - [ ] Agent loop: watch new calls from followed KOLs, apply user rules (max size, only KOLs with hit rate > X), place orders through Flash within a pre-approved budget
