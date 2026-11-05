@@ -140,8 +140,18 @@ object KallrTrader {
             put("context", q.context)
         }
         val res = Kallr.post("/api/flash/order", submit.toString()).getOrThrow()
-        json.parseToJsonElement(res).jsonObject.str("orderId") ?: error("Flash didn't return an order ID.")
+        val orderId = json.parseToJsonElement(res).jsonObject.str("orderId") ?: error("Flash didn't return an order ID.")
+        order.symbol?.let { rememberSymbol(context, orderId, it) }
+        orderId
     }
+
+    /** Which token an order bought, so Positions can name memecoins Flash only knows by address. */
+    private fun rememberSymbol(context: Context, orderId: String, symbol: String) {
+        context.applicationContext.getSharedPreferences("kallr-orders", Context.MODE_PRIVATE).edit().putString(orderId, symbol).apply()
+    }
+
+    fun symbolFor(context: Context, orderId: String): String? =
+        context.applicationContext.getSharedPreferences("kallr-orders", Context.MODE_PRIVATE).getString(orderId, null)
 
     fun encode(order: KeyboardOrder): String = json.encodeToString(order)
     fun decode(text: String): KeyboardOrder = json.decodeFromString(text)

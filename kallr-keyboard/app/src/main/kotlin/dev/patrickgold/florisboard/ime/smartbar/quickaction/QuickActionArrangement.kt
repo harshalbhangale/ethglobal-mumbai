@@ -66,8 +66,10 @@ data class QuickActionArrangement(
 
     companion object {
         val Default = QuickActionArrangement(
-            stickyAction = QuickAction.InsertKey(TextKeyData.VOICE_INPUT),
+            // Kallr: Trade is the always-visible action, like the emoji key; voice input moves into the list.
+            stickyAction = QuickAction.InsertKey(TextKeyData.IME_UI_MODE_KALLR),
             dynamicActions = listOf(
+                QuickAction.InsertKey(TextKeyData.VOICE_INPUT),
                 QuickAction.InsertKey(TextKeyData.UNDO),
                 QuickAction.InsertKey(TextKeyData.REDO),
                 QuickAction.InsertKey(TextKeyData.SETTINGS),

@@ -19,7 +19,9 @@ package dev.patrickgold.florisboard.ime
 enum class ImeUiMode(val value: Int) {
     TEXT(0),
     MEDIA(1),
-    CLIPBOARD(2);
+    CLIPBOARD(2),
+    /** Kallr: the trading panel (swap, positions, wallet), opened like the emoji panel. */
+    KALLR(3);
 
     companion object {
         fun fromInt(int: Int) = entries.firstOrNull { it.value == int } ?: TEXT

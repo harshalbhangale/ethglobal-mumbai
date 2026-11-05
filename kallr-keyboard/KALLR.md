@@ -5,21 +5,24 @@ an open-source Android keyboard by The FlorisBoard Contributors, licensed under 
 [Apache License 2.0](LICENSE). All typing, layouts, suggestions, emoji and the clipboard
 come from FlorisBoard. Thank you to the FlorisBoard team.
 
-Phones can't run browser extensions, but every app has a keyboard. This fork adds a Kallr panel
-above FlorisBoard's Smartbar, so you can trade a call from inside X, Telegram or any app:
+Phones can't run browser extensions, but every app has a keyboard. This fork adds a **Trade**
+button to FlorisBoard's toolbar (blue, at the right end, where the mic was). Like the emoji button,
+it swaps the keys for the Kallr trading panel; **ABC** goes back to typing. The panel has three tabs:
 
-- **The call:** copy a post link from X (Share → Copy link) or a message with `$PEPE` from
-  Telegram. The header shows the call's after market and the caller's record.
-- **Trade:** pick the token (the call's coin, ETH or BTC), **Swap / Limit (−3/−5/−10%) / TWAP
-  (10 min, 1 h, 4 h)**, the amount ($1/$5/$20) and exits (TP/SL). Typing `copy $20 tp 20% sl 10%`
-  in the chat pre-fills it.
-- **Confirm sheet:** Buy opens a sheet (no browser) with what you pay, what you get, the exits and
-  the approval (this order's USDC only). "Confirm and sign" signs with your **Privy embedded
-  wallet**, the same wallet as the Kallr desk, and places the order on **Definitive Flash** on Base,
-  tagged as a keyboard trade.
-- **Kallr Wallet** (its own launcher icon): sign in with X, see the wallet's USDC and ETH on Base,
-  copy the address to fund it from MetaMask.
-- **A shared contract address:** a token check (GoPlus + Dexscreener) and no Buy for it.
+- **Swap:** the call you copied and the caller's record, then token (the call's coin, ETH or BTC),
+  **Swap / Limit (−3/−5/−10%) / TWAP (10 min, 1 h, 4 h)**, amount ($1/$5/$20/$50) and exits
+  (TP/SL), and Buy. "Powered by Flash · Definitive · on Base".
+- **Positions:** your Flash orders with status and TP/SL, and your USDC and ETH on Base.
+- **Wallet:** your Privy embedded wallet (the same as the Kallr desk), copy the address to fund it
+  from MetaMask, sign in with X.
+
+When you copy a call (X post link, or a `$PEPE` message from Telegram), share a contract or type
+`copy $20 of btc tp 20% sl 10%`, a slim "Trade this call" suggestion appears above the toolbar and
+opens the panel with the order filled in. A shared contract gets a token check and no Buy for it.
+
+Buy opens a confirm sheet (no browser) with what you pay, what you get, the exits and the approval
+(this order's USDC only). "Confirm and sign" signs with the embedded wallet and places the order on
+**Definitive Flash** on Base, tagged as a keyboard trade.
 
 Keys stay with Privy; the keyboard only asks for signatures on orders you confirm. It sends the
 Kallr server only a post link, a contract address or the order phrase being typed, and it shows
@@ -29,9 +32,10 @@ nothing in password fields or incognito mode.
 
 | File | Change |
 | --- | --- |
-| `app/src/main/kotlin/dev/patrickgold/florisboard/ime/kallr/` | New: the panel (`KallrRow.kt`), the server client (`KallrClient.kt`), the Privy wallet (`KallrWallet.kt`), Flash signing (`KallrTrader.kt`), the confirm sheet and wallet screens (`KallrActivities.kt`) |
+| `app/src/main/kotlin/dev/patrickgold/florisboard/ime/kallr/` | New: the trading panel (`KallrPanel.kt`), the suggestion row (`KallrRow.kt`), the server client (`KallrClient.kt`), the Privy wallet (`KallrWallet.kt`), Flash signing (`KallrTrader.kt`), the confirm sheet and wallet screens (`KallrActivities.kt`) |
 | `app/src/main/kotlin/dev/patrickgold/florisboard/FlorisApplication.kt` | Starts Privy once at launch |
-| `app/src/main/kotlin/dev/patrickgold/florisboard/ime/smartbar/Smartbar.kt` | Puts the Kallr row above the Smartbar |
+| `app/src/main/kotlin/dev/patrickgold/florisboard/ime/smartbar/Smartbar.kt` | Puts the Kallr suggestion above the Smartbar |
+| `ime/ImeUiMode.kt`, `ime/text/key/KeyCode.kt`, `ime/text/keyboard/TextKeyData.kt`, `ime/keyboard/KeyboardManager.kt`, `ime/keyboard/ComputingEvaluator.kt`, `ime/smartbar/quickaction/*`, `ime/popup/PopupUiController.kt`, `FlorisImeService.kt`, `res/values/strings.xml` | The Trade key (`IME_UI_MODE_KALLR`), its panel mode, blue chart icon and label, and Trade as the toolbar's sticky action |
 | `app/build.gradle.kts` | App ID `app.kallr.keyboard`, name "Kallr Keyboard", `-PkallrOrigin`, `-PprivyAppId`, `-PprivyClientId`, Privy Android SDK 0.18.0 |
 | `gradle.properties` | Android 9+ (API 28), which Privy's SDK needs |
 | `app/src/main/AndroidManifest.xml`, `res/xml/kallr_network_security.xml` | Internet permission; the confirm sheet, wallet screen and Privy's `kallr://` login redirect; plain HTTP only to the local dev server (debug builds: any host, for a laptop on the same Wi-Fi) |

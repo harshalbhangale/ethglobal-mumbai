@@ -90,7 +90,6 @@ private fun Line(label: String, value: String) {
     }
 }
 
-private fun short(a: String) = "${a.take(6)}…${a.takeLast(4)}"
 
 class KallrTradeActivity : ComponentActivity() {
     companion object {

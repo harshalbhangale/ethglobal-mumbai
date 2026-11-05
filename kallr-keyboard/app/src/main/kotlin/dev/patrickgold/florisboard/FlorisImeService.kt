@@ -679,6 +679,7 @@ class FlorisImeService : LifecycleInputMethodService() {
                                 ImeUiMode.TEXT -> TextInputLayout()
                                 ImeUiMode.MEDIA -> MediaInputLayout()
                                 ImeUiMode.CLIPBOARD -> ClipboardInputLayout()
+                                ImeUiMode.KALLR -> dev.patrickgold.florisboard.ime.kallr.KallrInputLayout()
                             }
                         }
                     }
