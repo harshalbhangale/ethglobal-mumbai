@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ScoredCall } from "./after-market";
-import { callExpiration, callValues, resultValues, SCORING_WINDOW_SECONDS, tradeValues } from "./arkiv";
+import { callExpiration, callSnapshot, callValues, resultValues, SCORING_WINDOW_SECONDS, tradeValues } from "./arkiv";
 import type { FlashOrderInput } from "./definitive";
 
 const NOW = 1_800_000_000;
@@ -78,5 +78,29 @@ describe("calls", () => {
     expect(at(callExpiration(call(), NOW))).toBe(NOW + 3600 + SCORING_WINDOW_SECONDS);
     // A year-long call is capped a day inside Arkiv's ~182.5-day maximum.
     expect(at(callExpiration(call({ expiresAt: NOW + 400 * 86400 }), NOW))).toBe(NOW + 181 * 86400);
+  });
+});
+
+describe("Swarm snapshots", () => {
+  const REF = "a".repeat(64);
+
+  it("keeps the snapshot reference on both the call and its result", () => {
+    expect(callValues(call(), REF)).toMatchObject({ swarmRef: REF });
+    expect(resultValues(call({ status: "miss", returnBps: -120 }), REF)).toMatchObject({ swarmRef: REF, status: "miss" });
+    expect(callValues(call())).not.toHaveProperty("swarmRef");
+  });
+
+  it("snapshots the post as seen, with the call Kallr read from it", () => {
+    const s = callSnapshot(call(), "$ETH to 4k this week", NOW);
+    expect(s).toMatchObject({
+      kind: "kallr.call-snapshot",
+      url: "https://x.com/KOL/status/1850000000000000000",
+      caller: "kol",
+      text: "$ETH to 4k this week",
+      asset: "ETH",
+      direction: "up",
+      entry: 3412.5,
+      capturedAt: NOW,
+    });
   });
 });

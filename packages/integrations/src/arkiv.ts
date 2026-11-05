@@ -50,6 +50,8 @@ export const Calls = defineSchema("kallr.calls", {
   horizonStated: bool(),
   /** Chainlink price at the minute it was posted; absent when unpriced. */
   entry: dec().optional(),
+  /** Swarm reference of the post snapshot (text and link as seen when priced), so a deleted post stays provable. */
+  swarmRef: str().optional(),
 });
 
 /** How a call ended. Anyone may extend it so a caller's record outlives Arkiv's max lifetime; nobody can edit it. */
@@ -66,6 +68,8 @@ export const CallResults = defineSchema("kallr.call-results", {
   exit: dec(),
   postedAt: u64(),
   deadline: u64().indexed(),
+  /** The same Swarm snapshot as the call, kept for the result's ~182-day life. */
+  swarmRef: str().optional(),
 });
 
 export type TradeSource = "desk" | "extension" | "keyboard";
@@ -96,8 +100,9 @@ export function tradeValues(input: FlashOrderInput, orderId: string, context: Tr
   };
 }
 
-export function callValues(call: ScoredCall) {
+export function callValues(call: ScoredCall, swarmRef?: string | null) {
   return {
+    ...(swarmRef ? { swarmRef } : {}),
     postId: call.postId,
     caller: call.handle.toLowerCase(),
     asset: call.asset,
@@ -110,10 +115,11 @@ export function callValues(call: ScoredCall) {
 }
 
 /** Values for a settled call, or null while it is open or unpriced. */
-export function resultValues(call: ScoredCall) {
+export function resultValues(call: ScoredCall, swarmRef?: string | null) {
   if (call.status !== "hit" && call.status !== "miss" && call.status !== "flat") return null;
   if (call.entry === null || call.last === null || call.returnBps === null) return null;
   return {
+    ...(swarmRef ? { swarmRef } : {}),
     postId: call.postId,
     caller: call.handle.toLowerCase(),
     asset: call.asset,
@@ -176,6 +182,38 @@ export async function readDueCalls(client: ArkivPublic, writer: Hex, nowSeconds:
       .limit(100)
       .fetch()
   ).entities;
+}
+
+/** The stored call for a post, with its Swarm snapshot reference, or null. */
+export async function findCall(client: ArkivPublic, writer: Hex, postId: string) {
+  const page = await client
+    .select({ $key: true, swarmRef: true })
+    .from(Calls)
+    .createdBy(writer)
+    .where(eq("postId", postId))
+    .limit(1)
+    .fetch();
+  const row = page.entities[0];
+  return row ? { key: row.$key, swarmRef: row.swarmRef?.value ?? null } : null;
+}
+
+/** What Kallr saves to Swarm when it first prices a call: the post as seen, and the call it read. */
+export function callSnapshot(call: ScoredCall, text: string, capturedAt: number) {
+  return {
+    kind: "kallr.call-snapshot",
+    version: 1,
+    postId: call.postId,
+    url: `https://x.com/${call.handle}/status/${call.postId}`,
+    caller: call.handle.toLowerCase(),
+    text: text.slice(0, 2000),
+    asset: call.asset,
+    direction: call.direction,
+    postedAt: call.postedAt,
+    deadline: call.expiresAt,
+    entry: call.entry,
+    priceSource: "chainlink-base",
+    capturedAt,
+  };
 }
 
 export async function hasCall(client: ArkivPublic, writer: Hex, postId: string) {

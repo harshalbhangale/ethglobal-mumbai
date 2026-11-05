@@ -223,6 +223,8 @@ function Dashboard({ session }: { session: Session | null }) {
 
         <CallerBoard results={results} openCalls={openCalls} />
 
+        <CallArchive results={results} openCalls={openCalls} explorer={config?.explorer ?? ""} />
+
         {config?.writer && (
           <section className="rounded-2xl border border-rule bg-card p-6 text-sm text-slate">
             <h2 className="font-display text-base font-semibold text-ink">Check it yourself</h2>
@@ -323,6 +325,89 @@ function CallerBoard({ results, openCalls }: { results: readonly ResultRow[] | n
             </tbody>
           </table>
         </div>
+      )}
+    </section>
+  );
+}
+
+const SWARM_GATEWAY = "https://api.gateway.ethswarm.org";
+
+/**
+ * Recent calls and results with their Swarm snapshots: the post as Kallr saw it when it priced the
+ * call, stored on Swarm and referenced from the Arkiv entity, so it stays provable if the post goes.
+ */
+function CallArchive({
+  results,
+  openCalls,
+  explorer,
+}: {
+  results: readonly ResultRow[] | null;
+  openCalls: readonly CallRow[] | null;
+  explorer: string;
+}) {
+  const rows = [
+    ...(openCalls ?? []).map((c) => ({
+      key: c.$key,
+      postId: c.postId.value,
+      caller: c.caller.value,
+      line: `$${c.asset.value} ${c.direction.value} · open until ${when(c.deadline.value)}`,
+      swarmRef: c.swarmRef?.value ?? null,
+      at: Number(c.postedAt.value),
+    })),
+    ...(results ?? []).map((r) => ({
+      key: r.$key,
+      postId: r.postId.value,
+      caller: r.caller.value,
+      line: `$${r.asset.value} ${r.direction.value} · ${r.status.value} ${pct(Number(r.returnBps.value))}`,
+      swarmRef: r.swarmRef?.value ?? null,
+      at: Number(r.postedAt.value),
+    })),
+  ]
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 12);
+
+  return (
+    <section aria-labelledby="archive-heading" className="rounded-2xl border border-rule bg-card p-6">
+      <h2 id="archive-heading" className="font-display text-lg font-semibold">
+        Call archive
+      </h2>
+      <p className="mt-1 text-sm text-slate">
+        Each call is snapshotted to Swarm when Kallr first prices it, and its Arkiv record keeps the Swarm reference, so a
+        deleted post stays provable.
+      </p>
+      {rows.length === 0 && <p className="mt-6 text-sm text-slate">No calls archived yet.</p>}
+      {rows.length > 0 && (
+        <ul className="mt-4 divide-y divide-rule text-sm">
+          {rows.map((r) => (
+            <li key={r.key} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                <a
+                  href={`https://x.com/${r.caller}/status/${r.postId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold hover:underline"
+                >
+                  @{r.caller}
+                </a>{" "}
+                <span className="text-slate tabular-nums">{r.line}</span>
+              </span>
+              <span className="flex gap-4 text-xs text-slate">
+                {r.swarmRef ? (
+                  <a className="hover:text-ink" href={`${SWARM_GATEWAY}/bzz/${r.swarmRef}/`} target="_blank" rel="noreferrer">
+                    Snapshot on Swarm ↗
+                  </a>
+                ) : (
+                  <span>No snapshot</span>
+                )}
+                {explorer && (
+                  <a className="hover:text-ink" href={`${explorer}/entity/${r.key}`} target="_blank" rel="noreferrer">
+                    Arkiv record ↗
+                  </a>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

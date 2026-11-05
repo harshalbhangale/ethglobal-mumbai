@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     fetchPost: (id) => fetchPublicPost(id),
     score: async (p) => {
       const call = await scoreCall(p, nowSeconds);
-      if (call) after(() => recordCall(call));
+      if (call) after(() => recordCall(call, p.text));
       return call;
     },
     checkToken: (address) => checkToken(address),

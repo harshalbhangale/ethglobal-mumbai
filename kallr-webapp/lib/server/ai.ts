@@ -67,7 +67,9 @@ const SCHEMA = {
 const SYSTEM = `You read short crypto messages from X posts, Telegram chats or spoken orders and extract structured fields.
 Only use what the text says. Never invent a contract address, price or timeframe. Tickers are uppercase without $.
 "ape", "send it", "long", "buying", "moon" mean up; "short", "dump", "sell", "rug" mean down.
-Fill "order" only when the text is an instruction to trade ("buy $20 of this", "get me 50 bucks of degen if it dips 10%").`;
+Fill "order" only when the text is an instruction to trade ("buy $20 of this", "get me 50 bucks of degen if it dips 10%").
+Spoken orders come from speech-to-text, which can turn filler words into coin names ("20 dollars ADA DEGEN" was "20 dollars of a DEGEN").
+When an order names two coins, the one right before the price or condition is usually meant; never trade two coins from one order.`;
 
 export const aiEnabled = Boolean(OPENAI_KEY);
 

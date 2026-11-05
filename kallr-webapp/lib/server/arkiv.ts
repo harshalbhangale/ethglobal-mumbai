@@ -8,7 +8,8 @@ import {
   Calls,
   callExpiration,
   callValues,
-  hasCall,
+  callSnapshot,
+  findCall,
   hasResult,
   readDueCalls,
   resultValues,
@@ -19,6 +20,7 @@ import {
 import type { CallAsset } from "@kallr/integrations/calls";
 import type { FlashOrderInput } from "@kallr/integrations/definitive";
 import { type Hex, http, isHex } from "viem";
+import { uploadJson } from "./swarm";
 import { privateKeyToAccount } from "viem/accounts";
 
 /**
@@ -67,24 +69,40 @@ export function recordTrade(input: FlashOrderInput, orderId: string, context: Tr
   });
 }
 
-/** The call while it's open, and its result once it settles. Each is written once. */
-export function recordCall(call: ScoredCall) {
+/** Swarm references by post, so a failed Arkiv write doesn't upload the same snapshot again. */
+const snapshots = new Map<string, string>();
+
+/**
+ * The call while it's open, and its result once it settles. Each is written once. The first time we
+ * see a call with its post text, a snapshot of the post goes to Swarm and both entities keep its
+ * reference, so the call stays provable after the post is deleted.
+ */
+export function recordCall(call: ScoredCall, text?: string) {
   if (!writer || call.status === "unpriced") return Promise.resolve();
   const w = writer;
   return enqueue(`call ${call.postId}`, async () => {
     const now = Math.floor(Date.now() / 1000);
-    if (call.expiresAt + 3600 > now && !(await hasCall(w.reader, w.address, call.postId))) {
-      await w.wallet.createEntity(Calls, callValues(call), {
+    const existing = await findCall(w.reader, w.address, call.postId);
+    let swarmRef = existing?.swarmRef ?? snapshots.get(call.postId) ?? null;
+    if (!existing && call.expiresAt + 3600 > now) {
+      if (text && !swarmRef) {
+        swarmRef = await uploadJson(`kallr-call-${call.postId}.json`, callSnapshot(call, text, now)).catch((err) => {
+          console.error("[swarm] snapshot failed:", err instanceof Error ? err.message : err);
+          return null;
+        });
+        if (swarmRef) snapshots.set(call.postId, swarmRef);
+      }
+      await w.wallet.createEntity(Calls, callValues(call, swarmRef), {
         expiration: callExpiration(call, now),
         flags: { readonly: true },
       });
     }
-    await writeResult(w, call);
+    await writeResult(w, call, swarmRef);
   });
 }
 
-async function writeResult(w: NonNullable<typeof writer>, call: ScoredCall) {
-  const values = resultValues(call);
+async function writeResult(w: NonNullable<typeof writer>, call: ScoredCall, swarmRef?: string | null) {
+  const values = resultValues(call, swarmRef);
   if (!values || (await hasResult(w.reader, w.address, call.postId))) return;
   await w.wallet.createEntity(CallResults, values, {
     expiration: ExpirationTime.max(),
@@ -112,7 +130,8 @@ export async function settleDueCalls(nowSeconds: number) {
       nowSeconds,
     ).catch(() => null);
     if (!scored || !resultValues(scored)) continue;
-    await enqueue(`result ${scored.postId}`, () => writeResult(w, scored));
+    const swarmRef = c.swarmRef?.value ?? null;
+    await enqueue(`result ${scored.postId}`, () => writeResult(w, scored, swarmRef));
     settled++;
   }
   return { settled, due: due.length, configured: true };

@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     evmRef ? cachedTokenCheck(evmRef.address) : Promise.resolve(null),
   ]);
   // Every call we price goes to Arkiv once (open, then its result), after the response.
-  if (call) after(() => recordCall(call));
+  if (call) after(() => recordCall(call, current.text));
   const others = history.filter((h) => h.postId !== current.postId);
   const scored: ScoredCall[] = [];
   for (const h of others) {
