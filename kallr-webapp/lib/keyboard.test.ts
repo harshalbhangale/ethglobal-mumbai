@@ -143,6 +143,26 @@ describe("AI layer and fake contracts", () => {
     expect(r.trade?.symbol).toBe("DEGEN");
   });
 
+  it("shows no direction when the AI says the message isn't a call", async () => {
+    const r = await keyboardLookup(
+      { text: "Was I long the $PEPE breakout? lol no" },
+      deps({
+        readCall: vi.fn(async () => read({ isCall: false, direction: "down", timeframe: null, summary: "Joke about missing a PEPE long." })),
+        findTradeToken: vi.fn(async () => pepe),
+      }),
+    );
+    expect(r.ai).toEqual({ summary: "Joke about missing a PEPE long.", symbol: "PEPE", direction: null, timeframe: null });
+  });
+
+  it("still fills an order the AI doesn't count as a call", async () => {
+    const order = { kind: "market" as const, usd: 20, limitPct: null, twapMinutes: null, tpPct: null, slPct: null };
+    const r = await keyboardLookup(
+      { typed: "buy 20 bucks of pepe" },
+      deps({ readCall: vi.fn(async () => read({ isCall: false, order })), findTradeToken: vi.fn(async () => pepe) }),
+    );
+    expect(r.prefill).toEqual(order);
+  });
+
   it("doesn't send ordinary chat to the AI", async () => {
     const readCall = vi.fn(async () => read());
     await keyboardLookup({ text: "see you at dinner" }, deps({ readCall }));

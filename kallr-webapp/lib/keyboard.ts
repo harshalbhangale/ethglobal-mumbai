@@ -174,7 +174,13 @@ export async function keyboardLookup(req: KeyboardRequest, deps: KeyboardDeps): 
   const source = postText || (link ? "" : text);
   const read = source && deps.readCall && (postText || looksCrypto(source)) ? await deps.readCall(source).catch(() => null) : null;
   if (read) {
-    out.ai = { summary: read.summary, symbol: read.symbol, direction: read.direction, timeframe: read.timeframe };
+    // Sarcasm, questions and commentary still name a coin, but they aren't a view on it: no direction.
+    out.ai = {
+      summary: read.summary,
+      symbol: read.symbol,
+      direction: read.isCall ? read.direction : null,
+      timeframe: read.isCall ? read.timeframe : null,
+    };
     if (read.order) out.prefill = read.order;
   }
 
