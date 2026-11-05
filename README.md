@@ -123,6 +123,22 @@ open calls carry a [Swarm](https://www.ethswarm.org) snapshot of the post in `sw
 | [@inmortalcrypto: "accumulate … $BTC"](https://x.com/inmortalcrypto/status/2112240301758964212) | BTC up · hit +1.23% (`kallr.call-results`) | [`0xf597d7db…`](https://rabdi.explorer.arkiv.network/tx/0xf597d7db8fef9635721523a6894b33b17927fce93439b3a97177d736a0d90a57) | settled before we saw it |
 | [@inmortalcrypto: "below it, but not for long $BTC"](https://x.com/inmortalcrypto/status/2107186308346974251) | BTC up · miss −0.07% (`kallr.call-results`) | [`0xe685ce07…`](https://rabdi.explorer.arkiv.network/tx/0xe685ce075cd42513251fc2b3f59d11127fafafc8c7be4fe4c98b43fa77719a99) | settled before we saw it |
 
+Then, with the AI reading posts (`readCall`, gpt-4.1-mini; it agreed with a plain reading on 23 of 26 real posts
+against 14 for keywords), the same 26 posts went through the live API. It accepted 12 and wrote these:
+
+| Post on X | Read as | Arkiv transaction |
+| --- | --- | --- |
+| [@AltcoinSherpa: "still think this is a bounce area for bitcoin"](https://x.com/AltcoinSherpa/status/2118389790379028665) | BTC up · open, [Swarm `2695c6b3…`](https://api.gateway.ethswarm.org/bzz/2695c6b3364bdea0bd2ca5f7acc8740e46f55641117c9027868ccc7da0312f45/) | [`0x6392cb48…`](https://rabdi.explorer.arkiv.network/tx/0x6392cb481dceb8edc08f21761f1ab1f40ef0fd0916f0b7f792a799f6c0515fca) |
+| [@CryptoKaleo: "$ETH Up only."](https://x.com/CryptoKaleo/status/2118005120076234811) | ETH up · miss −6.47% | [`0xe1488385…`](https://rabdi.explorer.arkiv.network/tx/0xe14883858ab96299246ca9bf4b4bbcecc4c97f3336aeebb1e5087bcdca80daf4) |
+| [@CryptoKaleo: "$100K+ IS A MAGNET"](https://x.com/CryptoKaleo/status/2118004723597169006) | BTC up · miss −5.11% | [`0x5346935d…`](https://rabdi.explorer.arkiv.network/tx/0x5346935d9436733485fd9be452f14d3ba05d18a38b60cccf1c7dad0ede1af769) |
+| [@AltcoinSherpa: "$BTC in the short term, eyeing 82k"](https://x.com/AltcoinSherpa/status/2117998152859136080) | BTC up · miss −4.45% | [`0x5850e79a…`](https://rabdi.explorer.arkiv.network/tx/0x5850e79a8497b8194c4f6f96a5bdd0af1ff9df6434f86a767728e72f25405f8d) |
+| [@AltcoinSherpa: "I think 82k is next for bitcoin"](https://x.com/AltcoinSherpa/status/2117990595591594156) | BTC up · miss −0.18% | [`0x1ebe9530…`](https://rabdi.explorer.arkiv.network/tx/0x1ebe95302e4c094d6b25ae765edfd4a6b97683012ef04085c632dff588d99952) |
+| [@inmortalcrypto: "2.8k next, imo $ETH"](https://x.com/inmortalcrypto/status/2107875695317950568) | ETH up · miss −5.49% | [`0x57e30b5e…`](https://rabdi.explorer.arkiv.network/tx/0x57e30b5ede2e0c67d0ac7e4b44f1616bcd264ee494e659f751017712c9d4331f) |
+| [@inmortalcrypto: "Run it back. Turbo please. $ETH"](https://x.com/inmortalcrypto/status/2110859502371410195) | ETH up · miss −1.55% | [`0x6f57554b…`](https://rabdi.explorer.arkiv.network/tx/0x6f57554b421803a738d04beb4be013cb83327c035cab4b6ebe5361a1ca7fdf43) |
+
+The other five it accepted were already on Arkiv (above). It rejected sarcasm ("Was I long the BTC breakout? No."),
+looking back ("$BTC dropped 50%"), and commentary ("Bitcoin is now down -13%", orderbook stats).
+
 One write was wrong and is deleted: @AltcoinSherpa's "Looking decent for $BTC in the short term" was read as a short
 because of "short term" (fixed in `packages/integrations/src/signals.ts`; deletion
 [`0xf44153ff…`](https://rabdi.explorer.arkiv.network/tx/0xf44153ff5a8915142f65b56596908f2cf37a5c9948b8d3082fda444379169802)).
