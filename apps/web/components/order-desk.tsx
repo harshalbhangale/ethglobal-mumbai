@@ -8,7 +8,7 @@ import {
 import type { ConnectedWallet } from "@privy-io/react-auth";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getUsdPrice, hasUsdFeed, type PricedAsset } from "@/lib/chain";
-import { listFlashOrders, type PlaceStep, placeFlashOrder, stepLabel } from "@/lib/flash-client";
+import { listFlashOrders, type OrderContext, type PlaceStep, placeFlashOrder, stepLabel } from "@/lib/flash-client";
 import { toFlashOrder } from "@/lib/flash-order";
 import { describeOrder, type ExitPrices, exitPrices, type ParsedOrder, parseOrder } from "@aftermarkets/domain/order";
 
@@ -64,6 +64,7 @@ type Status = { kind: "idle" } | { kind: "working"; step: PlaceStep } | { kind: 
 export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | null; onPlaced: () => void }) {
   const [text, setText] = useState("");
   const [source, setSource] = useState<{ postId: string; caller: string | null } | null>(null);
+  const [via, setVia] = useState<OrderContext["source"]>("desk");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const prices = useUsdPrices();
 
@@ -73,6 +74,8 @@ export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | 
     const q = new URLSearchParams(window.location.search);
     const fromLink = q.get("order");
     if (fromLink) setText(fromLink.slice(0, 200));
+    const src = q.get("src");
+    if (src === "keyboard" || src === "extension") setVia(src);
     const post = q.get("post");
     if (post && /^[0-9]{1,30}$/.test(post)) {
       const caller = q.get("caller");
@@ -118,7 +121,10 @@ export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | 
           e.preventDefault();
           if (!flash?.ok || !wallet || busy) return;
           try {
-            const res = await placeFlashOrder(flash.input, wallet, (step) => setStatus({ kind: "working", step }));
+            const res = await placeFlashOrder(flash.input, wallet, (step) => setStatus({ kind: "working", step }), {
+              source: via,
+              caller: source?.caller ?? null,
+            });
             setStatus({ kind: "done", orderId: res.orderId });
             setText("");
             onPlaced();
@@ -228,7 +234,7 @@ function Cell({ label, value, tone, wide }: { label: string; value: string; tone
 const symbolOf = (address: string) =>
   Object.values(FLASH_BASE_ASSETS).find((a) => a.address.toLowerCase() === address.toLowerCase())?.symbol ?? "token";
 
-const statusText: Record<string, string> = {
+export const statusText: Record<string, string> = {
   ORDER_STATUS_PENDING: "Pending",
   ORDER_STATUS_ACCEPTED: "Working",
   ORDER_STATUS_PARTIALLY_FILLED: "Partly filled",
@@ -238,7 +244,7 @@ const statusText: Record<string, string> = {
   ORDER_STATUS_TERMINATED: "Ended",
 };
 
-const bracketText: Record<string, string> = {
+export const bracketText: Record<string, string> = {
   pending_activation: "Exits arm on first fill",
   active: "Exits armed",
   never_activated: "Exits never armed",

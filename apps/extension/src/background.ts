@@ -19,7 +19,7 @@ type Request =
   | { type: "observe-follows"; viewer: string; observations: Array<{ handle: string; following: boolean }> }
   | { type: "mirror"; enabled?: boolean }
   | { type: "flash-quote"; order: unknown }
-  | { type: "flash-order"; order: unknown; signatures: unknown };
+  | { type: "flash-order"; order: unknown; signatures: unknown; context?: unknown };
 
 const HANDLE = /^[a-z0-9_]{1,15}$/;
 
@@ -109,7 +109,11 @@ chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
   } else if (message?.type === "flash-quote" && fromX) {
     job = flashCall("/api/flash/quote", { order: message.order });
   } else if (message?.type === "flash-order" && fromX) {
-    job = flashCall("/api/flash/order", { order: message.order, signatures: message.signatures });
+    job = flashCall("/api/flash/order", {
+      order: message.order,
+      signatures: message.signatures,
+      context: message.context,
+    });
   } else if (message?.type === "observe-follows" && fromX && Array.isArray(message.observations)) {
     const observations = message.observations.filter(
       (o) => o && typeof o.handle === "string" && typeof o.following === "boolean",

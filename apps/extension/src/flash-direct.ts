@@ -35,6 +35,8 @@ export type CardOrder = {
   /** Live USD price, for the exit trigger prices. */
   price: number;
   postId?: string;
+  /** The caller whose post this card sits under, for the trades dashboard. */
+  caller?: string;
 };
 
 /** The order the server will quote, or a reason it can't be placed. */
@@ -116,7 +118,11 @@ export async function placeOnX(o: CardOrder, onStep: (step: Step) => void) {
   }
 
   onStep("submitting");
-  const res = await api<{ orderId?: string; attachedBracket?: { status: string } | null }>("flash-order", { order, signatures });
+  const res = await api<{ orderId?: string; attachedBracket?: { status: string } | null }>("flash-order", {
+    order,
+    signatures,
+    context: { source: "extension", caller: o.caller ?? null },
+  });
   if (!res.orderId) throw new Error("Flash didn't return an order ID.");
   return { orderId: res.orderId, from, exits: res.attachedBracket?.status ?? null, received: quote.to.amount };
 }

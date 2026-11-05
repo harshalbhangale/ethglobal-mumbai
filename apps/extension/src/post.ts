@@ -50,6 +50,7 @@ export function deskOrderUrl(origin: string, order: string, post: { handle: stri
   q.set("order", order);
   q.set("post", post.postId);
   q.set("caller", post.handle);
+  q.set("src", "extension");
   return `${origin}/app?${q}`;
 }
 
