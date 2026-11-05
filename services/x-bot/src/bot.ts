@@ -86,10 +86,16 @@ export async function replyFor(tag: Tag, deps: BotDeps): Promise<string | null> 
   if (COMMAND.test(command)) {
     const parsed = parseOrder(command);
     if (!parsed.ok) return fit([`@${tag.fromHandle} ${parsed.error}`, `Like: "copy $2, TP 10%, SL 5%"`]);
-    const callAsset = tag.parent
-      ? heuristicSignal({ postId: tag.parent.postId, handle: tag.parent.handle, text: tag.parent.text }).asset
+    const parentSignal = tag.parent
+      ? heuristicSignal({ postId: tag.parent.postId, handle: tag.parent.handle, text: tag.parent.text })
       : null;
-    const order = withCallAsset(parsed.order, callAsset);
+    // A post that shares a contract is about that contract; a ticker copy next to it could be a scam's bait.
+    if (parentSignal?.tokenReferences.length)
+      return fit([
+        `@${tag.fromHandle} This post shares a contract address, so I won't copy a ticker trade from it.`,
+        "Check the contract first: unverified tokens are where most rugs happen.",
+      ]);
+    const order = withCallAsset(parsed.order, parentSignal?.asset ?? null);
     const exits =
       order.takeProfitPct !== null || order.stopLossPct !== null
         ? `, ${[

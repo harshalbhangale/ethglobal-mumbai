@@ -1,8 +1,9 @@
 import type { Answer } from "./call-view";
 import { addFollowBadge } from "./creator-badge";
-import { send, shadowHost } from "./dom";
+import { el, send, shadowHost } from "./dom";
 import { flashCard } from "./flash-card";
 import { identityFromHref, mightBeCall } from "./post";
+import { TOKEN_CARD_CSS, tokenCheckCard } from "./token-card";
 import { findXTicker, mountTickerButton } from "./x-ticker";
 
 /**
@@ -45,6 +46,19 @@ export async function decorate(article: HTMLElement) {
     ? await send<Answer>({ type: "after-market", handle: post.handle, post: { postId: post.postId, text: post.text } })
     : null;
   if (!article.isConnected || handled.get(article) !== key) return;
+
+  // A post that shares a contract is about that contract: show its safety checks and no trade
+  // card, so a ticker copy is never offered next to a possibly fake token.
+  const tokenCheck = answer?.checks?.token ?? null;
+  if (tokenCheck) {
+    const { host, root } = shadowHost("aftermarkets-host");
+    host.dataset.postId = post.postId;
+    root.append(el("style", {}, TOKEN_CARD_CSS), tokenCheckCard(tokenCheck));
+    article.querySelector(".aftermarkets-host")?.remove();
+    post.textNode.after(host);
+    return;
+  }
+
   const asset = answer?.call?.asset ?? ticker?.asset;
   if (!asset) return;
 
