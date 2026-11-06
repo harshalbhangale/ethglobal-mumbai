@@ -12,6 +12,12 @@ Crypto runs on calls. Someone posts "$ETH, be more bullish" to 300,000 followers
 it becomes a screenshot and an ad for a paid group. If it fails, the post quietly disappears. Followers only see
 the wins, and in the replies a "contract address" for the coin is waiting: one wrong paste and the money is gone.
 
+The biggest version of this so far: in February 2025, Argentina's president posted the $LIBRA memecoin and its
+contract address on X. It shot up to billions, then crashed more than 90%; 86% of the people who bought it lost
+money, about $251M, while insider wallets cashed out. Hours later
+[the post was deleted](https://www.web3isgoinggreat.com/single/milei-memecoin-promotion). Smaller KOLs do the
+same thing every week: shill, dump, delete, and the next call starts from a clean timeline.
+
 We had already built an extension that let you trade straight from a post on X. Watching people use it, the
 trade was the easy part. The first question was always: *is this person ever right?* Nobody could answer,
 because the only record lives on the caller's own timeline, where they decide what survives.
@@ -30,7 +36,9 @@ One product, wherever calls show up:
 
 ## Architecture
 
-<p align="center"><img src="docs/architecture.svg" alt="Three apps talk to one Kall server on Vercel, which trades on Definitive Flash, prices and checks with Chainlink (price feeds and CRE), and keeps receipts on Arkiv with post snapshots on Swarm." /></p>
+<p align="center"><img src="docs/architecture.png" alt="Kall Markets architecture: calls from X and Telegram reach the extension, keyboard and web app; one Kall server on Vercel; built on Definitive Flash, Chainlink, Arkiv (Rabdi testnet) and Swarm; the real transactions." /></p>
+
+Editable source: [`docs/architecture.excalidraw`](docs/architecture.excalidraw) (open it at excalidraw.com).
 
 ```mermaid
 flowchart TB
