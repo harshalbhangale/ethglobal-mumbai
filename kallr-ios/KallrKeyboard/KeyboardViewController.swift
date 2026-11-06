@@ -12,7 +12,7 @@ final class KeyboardViewController: UIInputViewController {
     private var height: NSLayoutConstraint?
     /** Typing is the iPhone keyboard's height plus the strip; the panel needs more room. */
     static let typingHeight: CGFloat = 260
-    static let panelHeight: CGFloat = 320
+    static let panelHeight: CGFloat = 336
 
     override func viewDidLoad() {
         super.viewDidLoad()

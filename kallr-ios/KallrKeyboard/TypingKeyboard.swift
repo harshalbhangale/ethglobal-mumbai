@@ -70,7 +70,7 @@ private struct SuggestionStrip: View {
 }
 
 /** A strip this short would be blurred whole by the newer iOS scroll-edge effect; keep it sharp. */
-private struct NoEdgeBlur: ViewModifier {
+struct NoEdgeBlur: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content.scrollEdgeEffectHidden(true, for: .all)

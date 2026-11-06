@@ -56,7 +56,11 @@ final class KeyboardModel: ObservableObject {
     // Trade
     @Published var asset = "ETH"
     @Published var usd = "5"
-    @Published var exits: Exits = .tp10
+    /** Take-profit and stop-loss, as percents from where the order buys; set under Advanced. */
+    @Published var tpPct = 10.0
+    @Published var slPct = 5.0
+    @Published var exitsOn = true
+    @Published var advancedOpen = false
     @Published var kind = Kind.market
     @Published var limitPct = -5.0
     @Published var twapMinutes = 60
@@ -110,9 +114,37 @@ final class KeyboardModel: ObservableObject {
         }
     }
 
-    enum Exits: String, CaseIterable {
-        case none = "No exits", tp10 = "TP 10% · SL 5%", tp20 = "TP 20% · SL 10%"
-        var pcts: (Double, Double)? { self == .none ? nil : self == .tp10 ? (10, 5) : (20, 10) }
+    // MARK: Swap view
+
+    var price: Double? { feed?.prices[asset] ?? nil }
+    /** Where the order buys: the live price, or the limit below it. */
+    var entryPrice: Double? { price.map { kind == .limit ? $0 * (1 + limitPct / 100) : $0 } }
+    /** About how much of the coin the dollars buy, before fees. */
+    var estimate: Double? {
+        guard let n = Double(usd), n > 0, let e = entryPrice, e > 0 else { return nil }
+        return n / e
+    }
+    var priceLine: String {
+        guard let p = price else { return "Reading the price…" }
+        switch kind {
+        case .market: return "1 \(asset) = $" + Self.money(p)
+        case .limit: return "Buys at $" + Self.money(entryPrice ?? p) + " (−\(Kallr.fmt(-limitPct))%)"
+        case .twap: return "Over " + (twapMinutes >= 60 ? "\(twapMinutes / 60)h" : "\(twapMinutes)m") + " · now $" + Self.money(p)
+        }
+    }
+    var exitsSummary: String { exitsOn ? "TP +\(Kallr.fmt(tpPct))% · SL −\(Kallr.fmt(slPct))%" : "Add TP / SL" }
+    var exitsPriceLine: String? {
+        guard exitsOn, let e = entryPrice else { return nil }
+        return "Sells at $\(Self.money(e * (1 + tpPct / 100))) up, or $\(Self.money(e * (1 - slPct / 100))) down"
+    }
+    static func money(_ v: Double) -> String { v.formatted(.number.precision(.fractionLength(v >= 100 ? 0 : 2))) }
+
+    /** MAX: all the USDC the Kall wallet holds, up to the per-order cap. */
+    func useMax() {
+        guard let usdc = wallet?.usdcValue else { return }
+        let most = (min(usdc, wallet?.maxUsd ?? 25) * 100).rounded(.down) / 100
+        if most > 0 { usd = String(format: "%.2f", most) }
+        freshEntry = false
     }
 
     init(controller: KeyboardViewController) { self.controller = controller }
@@ -284,8 +316,8 @@ final class KeyboardModel: ObservableObject {
             usd: usd,
             limitPct: kind == .limit ? limitPct : nil,
             twapMinutes: kind == .twap ? twapMinutes : nil,
-            tpPct: exits.pcts?.0,
-            slPct: exits.pcts?.1,
+            tpPct: exitsOn ? tpPct : nil,
+            slPct: exitsOn ? slPct : nil,
             postId: source?.postId,
             caller: source?.handle
         )
@@ -298,7 +330,7 @@ final class KeyboardModel: ObservableObject {
         }
         if let p = r.prefill {
             if let v = p.usd { usd = Kallr.fmt(v) }
-            if let tp = p.tpPct, let sl = p.slPct { exits = tp >= 20 ? .tp20 : (tp > 0 && sl > 0 ? .tp10 : .none) }
+            if let tp = p.tpPct, let sl = p.slPct, tp > 0, sl > 0 { exitsOn = true; tpPct = tp; slPct = sl }
         }
         if let post = r.post { source = (post.handle, post.postId, r.call.map { "@\(post.handle) · \($0.line)" } ?? "@\(post.handle)") }
     }
@@ -696,53 +728,59 @@ private struct TradeTab: View {
         }
     }
 
+    /** Like a swap: what you pay in dollars, what you get, the order type, and Advanced folded away. */
     private var form: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            AmountBar(model: model, editing: false)
-            HStack(spacing: 6) {
-                ForEach(["1", "5", "10", "25"], id: \.self) { a in Chip(label: "$\(a)", on: model.usd == a) { model.tap(); model.usd = a } }
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(KeyboardModel.Kind.allCases, id: \.self) { k in Chip(label: k.rawValue, on: model.kind == k) { model.tap(); model.kind = k } }
-                    Rectangle().fill(Kallr.hairline).frame(width: 1, height: 20).padding(.horizontal, 2)
-                    switch model.kind {
-                    case .market:
-                        ForEach(KeyboardModel.Exits.allCases, id: \.self) { e in Chip(label: e.rawValue, on: model.exits == e) { model.tap(); model.exits = e } }
-                    case .limit:
-                        ForEach([-3.0, -5.0, -10.0], id: \.self) { p in Chip(label: "\(Kallr.fmt(p))%", on: model.limitPct == p) { model.tap(); model.limitPct = p } }
-                    case .twap:
-                        ForEach([(10, "10 min"), (60, "1 hour"), (240, "4 hours")], id: \.0) { m in Chip(label: m.1, on: model.twapMinutes == m.0) { model.tap(); model.twapMinutes = m.0 } }
+        VStack(spacing: 6) {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 6) {
+                    ZStack {
+                        VStack(spacing: 4) {
+                            PayBox(model: model, editing: false)
+                            GetBox(model: model)
+                        }
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.bone)
+                            .frame(width: 28, height: 28)
+                            .background(Kallr.keyDark, in: RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Kallr.black, lineWidth: 3))
+                            .offset(y: (PayBox.height - GetBox.height) / 2)
+                            .allowsHitTesting(false)
+                    }
+                    OrderTypeRow(model: model)
+                    if model.advancedOpen {
+                        AdvancedPanel(model: model).transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
+                .padding(.horizontal, 8)
+                .padding(.top, 2)
             }
-            if model.kind != .market {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(KeyboardModel.Exits.allCases, id: \.self) { e in Chip(label: e.rawValue, on: model.exits == e) { model.tap(); model.exits = e } }
-                    }
+            .modifier(NoEdgeBlur())
+            VStack(alignment: .leading, spacing: 5) {
+                // The post this trade copies, just above the footer.
+                if let source = model.source {
+                    Label(source.line, systemImage: "quote.bubble.fill")
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
+                        .labelStyle(PostLabel())
                 }
+                status
+                Button { model.review() } label: {
+                    Text(model.busy ? "GETTING A QUOTE…" : model.blocked ?? reviewTitle)
+                        .font(.system(size: 15, weight: .heavy)).tracking(0.5).lineLimit(1).minimumScaleFactor(0.75)
+                        .foregroundStyle(model.blocked == nil ? Kallr.black : Kallr.muted)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(model.blocked == nil ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(Press())
+                .disabled(model.blocked != nil || model.busy)
             }
-            Spacer(minLength: 0)
-            // The post this trade copies, just above the footer.
-            if let source = model.source {
-                Label(source.line, systemImage: "quote.bubble.fill")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
-                    .labelStyle(PostLabel())
-            }
-            status
-            Button { model.review() } label: {
-                Text(model.busy ? "GETTING A QUOTE…" : model.blocked ?? "REVIEW $\(model.usd) OF \(model.asset)  ↗")
-                    .font(.system(size: 15, weight: .heavy)).tracking(0.5).lineLimit(1).minimumScaleFactor(0.8)
-                    .foregroundStyle(model.blocked == nil ? Kallr.black : Kallr.muted)
-                    .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(model.blocked == nil ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 11))
-            }
-            .buttonStyle(Press())
-            .disabled(model.blocked != nil || model.busy)
+            .padding(.horizontal, 8)
         }
-        .padding(.horizontal, 8)
         .padding(.bottom, 6)
+    }
+
+    private var reviewTitle: String {
+        let what = model.kind == .market ? "BUY" : model.kind == .limit ? "LIMIT BUY" : "TWAP BUY"
+        return "REVIEW · \(what) $\(model.usd) OF \(model.asset)  ↗"
     }
 
     @ViewBuilder private var status: some View {
@@ -754,6 +792,235 @@ private struct TradeTab: View {
         default:
             PoweredByDefinitive(height: 9, suffix: "Flash · review first · up to $\(Kallr.fmt(model.wallet?.maxUsd ?? 25))")
         }
+    }
+}
+
+/** You pay: dollars of USDC from the Kall wallet. Tap to type; MAX fills what it can spend. */
+private struct PayBox: View {
+    static let height: CGFloat = 66
+    @ObservedObject var model: KeyboardModel
+    let editing: Bool
+    @State private var blink = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("YOU PAY").font(.system(size: 9, weight: .heavy)).tracking(0.6).foregroundStyle(Kallr.muted)
+                HStack(spacing: 2) {
+                    Text("$").font(.system(size: 22, weight: .black)).foregroundStyle(Kallr.muted)
+                    Text(model.usd.isEmpty ? "0" : model.usd)
+                        .font(.system(size: 28, weight: .black).monospacedDigit())
+                        .foregroundStyle(model.usd.isEmpty ? Kallr.muted : Kallr.bone)
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                        .padding(.horizontal, editing && model.freshEntry ? 3 : 0)
+                        .background(editing && model.freshEntry ? Kallr.lime.opacity(0.25) : .clear, in: RoundedRectangle(cornerRadius: 4))
+                    if editing {
+                        Rectangle().fill(Kallr.lime).frame(width: 2, height: 26).opacity(blink ? 1 : 0)
+                            .onAppear { withAnimation(.easeInOut(duration: 0.5).repeatForever()) { blink = true } }
+                    }
+                }
+            }
+            Spacer(minLength: 4)
+            VStack(alignment: .trailing, spacing: 5) {
+                TokenBadge(symbol: "USDC")
+                HStack(spacing: 5) {
+                    Text(model.wallet?.usdcValue.map { String(format: "Bal $%.2f", $0) } ?? "Bal …")
+                        .font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted)
+                    // While typing, MAX sits with the quick amounts under the box.
+                    if !editing {
+                        Button { Haptics.modifier(); model.useMax() } label: {
+                            Text("MAX").font(.system(size: 9, weight: .heavy)).foregroundStyle(Kallr.lime)
+                                .padding(.horizontal, 5).frame(height: 16)
+                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Kallr.lime.opacity(0.6)))
+                        }
+                        .buttonStyle(Press())
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: Self.height)
+        .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(editing ? Kallr.lime : Kallr.hairline, lineWidth: editing ? 1.5 : 1))
+        .contentShape(Rectangle())
+        .onTapGesture { if !editing { model.startTyping() } }
+    }
+}
+
+/** You get: ETH or BTC, about how much, and the price it buys at. */
+private struct GetBox: View {
+    static let height: CGFloat = 58
+    @ObservedObject var model: KeyboardModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("YOU GET").font(.system(size: 9, weight: .heavy)).tracking(0.6).foregroundStyle(Kallr.muted)
+                Text(model.estimate.map { "≈ " + Self.amount($0) } ?? "—")
+                    .font(.system(size: 22, weight: .black).monospacedDigit()).foregroundStyle(Kallr.bone)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+            }
+            Spacer(minLength: 4)
+            VStack(alignment: .trailing, spacing: 5) {
+                HStack(spacing: 4) {
+                    ForEach(["ETH", "BTC"], id: \.self) { a in
+                        Button { Haptics.layer(); model.asset = a } label: { TokenBadge(symbol: a, selected: model.asset == a) }
+                            .buttonStyle(Press())
+                    }
+                }
+                Text(model.priceLine).font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted).lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: Self.height)
+        .background(Kallr.graphite.opacity(0.55), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Kallr.hairline))
+    }
+
+    static func amount(_ v: Double) -> String { String(format: v >= 1 ? "%.4f" : "%.6f", v) }
+}
+
+/** A coin pill: its colour with a glyph, then the symbol. */
+private struct TokenBadge: View {
+    let symbol: String
+    var selected = true
+
+    private var tint: Color {
+        switch symbol {
+        case "ETH": return Color(red: 0.384, green: 0.494, blue: 0.918)
+        case "BTC": return Color(red: 0.969, green: 0.576, blue: 0.102)
+        default: return Color(red: 0.153, green: 0.459, blue: 0.792)
+        }
+    }
+    private var glyph: String { symbol == "ETH" ? "Ξ" : symbol == "BTC" ? "₿" : "$" }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(glyph).font(.system(size: 10, weight: .black)).foregroundStyle(.white)
+                .frame(width: 18, height: 18).background(tint, in: Circle())
+            Text(symbol).font(.system(size: 12, weight: .heavy)).foregroundStyle(selected ? Kallr.bone : Kallr.muted)
+        }
+        .padding(.leading, 4).padding(.trailing, 8).frame(height: 26)
+        .background(selected ? Kallr.keyDark : .clear, in: Capsule())
+        .overlay(Capsule().stroke(selected && symbol != "USDC" ? Kallr.lime.opacity(0.7) : Kallr.hairline))
+        .opacity(selected ? 1 : 0.65)
+    }
+}
+
+/** Market, Limit or TWAP, small; and the fold for take-profit and stop-loss. */
+private struct OrderTypeRow: View {
+    @ObservedObject var model: KeyboardModel
+
+    var body: some View {
+        HStack(spacing: 6) {
+            HStack(spacing: 2) {
+                ForEach(KeyboardModel.Kind.allCases, id: \.self) { k in
+                    Button {
+                        Haptics.layer()
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            model.kind = k
+                            if k != .market { model.advancedOpen = true }
+                        }
+                    } label: {
+                        Text(k.rawValue).font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(model.kind == k ? Kallr.black : Kallr.bone)
+                            .padding(.horizontal, 10).frame(height: 24)
+                            .background(model.kind == k ? Kallr.bone : .clear, in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(Press())
+                }
+            }
+            .padding(2)
+            .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
+            Spacer(minLength: 4)
+            Button {
+                Haptics.modifier()
+                withAnimation(.easeOut(duration: 0.18)) { model.advancedOpen.toggle() }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(model.exitsSummary).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
+                        .rotationEffect(.degrees(model.advancedOpen ? 180 : 0))
+                }
+                .foregroundStyle(model.advancedOpen ? Kallr.lime : Kallr.bone)
+                .padding(.horizontal, 10).frame(height: 28)
+                .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(Press())
+            .accessibilityLabel("Advanced: take profit and stop loss")
+        }
+    }
+}
+
+/** Advanced, folded by default: the limit or TWAP setting, take-profit and stop-loss, and where they sell. */
+private struct AdvancedPanel: View {
+    @ObservedObject var model: KeyboardModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if model.kind == .limit {
+                row("BUY AT") {
+                    ForEach([-1.0, -3, -5, -10], id: \.self) { p in
+                        MiniChip(label: "−\(Kallr.fmt(-p))%", on: model.limitPct == p) { model.limitPct = p }
+                    }
+                }
+            }
+            if model.kind == .twap {
+                row("SPREAD OVER") {
+                    ForEach([(10, "10m"), (60, "1h"), (240, "4h"), (720, "12h")], id: \.0) { m in
+                        MiniChip(label: m.1, on: model.twapMinutes == m.0) { model.twapMinutes = m.0 }
+                    }
+                }
+            }
+            row("TAKE PROFIT") {
+                MiniChip(label: "Off", on: !model.exitsOn) { model.exitsOn = false }
+                ForEach([5.0, 10, 20, 50], id: \.self) { p in
+                    MiniChip(label: "+\(Kallr.fmt(p))%", on: model.exitsOn && model.tpPct == p) { model.exitsOn = true; model.tpPct = p }
+                }
+            }
+            if model.exitsOn {
+                row("STOP LOSS") {
+                    ForEach([3.0, 5, 10, 20], id: \.self) { p in
+                        MiniChip(label: "−\(Kallr.fmt(p))%", on: model.slPct == p, danger: true) { model.slPct = p }
+                    }
+                }
+                if let line = model.exitsPriceLine {
+                    Text(line).font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted).lineLimit(1)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Kallr.graphite.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Kallr.hairline))
+    }
+
+    private func row<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: 5) {
+            Text(label).font(.system(size: 9, weight: .heavy)).tracking(0.5).foregroundStyle(Kallr.muted)
+                .frame(width: 76, alignment: .leading)
+            content()
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+private struct MiniChip: View {
+    let label: String
+    let on: Bool
+    var danger = false
+    var wide = false
+    let action: () -> Void
+
+    var body: some View {
+        Button { Haptics.letter(); action() } label: {
+            Text(label).font(.system(size: 11, weight: .bold).monospacedDigit())
+                .foregroundStyle(on ? Kallr.black : Kallr.bone)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: wide ? .infinity : nil, minHeight: 26)
+                .background(on ? (danger ? Kallr.danger : Kallr.lime) : Kallr.keyDark, in: RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(Press())
     }
 }
 
@@ -828,57 +1095,7 @@ private struct PostLabel: LabelStyle {
     }
 }
 
-/**
- * The dollar amount as an input field: tap it to type on the number pad. ETH or BTC sits at its end.
- * While typing, a lime caret blinks; the amount is selected until the first key replaces it.
- */
-private struct AmountBar: View {
-    @ObservedObject var model: KeyboardModel
-    let editing: Bool
-    @State private var blink = false
-
-    var body: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 3) {
-                Text("$").font(.system(size: 20, weight: .black)).foregroundStyle(Kallr.muted)
-                Text(model.usd.isEmpty ? "0" : model.usd)
-                    .font(.system(size: 24, weight: .black).monospacedDigit())
-                    .foregroundStyle(model.usd.isEmpty ? Kallr.muted : Kallr.bone)
-                    .padding(.horizontal, editing && model.freshEntry ? 3 : 0)
-                    .background(editing && model.freshEntry ? Kallr.lime.opacity(0.25) : .clear, in: RoundedRectangle(cornerRadius: 4))
-                if editing {
-                    Rectangle().fill(Kallr.lime).frame(width: 2, height: 24).opacity(blink ? 1 : 0)
-                        .onAppear { withAnimation(.easeInOut(duration: 0.5).repeatForever()) { blink = true } }
-                }
-                Spacer(minLength: 4)
-                if !editing {
-                    Text("TYPE AMOUNT").font(.system(size: 9, weight: .heavy)).tracking(0.4).foregroundStyle(Kallr.muted)
-                }
-            }
-            .padding(.horizontal, 12).frame(height: 44)
-            .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(editing ? Kallr.lime : Kallr.hairline, lineWidth: editing ? 1.5 : 1))
-            .contentShape(Rectangle())
-            .onTapGesture { if !editing { model.startTyping() } }
-            if !editing {
-                HStack(spacing: 2) {
-                    ForEach(["ETH", "BTC"], id: \.self) { a in
-                        Button { model.tap(); model.asset = a } label: {
-                            Text(a).font(.system(size: 13, weight: .heavy))
-                                .foregroundStyle(model.asset == a ? Kallr.black : Kallr.bone)
-                                .frame(width: 48, height: 36)
-                                .background(model.asset == a ? Kallr.lime : .clear, in: RoundedRectangle(cornerRadius: 8))
-                        }
-                        .buttonStyle(Press())
-                    }
-                }
-                .padding(4)
-                .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
-            }
-        }
-    }
-}
-
+/** Typing the amount: the pay box stays on top, with quick amounts and the keys under it. */
 private struct AmountPad: View {
     @ObservedObject var model: KeyboardModel
     private let keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "⌫"]
@@ -886,19 +1103,25 @@ private struct AmountPad: View {
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
-                AmountBar(model: model, editing: true)
+                PayBox(model: model, editing: true)
                 Button { model.tap(.medium); model.freshEntry = false; model.editingAmount = false } label: {
                     Text("DONE").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.black)
-                        .frame(width: 64, height: 44).background(Kallr.lime, in: RoundedRectangle(cornerRadius: 10))
+                        .frame(width: 64, height: PayBox.height).background(Kallr.lime, in: RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(Press())
+            }
+            HStack(spacing: 6) {
+                ForEach(["1", "5", "10", "25"], id: \.self) { a in
+                    MiniChip(label: "$\(a)", on: model.usd == a, wide: true) { model.usd = a; model.freshEntry = false }
+                }
+                MiniChip(label: "MAX", on: false, wide: true) { model.useMax() }
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
                 ForEach(keys, id: \.self) { k in
                     Button { model.keypad(k) } label: {
                         Group { if k == "⌫" { Image(systemName: "delete.left") } else { Text(k) } }
                             .font(.system(size: 22, weight: .medium)).foregroundStyle(Kallr.bone)
-                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .frame(maxWidth: .infinity, minHeight: 38)
                             .background(k == "⌫" || k == "." ? Kallr.keyDark : Kallr.graphite, in: RoundedRectangle(cornerRadius: 7))
                     }
                     .buttonStyle(Press())

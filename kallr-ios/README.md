@@ -13,9 +13,10 @@ plays keyboard haptics only with Allow Full Access.
   **Trade**. Caller chips with hit rates narrow the list; Active, Settled and starred Favorites filter it.
   **Explore** lists every caller Kall Markets tracks or has priced, with their record and Follow. The
   clipboard button checks a post or $TICKER message you copied.
-- **Trade:** a dollar amount bar you type into (tap it for the number pad), ETH or BTC beside it, and $1,
-  $5, $10 and $25 presets under it; Market, Limit (−3, −5 or
-  −10%) or TWAP (10 min, 1 hour, 4 hours); take-profit and stop-loss presets. **Review** gets a fresh
+- **Trade:** laid out like a swap. **You pay** is dollars of USDC (tap to type, with $1, $5, $10, $25 and
+  Max; the Kall wallet's balance beside it); **You get** is ETH or BTC, about how much, and the price it
+  buys at. Market, Limit or TWAP is a small toggle; take-profit and stop-loss fold into Advanced (with the
+  limit offset, −1 to −10%, or the TWAP length, 10 minutes to 12 hours) and show where they'd sell. **Review** gets a fresh
   Definitive Flash quote (you pay, you get, price impact and fee, exits, approval) without sending
   anything; **Confirm & place** sends it.
 - **Orders:** the Kall wallet's Flash orders with live status (re-read every 5 seconds while one is
