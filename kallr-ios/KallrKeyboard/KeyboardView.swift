@@ -200,6 +200,54 @@ final class KeyboardModel: ObservableObject {
         liveTask = nil
     }
 
+    // MARK: Chainlink CRE
+
+    /** CRE is checking the coin a copied post names, or has decided. */
+    enum CreState { case checking(String), decided(Kallr.CreVerdict) }
+    @Published var cre: CreState?
+    private var creTask: Task<Void, Never>?
+    /** A fake: Trade shows the red card and no Trade button. */
+    var creFake: Kallr.CreVerdict? { if case .decided(let v) = cre, v.isFake { return v }; return nil }
+    var creReal: Kallr.CreVerdict? { if case .decided(let v) = cre, v.isReal { return v }; return nil }
+    var creChecking: String? { if case .checking(let claimed) = cre { return claimed }; return nil }
+
+    /**
+     * Before a coin from a post can be traded, Chainlink CRE checks that the contract is really that coin:
+     * its verdict if it has one, otherwise a fresh check (about 10 seconds). A fake opens Trade on the red card.
+     */
+    func checkCre(token: String, claimed: String, reveal: Bool) {
+        creTask?.cancel()
+        cre = .checking(claimed)
+        creTask = Task {
+            var verdict = await Kallr.creVerdict(token: token, claimed: claimed)
+            if verdict?.checked != true, verdict?.canRun == true, !Task.isCancelled {
+                verdict = await Kallr.runCre(token: token, claimed: claimed)
+            }
+            guard !Task.isCancelled else { return }
+            guard let verdict, verdict.checked, verdict.verdict != "unknown" else { cre = nil; return }
+            cre = .decided(verdict)
+            if verdict.isFake {
+                Haptics.error()
+                placing = .idle
+                tab = .trade
+                if reveal { mode = .panel }
+            }
+        }
+    }
+
+    func clearCre() {
+        creTask?.cancel()
+        cre = nil
+    }
+
+    /** Drops the warning and CRE's signed verdict into the chat. */
+    func shareCreProof() {
+        guard let v = creFake, let proof = v.proof else { return }
+        tap(.medium)
+        controller?.textDocumentProxy.insertText("Fake $\(v.claimed ?? v.symbol ?? "token") contract: \(v.reason ?? "not the real coin"). Checked by Chainlink CRE: \(proof)")
+        mode = .typing
+    }
+
     // MARK: The fill on Base
 
     /** Drops the trade and its BaseScan link into the chat you're typing in. */
@@ -305,12 +353,14 @@ final class KeyboardModel: ObservableObject {
     }
 
     func pickCore(_ key: String) {
+        clearCre()
         asset = key
         placing = .idle
         closePicker()
     }
 
     func pick(_ hit: Kallr.TokenHit) {
+        clearCre()
         if hit.riskFlagged == true {
             Haptics.error()
             pickerNote = "Definitive flags \(hit.symbol) as risky, so Kall won't trade it."
@@ -459,6 +509,7 @@ final class KeyboardModel: ObservableObject {
     func openPanel(_ tab: Tab?) {
         if let tab { self.tab = tab }
         mode = .panel
+        controller?.checkContext()
         if self.tab == .orders { startPolling() }
         Task { await load() }
     }
@@ -530,6 +581,7 @@ final class KeyboardModel: ObservableObject {
     func trade(_ item: Item) {
         tap(.medium)
         opened = nil
+        clearCre()
         if item.demo {
             // The demo call is a swap: pay with the wallet's ETH, get USDC.
             payAsset = "ETH"
@@ -596,6 +648,8 @@ final class KeyboardModel: ObservableObject {
     }
 
     var blocked: String? {
+        if let claimed = creChecking { return "Checking $\(claimed) with Chainlink CRE…" }
+        if creFake != nil { return "Fake token: trading is off" }
         if let w = copied?.warning { return w.hasPrefix("Fake") ? "No buy: fake contract" : "No buy: risky token" }
         guard let n = Double(usd), n > 0 else { return "Enter an amount" }
         if payingETH {
@@ -796,7 +850,7 @@ private struct FollowingTab: View {
                 }
                 .padding(.horizontal, 14)
 
-                if model.checking || model.note != nil || model.copied?.headline(typed: nil) != nil { CopiedBanner(model: model) }
+                if model.checking || model.note != nil || model.cre != nil || model.copied?.headline(typed: nil) != nil { CopiedBanner(model: model) }
 
                 if model.scope == .explore { ExploreList(model: model) } else { FollowingList(model: model) }
             }
@@ -894,13 +948,17 @@ private struct IconButton: View {
 private struct CopiedBanner: View {
     @ObservedObject var model: KeyboardModel
     var body: some View {
-        let warning = model.copied?.warning != nil || model.note != nil
+        let fake = model.creFake
+        let warning = model.copied?.warning != nil || model.note != nil || fake != nil
         HStack(spacing: 8) {
-            Text(model.checking ? "Checking what you copied…" : model.note ?? model.copied?.headline(typed: nil) ?? "")
+            Text(model.checking ? "Checking what you copied…"
+                 : fake.map { "✕ Fake $\($0.claimed ?? "token") · checked by Chainlink CRE" }
+                 ?? model.creChecking.map { "Checking $\($0) with Chainlink CRE…" }
+                 ?? model.note ?? model.copied?.headline(typed: nil) ?? "")
                 .font(.system(size: 12, weight: .semibold)).lineLimit(1)
                 .foregroundStyle(warning ? Kallr.danger : Kallr.bone)
             Spacer(minLength: 0)
-            if !warning, model.copied?.trade != nil {
+            if !warning, model.creChecking == nil, model.copied?.trade != nil {
                 SmallButton(label: "TRADE ↗") { model.tap(.medium); model.tab = .trade }
             }
         }
@@ -1074,6 +1132,8 @@ private struct TradeTab: View {
         Group {
             if model.picking {
                 TokenPicker(model: model)
+            } else if let fake = model.creFake {
+                FakeCoinCard(model: model, verdict: fake)
             } else if model.editingAmount {
                 AmountPad(model: model)
             } else if case .review(let quote) = model.placing {
@@ -1103,6 +1163,15 @@ private struct TradeTab: View {
                     VStack(alignment: .leading, spacing: 6) {
                         if let call = callLine {
                             Text(call).font(TradeFont.body).foregroundStyle(Kallr.bone).lineLimit(1)
+                        }
+                        if let claimed = model.creChecking {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small).tint(Kallr.muted)
+                                Text("Checking $\(claimed) with Chainlink CRE…").font(TradeFont.body).foregroundStyle(Kallr.muted).lineLimit(1)
+                            }
+                        } else if let real = model.creReal {
+                            Label("Real $\(real.claimed ?? real.symbol ?? "") · checked by Chainlink CRE", systemImage: "checkmark.seal.fill")
+                                .font(TradeFont.body).foregroundStyle(Kallr.lime).lineLimit(1)
                         }
                         LiveTicker(model: model)
                     }
@@ -1186,7 +1255,7 @@ private struct TradeTab: View {
                     withAnimation(.easeOut(duration: 0.18)) { model.advancedOpen.toggle() }
                 } label: {
                     HStack(spacing: 4) {
-                        Text(model.optionsSummary).font(TradeFont.body).lineLimit(1)
+                        Text(model.optionsSummary).font(TradeFont.body).lineLimit(1).minimumScaleFactor(0.6)
                         Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold))
                             .rotationEffect(.degrees(model.advancedOpen ? 180 : 0))
                     }
@@ -1453,6 +1522,60 @@ private struct ReviewCard: View {
     }
 }
 
+/**
+ * Chainlink CRE says the contract isn't the coin the post names: why, the real one, CRE's signed verdict to
+ * share, and no Trade button at all.
+ */
+private struct FakeCoinCard: View {
+    @ObservedObject var model: KeyboardModel
+    let verdict: Kallr.CreVerdict
+
+    private var realOne: String? {
+        guard let c = verdict.canonical, c.count == 42, c != "0x0000000000000000000000000000000000000000" else { return nil }
+        return "The real $\(verdict.claimed ?? "") is \(c.prefix(6))…\(c.suffix(4))"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Fake token · checked by Chainlink CRE", systemImage: "xmark.octagon.fill")
+                    .font(TradeFont.bold).foregroundStyle(Kallr.danger)
+                Text("$\(verdict.claimed ?? verdict.symbol ?? "?")").font(TradeFont.mid).foregroundStyle(Kallr.bone)
+                Text(verdict.reason ?? "This contract isn't the coin the post names.").font(TradeFont.body).foregroundStyle(Kallr.bone)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let realOne { Text(realOne).font(TradeFont.body).foregroundStyle(Kallr.muted) }
+                Text("Trading is off for this post.").font(TradeFont.body).foregroundStyle(Kallr.muted)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            Spacer(minLength: 0)
+            HStack(spacing: 8) {
+                Button { model.shareCreProof() } label: {
+                    Text("Share the signed verdict").font(TradeFont.bold)
+                        .foregroundStyle(verdict.proof == nil ? Kallr.muted : Kallr.black)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(verdict.proof == nil ? Kallr.keyDark : Kallr.danger, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(Press())
+                .disabled(verdict.proof == nil)
+                Button {
+                    model.tap()
+                    model.clearCre()
+                    model.copied = nil
+                    model.source = nil
+                } label: {
+                    Text("Close").font(TradeFont.bold).foregroundStyle(Kallr.bone)
+                        .frame(width: 96, height: 52)
+                        .background(Kallr.keyDark, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(Press())
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
+        }
+    }
+}
+
 /** Placed: what you got, on Definitive Flash, and its BaseScan link to drop into the chat. */
 private struct DoneCard: View {
     @ObservedObject var model: KeyboardModel
@@ -1584,6 +1707,7 @@ private struct TokenBadge: View {
             if chevron { Image(systemName: "chevron.down").font(.system(size: 11, weight: .heavy)).foregroundStyle(Kallr.muted) }
         }
         .padding(.leading, 6).padding(.trailing, 12).frame(height: 40)
+        .fixedSize()
         .background(selected ? Kallr.keyDark : .clear, in: Capsule())
         .opacity(selected ? 1 : 0.65)
     }

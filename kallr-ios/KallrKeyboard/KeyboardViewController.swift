@@ -138,6 +138,16 @@ final class KeyboardViewController: UIInputViewController {
         check(text: nil, typed: typed, openTrade: true)
     }
 
+    private var lastContextChecked: String?
+
+    /** TRADE with a call already in the field (typed or pasted): check it, as a paste would be. */
+    func checkContext() {
+        guard let reference = Kallr.reference(fromCopied: textDocumentProxy.documentContextBeforeInput ?? ""),
+              reference != lastContextChecked else { return }
+        lastContextChecked = reference
+        check(text: reference, typed: nil, openTrade: true, openPanel: true)
+    }
+
     /** "Check what you copied": reads the clipboard only when the user taps it. */
     func checkCopied() {
         guard hasFullAccess else {
@@ -156,6 +166,7 @@ final class KeyboardViewController: UIInputViewController {
         lookupTask = Task { @MainActor in
             model.checking = true
             model.note = nil
+            model.clearCre()
             let result = await Kallr.lookup(text: text, typed: typed)
             guard !Task.isCancelled else { return }
             model.checking = false
@@ -168,6 +179,10 @@ final class KeyboardViewController: UIInputViewController {
                     model.tab = .trade
                     model.closePicker()
                     if model.mode != .panel { Haptics.trade(); model.mode = .panel }
+                }
+                // A post that names a coin and gives a contract: Chainlink CRE checks they match.
+                if let target = text.flatMap(Kallr.creTarget(in:)) ?? Kallr.creTarget(result) {
+                    model.checkCre(token: target.token, claimed: target.claimed, reveal: openPanel)
                 }
             } else if text != nil {
                 model.note = hasFullAccess ? "Couldn't reach Kall Markets." : "Turn on Allow Full Access for Kall Keyboard in Settings."
