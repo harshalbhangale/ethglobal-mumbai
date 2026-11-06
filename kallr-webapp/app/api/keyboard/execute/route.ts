@@ -15,6 +15,8 @@ import { tradeTokenByKey } from "@/lib/server/keyboard-tokens";
  *   POST → { order, dryRun? }; dryRun quotes and signs but sends nothing
  */
 export const dynamic = "force-dynamic";
+/** Quote, two approvals that wait for Base, signing and submit can take 10–30s; the default is shorter. */
+export const maxDuration = 60;
 
 export async function GET() {
   if (!keyboardWalletAddress) return Response.json({ configured: false });
