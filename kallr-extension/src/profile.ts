@@ -19,11 +19,23 @@ export function profileHandle(pathname = location.pathname): string | null {
   return /^[A-Za-z0-9_]{1,15}$/.test(first) ? first.toLowerCase() : null;
 }
 
+/**
+ * The block holding X's profile tabs (Posts, Replies, Media…). The tablist sits inside a swipeable
+ * strip that clips anything else put in it, so the card goes before the whole <nav> (or its
+ * single-child wrapper), never next to the tablist itself.
+ */
+export function tabsBlock(tabs: HTMLElement, column: HTMLElement): HTMLElement {
+  let block = tabs.closest<HTMLElement>("nav") ?? tabs.closest<HTMLElement>('[data-testid="ScrollSnap-SwipeableList"]') ?? tabs;
+  if (!column.contains(block)) block = tabs;
+  const parent = block.parentElement;
+  return parent && parent !== column && parent.childElementCount === 1 ? parent : block;
+}
+
 /** Below the bio and follower row, above the Posts tabs. Falls back to under the name. */
 function mount(anchor: HTMLElement, host: HTMLElement) {
   const column = anchor.closest<HTMLElement>('[data-testid="primaryColumn"]') ?? anchor.parentElement ?? document.body;
   const tabs = column.querySelector<HTMLElement>('[role="tablist"]');
-  if (tabs) return tabs.before(host);
+  if (tabs) return tabsBlock(tabs, column).before(host);
   const meta =
     column.querySelector<HTMLElement>('[data-testid="UserProfileHeader_Items"]') ??
     column.querySelector<HTMLElement>('[data-testid="UserDescription"]');

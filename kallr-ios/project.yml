@@ -19,10 +19,20 @@ targets:
     type: application
     platform: iOS
     sources: [Kallr, Shared]
+    entitlements:
+      path: Kallr/Kallr.entitlements
+      properties:
+        # Shared with the keyboard: the key from linking your Kall wallet, kept in the keychain.
+        keychain-access-groups: ["$(AppIdentifierPrefix)com.buddyharshal.kallr.shared"]
     info:
       path: Kallr/Info.plist
       properties:
         CFBundleDisplayName: Kall Keyboard
+        KallKeychainGroup: $(AppIdentifierPrefix)com.buddyharshal.kallr.shared
+        # kallmarkets://link?key=…&address=…&expires=… from the web app's /app/keyboard-link.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.buddyharshal.kallr.link
+            CFBundleURLSchemes: [kallmarkets]
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
@@ -40,10 +50,15 @@ targets:
     type: app-extension
     platform: iOS
     sources: [KallrKeyboard, Shared]
+    entitlements:
+      path: KallrKeyboard/KallrKeyboard.entitlements
+      properties:
+        keychain-access-groups: ["$(AppIdentifierPrefix)com.buddyharshal.kallr.shared"]
     info:
       path: KallrKeyboard/Info.plist
       properties:
         CFBundleDisplayName: Kall Keyboard
+        KallKeychainGroup: $(AppIdentifierPrefix)com.buddyharshal.kallr.shared
         NSExtension:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController

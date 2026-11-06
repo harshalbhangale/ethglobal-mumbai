@@ -293,7 +293,7 @@ export function OpenOrders({
 }: {
   orders: FlashOrder[] | null;
   error: string | null;
-  history?: { trades: TradeItem[]; explorer: string; loading: boolean };
+  history?: { trades: TradeItem[]; scope?: "yours" | "all"; explorer: string; loading: boolean };
   /** The wallet that placed these orders: Flash needs it to look up a fill's transaction. */
   funder?: string | null;
 }) {
@@ -351,10 +351,29 @@ export function OpenOrders({
           ) : history.trades.length === 0 ? (
             <Placeholder text="No trades from this wallet yet. Each trade you place is recorded on Arkiv and shows here." />
           ) : (
-            <TradeTable trades={history.trades} explorer={history.explorer} />
+            <>
+              {history.scope === "all" && (
+                <p className="border-b border-rule px-4 py-2.5 text-xs text-slate">
+                  <span className="font-semibold text-ink">All Kall trades.</span> Your wallet hasn’t traded yet, so this is every trade placed through Kall, from X, the keyboard and the web, each with its Arkiv record.
+                </p>
+              )}
+              <TradeTable trades={history.trades} explorer={history.explorer} />
+            </>
           ))}
       </section>
     </div>
+  );
+}
+
+/** Signed out: every trade placed through Kall, so the proof is visible before you sign in. */
+export function KallTrades({ trades, explorer, loading }: { trades: TradeItem[]; explorer: string; loading: boolean }) {
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-rule bg-card">
+      <p className="border-b border-rule px-4 py-2.5 text-xs text-slate">
+        <span className="font-semibold text-ink">All Kall trades.</span> Every trade placed through Kall, from X, the keyboard and the web, each with its Arkiv record.
+      </p>
+      {loading ? <Placeholder text="Reading Arkiv…" /> : trades.length === 0 ? <Placeholder text="No trades yet." /> : <TradeTable trades={trades} explorer={explorer} />}
+    </section>
   );
 }
 
@@ -530,6 +549,7 @@ function TradeRow({ t, explorer }: { t: TradeItem; explorer: string }) {
             <Detail k="Take-profit" v={t.takeProfit !== null ? usd(t.takeProfit) : "—"} tone="text-up" />
             <Detail k="Stop-loss" v={t.stopLoss !== null ? usd(t.stopLoss) : "—"} tone="text-down" />
             <Detail k="Flash order" v={`${t.flashOrderId.slice(0, 10)}…`} />
+            {t.trader && <Detail k="Wallet" v={`${t.trader.slice(0, 6)}…${t.trader.slice(-4)}`} />}
           </dl>
           <div className="flex flex-wrap gap-2">
             <a href={`${explorer}/entity/${t.id}`} target="_blank" rel="noreferrer" className="rounded-md border border-rule px-3 py-1.5 text-xs font-semibold hover:border-lime hover:text-lime">

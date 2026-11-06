@@ -12,6 +12,12 @@ Crypto runs on calls. Someone posts "$ETH, be more bullish" to 300,000 followers
 it becomes a screenshot and an ad for a paid group. If it fails, the post quietly disappears. Followers only see
 the wins, and in the replies a "contract address" for the coin is waiting: one wrong paste and the money is gone.
 
+The biggest version of this so far: in February 2025, Argentina's president posted the $LIBRA memecoin and its
+contract address on X. It shot up to billions, then crashed more than 90%; 86% of the people who bought it lost
+money, about $251M, while insider wallets cashed out. Hours later
+[the post was deleted](https://www.web3isgoinggreat.com/single/milei-memecoin-promotion). Smaller KOLs do the
+same thing every week: shill, dump, delete, and the next call starts from a clean timeline.
+
 We had already built an extension that let you trade straight from a post on X. Watching people use it, the
 trade was the easy part. The first question was always: *is this person ever right?* Nobody could answer,
 because the only record lives on the caller's own timeline, where they decide what survives.
@@ -30,7 +36,40 @@ One product, wherever calls show up:
 
 ## Architecture
 
-<p align="center"><img src="docs/architecture.svg" alt="Three apps talk to one Kall server on Vercel, which trades on Definitive Flash, prices and checks with Chainlink (price feeds and CRE), and keeps receipts on Arkiv with post snapshots on Swarm." /></p>
+<p align="center"><img src="docs/architecture.png" alt="Kall Markets architecture: calls from X and Telegram reach the extension, keyboard and web app; one Kall server on Vercel; built on Definitive Flash, Chainlink, Arkiv (Rabdi testnet) and Swarm; the real transactions." /></p>
+
+Editable source: [`docs/architecture.excalidraw`](docs/architecture.excalidraw) (open it at excalidraw.com).
+
+```mermaid
+flowchart TB
+  X["𝕏 A post on X<br/>a call + a contract address"] --> EXT
+  TG["Telegram · WhatsApp<br/>a call in a group chat"] --> KB
+
+  subgraph APPS["Kall, where the call is"]
+    direction LR
+    EXT["Kall Extension<br/>Chrome, on X"]
+    KB["Kall Keyboard<br/>iPhone · Android"]
+    WEB["Kall Web App<br/>kallmarkets.vercel.app"]
+  end
+
+  EXT & KB & WEB --> API["Kall API · Next.js on Vercel<br/>read the call → check the coin → price it → quote → you sign → record"]
+
+  API -->|quote · order| FLASH["Definitive Flash<br/>market · limit · TWAP · TP / SL"]
+  API -->|price at the post| FEEDS["Chainlink price feeds<br/>on Base"]
+  API -->|is this the real coin?| CRE["Chainlink CRE<br/>check-coin · score-calls"]
+  API -->|call · result · trade| ARKIV["Arkiv<br/>read-only records"]
+  API -->|the post itself| SWARM["Swarm<br/>post snapshot"]
+
+  FLASH --> BASE[("Base mainnet<br/>every fill, Basescan receipt")]
+  CRE -->|signed verdicts| KV[("KallVerdicts<br/>Base Sepolia")]
+
+  classDef app fill:#0b0d0c,stroke:#c6f25a,color:#e6ebe3
+  classDef sponsor fill:#141816,stroke:#c6f25a,color:#e6ebe3
+  classDef chain fill:#0b1a3a,stroke:#0052ff,color:#e6ebe3
+  class EXT,KB,WEB,API app
+  class FLASH,FEEDS,CRE,ARKIV,SWARM sponsor
+  class BASE,KV chain
+```
 
 Three apps, one server, three rails. Every call goes down the same line:
 

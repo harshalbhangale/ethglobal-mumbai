@@ -11,7 +11,7 @@ import { InstallButton } from "@/components/install-button";
 import { CallsBoard, type Row, type Scope } from "@/components/calls-board";
 import { KolAvatar } from "@/components/kol-avatar";
 import { WalletPanel } from "@/components/wallet-panel";
-import { OpenOrders, useFlashOrders } from "@/components/order-desk";
+import { KallTrades, OpenOrders, useFlashOrders } from "@/components/order-desk";
 import { type TicketPrefill, TradeTicket } from "@/components/trade-ticket";
 import { callerStats, copyCall, useFollows, useKallrData } from "@/lib/feed";
 
@@ -197,9 +197,12 @@ function Terminal({ session }: { session: Session }) {
             <h1 className="font-display text-2xl font-semibold">Orders</h1>
             <p className="mb-4 text-sm text-slate">Every order is a Definitive Flash order on Base; every trade is recorded on Arkiv.</p>
             {signedIn ? (
-              <OpenOrders orders={flashOrders.orders} error={flashOrders.error} funder={signedIn ? session.address : null} history={{ trades: data.trades, explorer: data.explorer, loading: data.loading }} />
+              <OpenOrders orders={flashOrders.orders} error={flashOrders.error} funder={signedIn ? session.address : null} history={{ trades: data.trades, scope: data.tradesScope, explorer: data.explorer, loading: data.loading }} />
             ) : (
-              <SignInCard what="see your orders" />
+              <>
+                <SignInCard what="see your orders" />
+                <KallTrades trades={data.trades} explorer={data.explorer} loading={data.loading} />
+              </>
             )}
           </div>
           <div hidden={view !== "wallet"}>
