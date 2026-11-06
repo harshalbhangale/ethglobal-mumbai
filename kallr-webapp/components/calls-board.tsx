@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { FollowButton } from "@/components/follow-button";
 import { KolAvatar } from "@/components/kol-avatar";
 import { TweetEmbed } from "@/components/tweet-embed";
@@ -14,29 +14,8 @@ import { type CallItem, callerStats, copyCall, type ResultItem, useFollows, useK
  */
 
 export type Scope = "following" | "explore";
-type Filter = "active" | "settled" | "favorites";
+type Filter = "active" | "settled";
 export type Row = (CallItem | ResultItem) & { open: boolean };
-
-const FAV_KEY = "kallr.favoriteCalls";
-function useFavorites() {
-  const [favs, setFavs] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    try {
-      setFavs(new Set(JSON.parse(localStorage.getItem(FAV_KEY) ?? "[]") as string[]));
-    } catch {}
-  }, []);
-  const toggle = (postId: string) =>
-    setFavs((prev) => {
-      const next = new Set(prev);
-      if (next.has(postId)) next.delete(postId);
-      else next.add(postId);
-      try {
-        localStorage.setItem(FAV_KEY, JSON.stringify([...next]));
-      } catch {}
-      return next;
-    });
-  return { favs, toggle };
-}
 
 const pct = (bps: number) => `${bps >= 0 ? "+" : ""}${(bps / 100).toFixed(2)}%`;
 const usd = (n: number | null) => (n === null ? "unpriced" : `$${n.toLocaleString("en-US", { maximumFractionDigits: n < 10 ? 4 : 0 })}`);
@@ -62,7 +41,6 @@ export function CallsBoard({
   setCaller: (h: string | null) => void;
   onCopy: (row: Row) => void;
 }) {
-  const { favs, toggle } = useFavorites();
   const prices = useUsdPrices();
   const recordOf = (h: string) => {
     const s = callerStats(
@@ -80,9 +58,9 @@ export function CallsBoard({
   const inScope = (h: string) => (caller ? h === caller : scope === "explore" || follows.handles.has(h));
   const rows = all
     .filter((r) => inScope(r.caller))
-    .filter((r) => (filter === "favorites" ? favs.has(r.postId) : filter === "active" ? r.open : !r.open))
+    .filter((r) => (filter === "active" ? r.open : !r.open))
     .sort((a, b) => b.postedAt - a.postedAt);
-  const count = (f: Filter) => all.filter((r) => inScope(r.caller) && (f === "favorites" ? favs.has(r.postId) : f === "active" ? r.open : !r.open)).length;
+  const count = (f: Filter) => all.filter((r) => inScope(r.caller) && (f === "active" ? r.open : !r.open)).length;
 
   return (
     <div className="min-w-0">
@@ -111,7 +89,7 @@ export function CallsBoard({
       )}
 
       <div className="sticky top-0 z-10 -mx-1 mb-4 flex gap-5 border-b border-rule bg-paper/95 px-1 pt-3 backdrop-blur" role="tablist" aria-label="Calls">
-        {(["active", "settled", "favorites"] as const).map((f) => (
+        {(["active", "settled"] as const).map((f) => (
           <button
             key={f}
             type="button"
@@ -120,7 +98,7 @@ export function CallsBoard({
             onClick={() => setFilter(f)}
             className={`-mb-px border-b-2 pb-2.5 text-sm font-semibold ${filter === f ? "border-lime text-ink" : "border-transparent text-slate hover:text-ink"}`}
           >
-            {f === "active" ? "Live" : f === "settled" ? "Settled" : "Saved"}
+            {f === "active" ? "Live" : "Settled"}
             <span className="ml-1.5 rounded bg-card px-1.5 py-0.5 text-xs tabular-nums text-slate">{count(f)}</span>
           </button>
         ))}
@@ -129,15 +107,13 @@ export function CallsBoard({
       {data.loading ? (
         <p className="py-16 text-center text-sm text-slate">Reading calls from Arkiv…</p>
       ) : rows.length === 0 ? (
-        <Empty scope={caller ? "caller" : scope} filter={filter} onExplore={() => setScope("explore")} />
+        <Empty scope={caller ? "caller" : scope} onExplore={() => setScope("explore")} />
       ) : (
         <ul className="space-y-5">
           {rows.map((r) => (
             <PostCard
               key={r.id}
               row={r}
-              fav={favs.has(r.postId)}
-              onFav={() => toggle(r.postId)}
               onCaller={() => setCaller(r.caller)}
               onCopy={() => onCopy(r)}
               record={recordOf(r.caller)}
@@ -152,20 +128,18 @@ export function CallsBoard({
   );
 }
 
-function Empty({ scope, filter, onExplore }: { scope: Scope | "caller"; filter: Filter; onExplore: () => void }) {
+function Empty({ scope, onExplore }: { scope: Scope | "caller"; onExplore: () => void }) {
   return (
     <div className="rounded-lg border border-dashed border-rule px-6 py-14 text-center">
       <p className="font-semibold">
-        {filter === "favorites" ? "Nothing saved yet" : scope === "following" ? "Nothing from the callers you follow yet" : "No calls here yet"}
+        {scope === "following" ? "Nothing from the callers you follow yet" : "No calls here yet"}
       </p>
       <p className="mx-auto mt-2 max-w-sm text-sm text-slate">
-        {filter === "favorites"
-          ? "Star a call to keep it here."
-          : scope === "following"
-            ? "Follow callers from the list on the left and their calls land here."
-            : "New calls arrive as Kall Markets reads callers' posts on X."}
+        {scope === "following"
+          ? "Follow callers from the list on the left and their calls land here."
+          : "New calls arrive as Kall Markets reads callers' posts on X."}
       </p>
-      {scope === "following" && filter !== "favorites" && (
+      {scope === "following" && (
         <button type="button" onClick={onExplore} className="mt-4 rounded-md bg-lime px-4 py-2 text-sm font-semibold text-on-lime hover:bg-lime-strong">
           Show all calls
         </button>
@@ -176,8 +150,6 @@ function Empty({ scope, filter, onExplore }: { scope: Scope | "caller"; filter: 
 
 function PostCard({
   row,
-  fav,
-  onFav,
   onCaller,
   onCopy,
   record,
@@ -185,8 +157,6 @@ function PostCard({
   arkiv,
 }: {
   row: Row;
-  fav: boolean;
-  onFav: () => void;
   onCaller: () => void;
   onCopy: () => void;
   record: string;
@@ -219,15 +189,6 @@ function PostCard({
         >
           {up ? "▲ LONG" : "▼ SHORT"} ${row.asset}
         </span>
-        <button
-          type="button"
-          onClick={onFav}
-          aria-pressed={fav}
-          aria-label={fav ? "Remove from saved" : "Save this call"}
-          className={`shrink-0 text-lg leading-none ${fav ? "text-lime-strong" : "text-rule-strong hover:text-slate"}`}
-        >
-          {fav ? "★" : "☆"}
-        </button>
       </div>
 
       <div className="px-3">

@@ -10,8 +10,8 @@ final class KeyboardModel: ObservableObject {
     enum Tab: String, CaseIterable { case following = "FOLLOWING", trade = "TRADE", orders = "ORDERS", wallet = "WALLET" }
     enum Scope: CaseIterable { case following, explore }
     enum Filter: CaseIterable {
-        case active, settled, favorites
-        func label(count: Int) -> String { (self == .active ? "Active" : self == .settled ? "Settled" : "★ Favorites") + (count > 0 ? " \(count)" : "") }
+        case active, settled
+        func label(count: Int) -> String { (self == .active ? "Active" : "Settled") + (count > 0 ? " \(count)" : "") }
     }
     /** A call or a settled result, as the Following list shows it. */
     struct Item: Identifiable {
@@ -57,7 +57,6 @@ final class KeyboardModel: ObservableObject {
              status: nil, returnBps: nil, demo: true)
     }
     @Published var follows: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "kall.follows") ?? [])
-    @Published var favorites: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "kall.favorites") ?? [])
     @Published var refreshing = false
     @Published var feed: Kallr.Feed?
     @Published var feedError: String?
@@ -576,12 +575,6 @@ final class KeyboardModel: ObservableObject {
         UserDefaults.standard.set(Array(follows), forKey: "kall.follows")
     }
 
-    func toggleFavorite(_ postId: String) {
-        tap()
-        if favorites.contains(postId) { favorites.remove(postId) } else { favorites.insert(postId) }
-        UserDefaults.standard.set(Array(favorites), forKey: "kall.favorites")
-    }
-
     private var openItems: [Item] {
         (feed?.calls ?? []).map { Item(postId: $0.postId, caller: $0.caller, asset: $0.asset, short: $0.direction == "down", postedAt: $0.postedAt, deadline: $0.deadline, entry: $0.entry, text: $0.text, status: nil, returnBps: nil) }
     }
@@ -595,14 +588,12 @@ final class KeyboardModel: ObservableObject {
         switch f {
         case .active: return mine(openItems).count + 1  // the demo call
         case .settled: return mine(settledItems).count
-        case .favorites: return (openItems + settledItems).filter { favorites.contains($0.postId) }.count
         }
     }
     var visibleItems: [Item] {
         switch filter {
         case .active: return [demoItem] + mine(openItems)
         case .settled: return mine(settledItems)
-        case .favorites: return (openItems + settledItems).filter { favorites.contains($0.postId) }
         }
     }
 
@@ -977,15 +968,6 @@ private struct PostView: View {
                         .foregroundStyle(item.short && !item.demo ? Kallr.danger : Kallr.lime).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                if !item.demo {
-                    Button { model.toggleFavorite(item.postId) } label: {
-                        Image(systemName: model.favorites.contains(item.postId) ? "star.fill" : "star")
-                            .font(.system(size: 16)).foregroundStyle(model.favorites.contains(item.postId) ? Kallr.lime : Kallr.muted)
-                            .frame(width: 40, height: 40)
-                    }
-                    .buttonStyle(Press())
-                    .accessibilityLabel("Favorite")
-                }
             }
             .padding(.horizontal, 14)
             ScrollView(.vertical, showsIndicators: false) {
@@ -1085,7 +1067,7 @@ private struct FollowingList: View {
                     LazyVStack(spacing: 0) {
                         let items = model.visibleItems
                         if model.feed == nil { Empty(text: model.feedError ?? "Reading Arkiv…") }
-                        else if items.isEmpty { Empty(text: model.filter == .favorites ? "Star a call to keep it here." : model.filter == .active ? "No open calls from who you follow." : "Nothing settled yet.") }
+                        else if items.isEmpty { Empty(text: model.filter == .active ? "No open calls from who you follow." : "Nothing settled yet.") }
                         ForEach(items) { item in CallCard(item: item, model: model) }
                     }
                     .padding(.horizontal, 14)
