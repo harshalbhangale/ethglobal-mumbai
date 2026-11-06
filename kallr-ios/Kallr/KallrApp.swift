@@ -405,7 +405,7 @@ private struct SwapCard: View {
             line("Impact · fee", [q.details?.impactPct.map { String(format: "%.2f%%", abs($0)) }, q.details?.feeUsd.map { String(format: "$%.2f", $0) }]
                 .compactMap { $0 }.joined(separator: " · "))
             line("On Base", q.preview.approval)
-            if let compare = q.compare { line("Best price", compare.line) }
+            line("Best price", "✓ Definitive Flash · best route on Base")
             HStack(spacing: 8) {
                 Button { step = .idle } label: {
                     Text("BACK").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.bone)

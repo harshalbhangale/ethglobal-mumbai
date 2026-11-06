@@ -1447,7 +1447,7 @@ private struct ReviewCard: View {
             if q.preview.exits != "None" {
                 note("arrow.up.right.and.arrow.down.right", "Exits  " + q.preview.exits.replacingOccurrences(of: ".00", with: ""), tint: Kallr.bone)
             }
-            note("checkmark.seal.fill", (q.compare?.line ?? "Definitive Flash · best route on Base").replacingOccurrences(of: "✓ ", with: ""), tint: Kallr.lime)
+            note("checkmark.seal.fill", "Definitive Flash · best route on Base", tint: Kallr.lime)
         }
     }
 

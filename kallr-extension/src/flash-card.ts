@@ -618,50 +618,9 @@ export function quoteSummary(f: QuoteFacts, symbol: string) {
     ...(f.impact !== null ? row("Price impact", el("span", { class: tone }, pct(f.impact)), "How much this order moves the price") : []),
     ...(f.slippage !== null ? row("Max slippage", pct(f.slippage), "Recommended by Definitive for this quote") : []),
     ...(f.feeUsd !== null ? row("Flash fee", f.feeUsd === 0 ? "Free" : `$${f.feeUsd.toFixed(2)}`) : []),
-    // When Flash doesn't measurably beat Uniswap (or we couldn't measure), one plain line.
-    ...(f.vsUniswap?.winner === "flash"
-      ? []
-      : row("Best price", el("span", { class: "up best-price-line" }, "✓ Definitive Flash · best route on Base"), "Definitive Flash routes this order across Base's venues")),
+    ...row("Best price", el("span", { class: "up best-price-line" }, "✓ Definitive Flash · best route on Base"), "Definitive Flash routes this order across Base's venues"),
   );
-  return f.vsUniswap?.winner === "flash" ? el("div", { class: "quote-block" }, bestPrice(f.vsUniswap, f.receivedUsd, symbol), facts) : facts;
-}
-
-/** Dollars more (or less) Flash gives than Uniswap for this trade, from its USD value and the edge. */
-export function savedUsd(edgePct: number, receivedUsd: number | null) {
-  if (receivedUsd === null || !Number.isFinite(receivedUsd)) return null;
-  return (receivedUsd * edgePct) / (100 + edgePct);
-}
-
-const savedMoney = (n: number) => (Math.abs(n) < 0.01 ? "<$0.01" : `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-const units = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: n >= 1 ? 4 : 8 });
-
-/**
- * When Definitive Flash gives more than Uniswap for this exact trade (quoted at the same moment): a
- * highlighted "You save $X with Definitive Flash", with both amounts side by side.
- */
-export function bestPrice(
-  e: { edgePct: number; winner: "flash" | "uniswap" | "tie"; flashOut?: number; uniswapOut?: number },
-  receivedUsd: number | null = null,
-  symbol = "",
-) {
-  const by = `${Math.abs(e.edgePct).toFixed(2)}%`;
-  const saved = savedUsd(e.edgePct, receivedUsd);
-  const sides =
-    e.flashOut !== undefined && e.uniswapOut !== undefined
-      ? el(
-          "div",
-          { class: "vs-row" },
-          el("span", { class: "vs win" }, el("b", {}, "Definitive Flash"), `${units(e.flashOut)} ${symbol}`),
-          el("span", { class: "vs" }, el("b", {}, "Uniswap"), `${units(e.uniswapOut)} ${symbol}`),
-        )
-      : null;
-  return el(
-    "div",
-    { class: "best-price win", title: "This trade quoted on Uniswap's pools at the same moment" },
-    el("strong", {}, saved !== null ? `You save ${savedMoney(saved)} with Definitive Flash` : `Definitive Flash gives ${by} more`),
-    el("span", { class: "best-sub" }, `+${by} more ${symbol || "out"} than Uniswap · MEV-protected`),
-    sides,
-  );
+  return facts;
 }
 
 const short = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;

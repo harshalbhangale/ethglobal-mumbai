@@ -2,7 +2,7 @@ import { el, send } from "./dom";
 import { tokenIcon } from "./logos";
 
 /**
- * Token picker for the card, Uniswap-style: ETH and BTC up top, then live search by symbol, name or
+ * Token picker for the card, like a swap app: ETH and BTC up top, then live search by symbol, name or
  * pasted contract address (Base only, through the app's /api/tokens/search). Symbols aren't unique,
  * so each row shows the contract and liquidity; tokens Definitive flags as risky can't be picked.
  */

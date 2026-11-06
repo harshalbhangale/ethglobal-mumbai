@@ -41,13 +41,11 @@ Kall Markets is one product in three places, wherever calls actually show up:
   failed”, and no trade is offered.
 - **Trade it.** One tap builds a Definitive Flash order on Base: quote, price impact and fee up front, signed in
   your own wallet (MetaMask or a Privy wallet from signing in with X).
-- **Prove the price.** Every Flash quote is set beside Uniswap’s for the same swap, so you see the best price
-  before you sign.
 - **Get a receipt.** After the fill you get the Basescan transaction and the route Definitive took.
 
 ## Built with
 
-Definitive Flash (every order) · Arkiv (calls, results, trades) · Uniswap Trading API (price benchmark) ·
+Definitive Flash (every order) · Arkiv (calls, results, trades) ·
 Chainlink price feeds on Base · Swarm (post snapshots) · Privy (sign in with X, embedded wallet).
 
 Live: [kall-markets.vercel.app](https://kall-markets.vercel.app)

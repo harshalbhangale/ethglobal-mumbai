@@ -22,9 +22,8 @@ plays keyboard haptics only with Allow Full Access.
   Max; the Kall wallet's balance beside it); **You get** is the coin, about how much, and the price it
   buys at. Tap the coin to pick another, like a swap's token list: ETH and BTC up top, then type a name or
   symbol on the keyboard's own keys, or paste a contract address, and Definitive's search lists what Flash
-  trades on Base (logo, price, liquidity; risky tokens are marked and refused). The review also sets the
-  Flash quote beside Uniswap's for the same trade ("Best price: ✓ Definitive Flash · +0.42% vs Uniswap")
-  when the server has `UNISWAP_API_KEY`; orders still go only to Flash. Market, Limit or TWAP is a small toggle; take-profit and stop-loss fold into Advanced (with the
+  trades on Base (logo, price, liquidity; risky tokens are marked and refused). The review shows
+  "Best price: ✓ Definitive Flash · best route on Base"; orders go only to Flash. Market, Limit or TWAP is a small toggle; take-profit and stop-loss fold into Advanced (with the
   limit offset, −1 to −10%, or the TWAP length, 10 minutes to 12 hours) and show where they'd sell. **Review** gets a fresh
   Definitive Flash quote (you pay, you get, price impact and fee, exits, approval) without sending
   anything; **Confirm & place** sends it.

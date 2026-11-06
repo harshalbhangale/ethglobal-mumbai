@@ -69,7 +69,7 @@ Three apps, one server, three rails:
 1. **Read.** A call is captured from X (extension) or a copied message (keyboard). The AI reader decides if it's a real call and its direction.
 2. **Check.** A coin named next to a contract that isn't that coin gets "Call check failed" and no trade.
 3. **Price and keep.** The entry price comes from Chainlink on Base; the call, its result later, and every trade go to Arkiv; the post is snapshotted to Swarm.
-4. **Trade.** Definitive Flash quotes, you sign in your own wallet, it fills on Base. Uniswap is asked for the same quote only to show Flash's edge.
+4. **Trade.** Definitive Flash quotes, you sign in your own wallet, it fills on Base.
 5. **Prove.** You get the Basescan receipt, and the caller's record updates for everyone.
 
 <details><summary>Same flow as a Mermaid diagram</summary>
@@ -98,7 +98,6 @@ flowchart LR
 
   subgraph Trade["Trade"]
     FL["Definitive Flash<br/>quote → sign → fill"]
-    UNI["Uniswap API<br/>price benchmark only"]
     WAL["Your wallet<br/>MetaMask · Privy"]
     BASE["Base mainnet<br/>Basescan receipt"]
   end
@@ -111,7 +110,6 @@ flowchart LR
   API --> CHECK
   ARK -->|caller record| EXT & KB & WEB
   API --> FL
-  API -.->|compare| UNI
   FL --> WAL --> BASE
   BASE -->|trade record| ARK
 ```
@@ -156,7 +154,6 @@ Environment (`kallr-webapp/.env.local`):
 | `OPENAI_API_KEY` | Keyboard AI: reading calls and plain-word orders | Keyboard falls back to links and cashtags only |
 | `ELEVENLABS_API_KEY` | Keyboard voice orders (Scribe) | OpenAI transcription, if set |
 | `SWARM_API_URL`, `SWARM_POSTAGE_BATCH_ID` | Your own Bee node and batch for snapshots | Swarm's public gateway |
-| `UNISWAP_API_KEY` | The "Best price" line: each Flash quote set beside Uniswap's | The line is hidden; trading is unchanged |
 | `NEXT_PUBLIC_ANON_RPC` | Which Anon-RPC network the web app's reads use: `nym` (default), `tor`, `passthrough` or `off` | Nym |
 | `NEXT_PUBLIC_ETH_RPC_URL` | The one Ethereum mainnet read that finds the Anon-RPC worker's hash | publicnode, drpc, 1rpc |
 
@@ -181,30 +178,6 @@ Where the Flash code lives:
 [`/api/flash/quote`](kallr-webapp/app/api/flash/quote/route.ts) and `/api/flash/order` keep the key server-side;
 the extension signs on X in [`placeOnX`](kallr-extension/src/flash-direct.ts) and shows the fill's Basescan
 transaction and route from `/orders/{id}`.
-
-## Uniswap: the price check on every Flash quote
-
-Kall Markets trades only through Definitive Flash. Uniswap is the benchmark: when Flash quotes a trade, the same
-swap (same tokens, same amount, same moment) is quoted through the
-[Uniswap Trading API](https://developers.uniswap.org/docs/api-reference/aggregator_quote) on Uniswap's v2, v3 and
-v4 pools, and one line under the quote says who gives more:
-
-> **Best price:** ✓ Definitive Flash · +0.42% vs Uniswap
-
-If Uniswap gives more, the line says so (“Uniswap +0.1% · Flash adds MEV protection”). If Uniswap is slow or the
-key is missing, the line is hidden and nothing else changes.
-
-- [`uniswapQuote`](packages/integrations/src/uniswap.ts#L37): `POST /v1/quote`, `EXACT_INPUT` on Base (8453),
-  `protocols: ["V2","V3","V4"]` for a like-for-like pool price, 2.5s timeout, never throws.
-- [`comparePrices`](packages/integrations/src/uniswap.ts#L92): Flash's output against Uniswap's in the output
-  token's decimals, as a signed percentage.
-- [`uniswapFor`](kallr-webapp/lib/server/uniswap.ts#L39): maps the order to Uniswap's tokenIn/tokenOut (USDC in on
-  a buy, the asset in on a sell; native ETH as WETH) and reads a searched token's decimals from Base.
-- [`/api/flash/quote`](kallr-webapp/app/api/flash/quote/route.ts#L15): starts the Uniswap quote alongside the Flash
-  quote, so the benchmark adds no wait, and returns it as `compare`.
-- Shown in the Kall Extension ([`bestPrice`](kallr-extension/src/flash-card.ts#L626)) and the Kall Web App's
-  ticket ([`trade-ticket.tsx`](kallr-webapp/components/trade-ticket.tsx#L471)).
-- Feedback for the Uniswap team: [FEEDBACK.md](FEEDBACK.md).
 
 ## Anon-RPC: the web app reads the chain privately
 
@@ -454,7 +427,7 @@ row and `/api/keyboard`, the Arkiv data layer and the `/trades` dashboard.
 ## Sponsor feedback
 
 Short, specific notes from building on their stacks: [Definitive](feedback/definitive.md),
-[Arkiv](arkiv/friction.md), [Swarm](arkiv/swarm.md#what-got-in-our-way) and [Uniswap](FEEDBACK.md).
+[Arkiv](arkiv/friction.md) and [Swarm](arkiv/swarm.md#what-got-in-our-way).
 
 ## How we used AI
 

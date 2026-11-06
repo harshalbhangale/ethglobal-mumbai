@@ -4,7 +4,7 @@ import { type ExitPrices, type ParsedOrder, exitPrices, parseOrder } from "@kall
 import type { FlashOrderInput } from "@kallr/integrations/definitive";
 import type { ConnectedWallet } from "@privy-io/react-auth";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type OrderContext, type PlaceStep, type PriceEdge, placeFlashOrder } from "@/lib/flash-client";
+import { type OrderContext, type PlaceStep, placeFlashOrder } from "@/lib/flash-client";
 import { toDecimal, toFlashOrder } from "@/lib/flash-order";
 import { useUsdPrices } from "./order-desk";
 
@@ -83,8 +83,6 @@ export function TradeTicket({
   const [source, setSource] = useState<{ postId: string; caller: string | null } | null>(null);
   const [via, setVia] = useState<OrderContext["source"]>("desk");
   const [run, setRun] = useState<Run>({ kind: "idle" });
-  // Flash vs Uniswap for the trade being placed: the benchmark line under the steps.
-  const [edge, setEdge] = useState<PriceEdge | null>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
 
   /** Fill the form from a typed order or a link. Returns an error, or null when applied. */
@@ -178,7 +176,6 @@ export function TradeTicket({
     if (!flash?.ok || !wallet || busy || !order) return;
     const seen: PlaceStep[] = [];
     let at: PlaceStep | null = null;
-    setEdge(null);
     const summary =
       kind === "limit" && limitPrice
         ? `Limit ${side} placed: ${usd(amountUsd)} of ${symbol} at ${usd(limitPrice)}`
@@ -193,7 +190,6 @@ export function TradeTicket({
           setRun({ kind: "working", step, seen: [...seen] });
         },
         { source: via, caller: source?.caller ?? null },
-        setEdge,
       );
       setRun({ kind: "done", orderId: res.orderId, seen: [...seen], summary, exits: res.bracketStatus });
       onPlaced();
@@ -408,7 +404,7 @@ export function TradeTicket({
               <p className="flex items-center justify-between gap-3 rounded-lg border border-rule px-3 py-2 text-xs" title="Definitive Flash routes this order across Base's venues">
                 <span className="text-slate">Best price</span>
                 <span className="font-semibold text-up">
-                  ✓ Definitive Flash · {edge?.winner === "flash" ? `+${Math.abs(edge.edgePct).toFixed(2)}% vs Uniswap` : "best route on Base"}
+                  ✓ Definitive Flash · best route on Base
                 </span>
               </p>
             )}

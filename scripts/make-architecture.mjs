@@ -86,7 +86,6 @@ s += lines(d.x + 28, 896, [
   "Price impact, slippage and fee shown before you sign",
   "You sign in your own wallet: MetaMask or Privy",
   "Fill returns the Basescan tx and the venues used",
-  "Flash quote checked against Uniswap’s for the edge",
 ], 15, 30, TEXT);
 
 // Arkiv

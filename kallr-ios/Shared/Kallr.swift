@@ -213,16 +213,7 @@ enum Kallr {
     struct Preview: Codable { let title: String; let kind: String; let pay: String; let get: String; let exits: String; let approval: String }
     struct Details: Codable { let impactPct: Double?; let slippagePct: Double?; let feeUsd: Double? }
     /** A dry run (the review card) or a placed order. */
-    /** The same trade quoted on Uniswap at the same moment: a benchmark, orders go only to Flash. */
-    struct Compare: Codable {
-        let edgePct: Double
-        let winner: String
-        /** Same wording as the web app and extension: Definitive Flash, with its edge when it beats Uniswap. */
-        var line: String {
-            winner == "flash" ? String(format: "✓ Definitive Flash · +%.2f%% vs Uniswap", abs(edgePct)) : "✓ Definitive Flash · best route on Base"
-        }
-    }
-    struct Placed: Codable { let orderId: String?; let preview: Preview; let details: Details?; let approvals: [String]?; let compare: Compare? }
+    struct Placed: Codable { let orderId: String?; let preview: Preview; let details: Details?; let approvals: [String]? }
 
     /** A Base token from Definitive's search (symbol, name or contract address). */
     struct TokenHit: Codable, Identifiable {

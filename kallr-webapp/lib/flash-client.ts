@@ -34,11 +34,8 @@ async function sendAndWait(provider: Eip1193, from: string, tx: { to: string; da
 const signTyped = (provider: Eip1193, from: string, typedDataJson: string) =>
   provider.request({ method: "eth_signTypedData_v4", params: [from, typedDataJson] }) as Promise<Hex>;
 
-/** Flash vs Uniswap for the same trade (server-side benchmark); edgePct > 0 means Flash gives more. */
-export type PriceEdge = { edgePct: number; winner: "flash" | "uniswap" | "tie" };
-
 export async function quoteFlashOrder(order: FlashOrderInput) {
-  return api<{ quote: FlashQuote; compare: PriceEdge | null }>("/api/flash/quote", { method: "POST", body: JSON.stringify({ order }) });
+  return api<{ quote: FlashQuote }>("/api/flash/quote", { method: "POST", body: JSON.stringify({ order }) });
 }
 
 /**
@@ -53,11 +50,9 @@ export async function placeFlashOrder(
   wallet: ConnectedWallet,
   onStep: (step: PlaceStep) => void,
   context: OrderContext = { source: "desk" },
-  onQuoted?: (vsUniswap: PriceEdge | null) => void,
 ): Promise<{ orderId: string; bracketStatus: string | null }> {
   onStep("quoting");
-  const { quote, compare } = await quoteFlashOrder(order);
-  onQuoted?.(compare ?? null);
+  const { quote } = await quoteFlashOrder(order);
 
   await wallet.switchChain(8453);
   const provider = (await wallet.getEthereumProvider()) as Eip1193;
