@@ -39,6 +39,8 @@ export function WalletPanel({ session }: { session: Session }) {
         <Balances address={session.address} />
       </section>
 
+      <Deposit address={session.address} />
+
       <section className="rounded-lg border border-rule bg-card p-6">
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-semibold">Your wallets</h3>
@@ -169,5 +171,59 @@ function Balances({ address }: { address: Address }) {
         <p className="mt-3 text-sm text-slate">Add a few cents of ETH on Base for gas: the first trade needs one approval.</p>
       ) : null}
     </>
+  );
+}
+
+/** Add funds: this wallet's address on Base, with the one rule that matters (Base only). */
+function Deposit({ address }: { address: Address }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+  return (
+    <section aria-labelledby="deposit-heading" className="rounded-lg border border-rule bg-card p-6">
+      <div className="flex items-center justify-between gap-3">
+        <h3 id="deposit-heading" className="font-display text-lg font-semibold">
+          Deposit
+        </h3>
+        <span className="rounded-md bg-[#0052ff]/15 px-2 py-0.5 text-xs font-semibold text-[#6e9bff]">Base network</span>
+      </div>
+      <p className="mt-1 text-sm text-slate">Send USDC to trade, plus a little ETH for gas (about $1 covers many trades).</p>
+
+      <div className="mt-4 rounded-lg border border-rule bg-paper p-4">
+        <p className="text-xs uppercase tracking-wider text-slate">Your address on Base</p>
+        <p className="mt-1.5 font-mono text-sm break-all text-ink">{address}</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={copy} className="rounded-md bg-lime px-4 py-2 text-sm font-semibold text-on-lime hover:bg-lime-strong">
+            {copied ? "Copied ✓" : "Copy address"}
+          </button>
+          <a href={`${BASESCAN}${address}`} target="_blank" rel="noreferrer" className="rounded-md border border-rule px-4 py-2 text-sm font-semibold hover:border-ink">
+            View on Basescan ↗
+          </a>
+        </div>
+      </div>
+
+      <ol className="mt-4 space-y-2 text-sm">
+        {[
+          ["From an exchange", "Withdraw USDC to this address and pick Base as the network (Coinbase, Binance, OKX all support it)."],
+          ["From another wallet", "Send USDC or ETH on Base. Coming from Ethereum or another chain? Bridge first, e.g. with the Base bridge."],
+          ["Then trade", "Your balance above updates within seconds; every order is signed by this wallet."],
+        ].map(([t, d], i) => (
+          <li key={t} className="flex gap-3">
+            <span className="grid size-5 shrink-0 place-items-center rounded-full bg-raised text-xs font-semibold text-lime">{i + 1}</span>
+            <span>
+              <span className="font-semibold">{t}.</span> <span className="text-slate">{d}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-4 rounded-md border border-amber/40 bg-amber/10 px-3 py-2 text-xs text-ink">
+        Only send on <strong>Base</strong>. Funds sent on another network to this address won’t show up here.
+      </p>
+    </section>
   );
 }

@@ -292,3 +292,16 @@
   .hs-scene, .hs-in, .hs-up, .hs-slide, .hs-tick, .hs-pop, .hs-kb, .hs-press { animation: none; opacity: 1; transform: none; max-height: none; }
   .hs-follow::after { content: "Following"; animation: none; }
 }
+
+/* X's embedded post: clip its iframe to our rounded corners (no white edges) and keep it dark. */
+.tweet-embed .twitter-tweet,
+.tweet-embed .twitter-tweet-rendered {
+  margin-inline: auto !important;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--color-paper);
+}
+.tweet-embed iframe {
+  color-scheme: dark;
+  border-radius: 12px;
+}

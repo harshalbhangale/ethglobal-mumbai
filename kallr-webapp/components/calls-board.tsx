@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FollowButton } from "@/components/follow-button";
 import { KolAvatar } from "@/components/kol-avatar";
 import { TweetEmbed } from "@/components/tweet-embed";
+import { useUsdPrices } from "@/components/order-desk";
 import { type CallItem, callerStats, copyCall, type ResultItem, useFollows, useKallrData } from "@/lib/feed";
 
 /**
@@ -62,6 +63,14 @@ export function CallsBoard({
   onCopy: (row: Row) => void;
 }) {
   const { favs, toggle } = useFavorites();
+  const prices = useUsdPrices();
+  const recordOf = (h: string) => {
+    const s = callerStats(
+      data.results.filter((r) => r.caller === h),
+      data.calls.filter((c) => c.caller === h),
+    );
+    return s.hitRate === null ? "No record yet" : `${Math.round(s.hitRate * 100)}% hit · ${s.settled} settled`;
+  };
   const [filter, setFilter] = useState<Filter>("active");
 
   const all = useMemo<Row[]>(
@@ -122,7 +131,7 @@ export function CallsBoard({
       ) : rows.length === 0 ? (
         <Empty scope={caller ? "caller" : scope} filter={filter} onExplore={() => setScope("explore")} />
       ) : (
-        <ul className="space-y-4">
+        <ul className="space-y-5">
           {rows.map((r) => (
             <PostCard
               key={r.id}
@@ -131,6 +140,8 @@ export function CallsBoard({
               onFav={() => toggle(r.postId)}
               onCaller={() => setCaller(r.caller)}
               onCopy={() => onCopy(r)}
+              record={recordOf(r.caller)}
+              live={prices[r.asset as "ETH" | "BTC"] ?? null}
             />
           ))}
         </ul>
@@ -162,55 +173,115 @@ function Empty({ scope, filter, onExplore }: { scope: Scope | "caller"; filter: 
   );
 }
 
-function PostCard({ row, fav, onFav, onCaller, onCopy }: { row: Row; fav: boolean; onFav: () => void; onCaller: () => void; onCopy: () => void }) {
+function PostCard({
+  row,
+  fav,
+  onFav,
+  onCaller,
+  onCopy,
+  record,
+  live,
+}: {
+  row: Row;
+  fav: boolean;
+  onFav: () => void;
+  onCaller: () => void;
+  onCopy: () => void;
+  record: string;
+  live: number | null;
+}) {
   const up = row.direction === "long";
   const result = row.open ? null : (row as ResultItem);
   const copyable = "href" in copyCall(row);
   const now = Date.now() / 1000;
+  // Move since the call, signed so that green means the call is working.
+  const move = row.open && live && row.entry ? ((live - row.entry) / row.entry) * (up ? 1 : -1) * 100 : null;
+  const elapsed = row.open ? Math.min(1, Math.max(0, (now - row.postedAt) / Math.max(1, row.deadline - row.postedAt))) : 1;
+  const tone = (n: number) => (n > 0 ? "text-up" : n < 0 ? "text-down" : "text-slate");
   return (
-    <li className="overflow-hidden rounded-lg border border-rule bg-card">
-      <div className="flex items-center justify-between gap-3 px-4 pt-3">
-        <button type="button" onClick={onCaller} className="flex min-w-0 items-center gap-2 text-left">
-          <KolAvatar handle={row.caller} size={28} />
-          <span className="truncate text-sm font-semibold hover:underline">@{row.caller}</span>
+    <li className="overflow-hidden rounded-xl border border-rule bg-card transition-colors hover:border-rule-strong">
+      <div className="flex items-center gap-2.5 px-4 pt-3.5 pb-3">
+        <button type="button" onClick={onCaller} className="flex min-w-0 items-center gap-2.5 text-left">
+          <KolAvatar handle={row.caller} size={32} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold hover:underline">@{row.caller}</span>
+            <span className="block text-xs text-slate tabular-nums">
+              {record} · {span(now - row.postedAt)} ago
+            </span>
+          </span>
         </button>
+        <span
+          className={`ml-auto shrink-0 rounded-md px-2 py-1 text-xs font-bold tracking-wide ${up ? "bg-up/15 text-up" : "bg-down/15 text-down"}`}
+        >
+          {up ? "▲ LONG" : "▼ SHORT"} ${row.asset}
+        </span>
         <button
           type="button"
           onClick={onFav}
           aria-pressed={fav}
-          aria-label={fav ? "Remove from favorites" : "Add to favorites"}
-          className={`text-xl leading-none ${fav ? "text-lime-strong" : "text-rule-strong hover:text-slate"}`}
+          aria-label={fav ? "Remove from saved" : "Save this call"}
+          className={`shrink-0 text-lg leading-none ${fav ? "text-lime-strong" : "text-rule-strong hover:text-slate"}`}
         >
           {fav ? "★" : "☆"}
         </button>
       </div>
-      <div className="px-3 pt-2">
+
+      <div className="px-3">
         <TweetEmbed postId={row.postId} handle={row.caller} />
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-rule bg-paper/40 px-4 py-3 text-sm">
-        <span className="font-semibold">
-          <span className={up ? "text-up" : "text-down"}>{up ? "LONG" : "SHORT"}</span> ${row.asset}
-        </span>
-        <span className="text-slate">Entry {usd(row.entry)}</span>
-        {result ? (
-          <span className={`font-semibold ${result.status === "hit" ? "text-up" : result.status === "miss" ? "text-down" : "text-slate"}`}>
-            {result.status.toUpperCase()} {pct(result.returnBps)} <span className="font-normal text-slate">· exit {usd(result.exit)}</span>
-          </span>
-        ) : (
-          <span className="text-slate">Open · settles in {span(row.deadline - now)}</span>
+
+      <div className="mt-3 border-t border-rule bg-paper/40">
+        {row.open && (
+          <div className="h-0.5 bg-rule" title={`${Math.round(elapsed * 100)}% of the call's window has passed`}>
+            <div className="h-full bg-lime/70" style={{ width: `${elapsed * 100}%` }} />
+          </div>
         )}
-        <span className="ml-auto flex items-center gap-3">
-          <a href={`https://x.com/${row.caller}/status/${row.postId}`} target="_blank" rel="noreferrer" className="text-slate hover:text-ink">
-            X ↗
-          </a>
-          {row.open && copyable && (
-            <button type="button" onClick={onCopy} className="rounded-md bg-lime px-3 py-1.5 font-semibold text-on-lime hover:bg-lime-strong">
-              Copy call
-            </button>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-sm">
+          <Metric label="Entry" value={usd(row.entry)} />
+          {result ? (
+            <>
+              <Metric label="Exit" value={usd(result.exit)} />
+              <Metric
+                label="Result"
+                value={`${result.status.toUpperCase()} ${pct(result.returnBps)}`}
+                tone={result.status === "hit" ? "text-up" : result.status === "miss" ? "text-down" : "text-slate"}
+              />
+            </>
+          ) : (
+            <>
+              <Metric label="Now" value={live ? usd(live) : "…"} />
+              <Metric label="Since call" value={move === null ? "—" : `${move >= 0 ? "+" : ""}${move.toFixed(2)}%`} tone={move === null ? "" : tone(move)} />
+              <Metric label="Settles in" value={span(row.deadline - now)} />
+            </>
           )}
-        </span>
+          <span className="ml-auto flex items-center gap-2">
+            <a
+              href={`https://x.com/${row.caller}/status/${row.postId}`}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open on X"
+              className="grid size-8 place-items-center rounded-md border border-rule text-slate hover:border-ink hover:text-ink"
+            >
+              𝕏
+            </a>
+            {row.open && copyable && (
+              <button type="button" onClick={onCopy} className="rounded-md bg-lime px-4 py-1.5 font-semibold text-on-lime hover:bg-lime-strong">
+                Copy call
+              </button>
+            )}
+          </span>
+        </div>
       </div>
     </li>
+  );
+}
+
+function Metric({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <span className="min-w-0">
+      <span className="block text-[11px] uppercase tracking-wider text-slate">{label}</span>
+      <span className={`block font-semibold tabular-nums ${tone ?? ""}`}>{value}</span>
+    </span>
   );
 }
 

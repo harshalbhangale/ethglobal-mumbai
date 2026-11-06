@@ -307,7 +307,7 @@ function AccountCard({ session, onWallet }: { session: Session; onWallet: () => 
       </div>
       <div className="mt-3 flex gap-2 text-xs">
         <button type="button" onClick={onWallet} className="flex-1 rounded-md border border-rule py-1.5 font-semibold hover:border-lime hover:text-lime">
-          Wallet
+          Deposit
         </button>
         <button type="button" onClick={() => session.logout()} className="flex-1 rounded-md border border-rule py-1.5 font-semibold text-slate hover:text-ink">
           Sign out
