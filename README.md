@@ -32,37 +32,6 @@ One product, wherever calls show up:
 
 <p align="center"><img src="docs/architecture.svg" alt="Three apps talk to one Kall server on Vercel, which trades on Definitive Flash, prices and checks with Chainlink (price feeds and CRE), and keeps receipts on Arkiv with post snapshots on Swarm." /></p>
 
-```mermaid
-flowchart TB
-  X["𝕏 A post on X<br/>a call + a contract address"] --> EXT
-  TG["Telegram · WhatsApp<br/>a call in a group chat"] --> KB
-
-  subgraph APPS["Kall, where the call is"]
-    direction LR
-    EXT["Kall Extension<br/>Chrome, on X"]
-    KB["Kall Keyboard<br/>iPhone · Android"]
-    WEB["Kall Web App<br/>kallmarkets.vercel.app"]
-  end
-
-  EXT & KB & WEB --> API["Kall API · Next.js on Vercel<br/>read the call → check the coin → price it → quote → you sign → record"]
-
-  API -->|quote · order| FLASH["Definitive Flash<br/>market · limit · TWAP · TP / SL"]
-  API -->|price at the post| FEEDS["Chainlink price feeds<br/>on Base"]
-  API -->|is this the real coin?| CRE["Chainlink CRE<br/>check-coin · score-calls"]
-  API -->|call · result · trade| ARKIV["Arkiv<br/>read-only records"]
-  API -->|the post itself| SWARM["Swarm<br/>post snapshot"]
-
-  FLASH --> BASE[("Base mainnet<br/>every fill, Basescan receipt")]
-  CRE -->|signed verdicts| KV[("KallVerdicts<br/>Base Sepolia")]
-
-  classDef app fill:#0b0d0c,stroke:#c6f25a,color:#e6ebe3
-  classDef sponsor fill:#141816,stroke:#c6f25a,color:#e6ebe3
-  classDef chain fill:#0b1a3a,stroke:#0052ff,color:#e6ebe3
-  class EXT,KB,WEB,API app
-  class FLASH,FEEDS,CRE,ARKIV,SWARM sponsor
-  class BASE,KV chain
-```
-
 Three apps, one server, three rails. Every call goes down the same line:
 
 1. **Read.** An AI reader decides whether a post is a real call, long or short, and which coin. Sarcasm,
