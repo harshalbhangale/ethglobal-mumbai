@@ -199,11 +199,25 @@ enum Kallr {
      * Flash. With dryRun it gets a fresh quote and signs, but sends nothing: the review card.
      */
     static func execute(_ order: KeyboardOrder, dryRun: Bool = false) async -> Swift.Result<Placed, Failure> {
-        var request = URLRequest(url: origin.appendingPathComponent("api/keyboard/execute"), timeoutInterval: 120)
+        await place("api/keyboard/execute", ExecuteBody(order: order, dryRun: dryRun))
+    }
+
+    private struct SwapBody: Codable { let usd: String; let dryRun: Bool }
+
+    /**
+     * Swap the Kall wallet's ETH to USDC on Flash, keeping about $1 of ETH for gas. With dryRun it gets
+     * a fresh quote and signs, but sends nothing.
+     */
+    static func swap(usd: String, dryRun: Bool = false) async -> Swift.Result<Placed, Failure> {
+        await place("api/keyboard/swap", SwapBody(usd: usd, dryRun: dryRun))
+    }
+
+    private static func place<Body: Encodable>(_ path: String, _ body: Body) async -> Swift.Result<Placed, Failure> {
+        var request = URLRequest(url: origin.appendingPathComponent(path), timeoutInterval: 120)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue("Bearer \(Secrets.execToken)", forHTTPHeaderField: "authorization")
-        request.httpBody = try? JSONEncoder().encode(ExecuteBody(order: order, dryRun: dryRun))
+        request.httpBody = try? JSONEncoder().encode(body)
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0

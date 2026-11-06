@@ -1,7 +1,15 @@
-import { buildQuoteRequest, flashOrderInputSchema } from "@kallr/integrations/definitive";
+import { buildQuoteRequest, flashOrderInputSchema, NATIVE_ASSET } from "@kallr/integrations/definitive";
 import { describe, expect, it } from "vitest";
 import { firstCashtag } from "./keyboard";
-import { buildKeyboardOrder, keyboardOrderSchema, priceString } from "./keyboard-trade";
+import {
+  buildKeyboardOrder,
+  buildSwapOrder,
+  ethForUsd,
+  keyboardOrderSchema,
+  keyboardSwapSchema,
+  maxSwapUsd,
+  priceString,
+} from "./keyboard-trade";
 
 const funder = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 const PEPE = "0x6982508145454Ce325dDbE47a25d4ec3d2311933";
@@ -56,5 +64,27 @@ describe("firstCashtag", () => {
   it("finds the coin a post calls, not dollar amounts", () => {
     expect(firstCashtag("$PEPE sending this week, buying $500 more")).toBe("PEPE");
     expect(firstCashtag("up 20% on $5 bags")).toBeNull();
+  });
+});
+
+describe("swap ETH to USDC", () => {
+  it("sells ETH worth the dollars asked, rounded down", () => {
+    expect(ethForUsd(10, 2000)).toBe("0.005");
+    expect(ethForUsd(10, 2223.41)).toBe("0.004497");
+    expect(() => ethForUsd(0.0001, 2000)).toThrow();
+  });
+  it("keeps about $1 of ETH for gas", () => {
+    expect(maxSwapUsd(0.0104, 2000)).toBe(20);
+    expect(maxSwapUsd(0.0003, 2000)).toBe(0);
+  });
+  it("is a market sell of native ETH that Flash will quote", () => {
+    const order = buildSwapOrder("10", 2000, funder);
+    expect(flashOrderInputSchema.parse(order)).toMatchObject({ asset: "ETH", side: "sell", qty: "0.005", native: true });
+    expect(buildQuoteRequest(order).targetAsset).toBe(NATIVE_ASSET);
+  });
+  it("takes whole dollars and cents, from $1", () => {
+    expect(keyboardSwapSchema.safeParse({ usd: "12.5" }).success).toBe(true);
+    expect(keyboardSwapSchema.safeParse({ usd: "0.5" }).success).toBe(false);
+    expect(keyboardSwapSchema.safeParse({ usd: "1.234" }).success).toBe(false);
   });
 });

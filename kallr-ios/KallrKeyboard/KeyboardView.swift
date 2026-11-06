@@ -48,6 +48,8 @@ final class KeyboardModel: ObservableObject {
     @Published var twapMinutes = 60
     @Published var source: (handle: String, postId: String, line: String)?
     @Published var editingAmount = false
+    /** The pad just opened: the first digit replaces the amount instead of adding to it. */
+    @Published var freshEntry = false
     @Published var placing = Placing.idle
 
     // Orders and wallet
@@ -214,7 +216,10 @@ final class KeyboardModel: ObservableObject {
         if let w = copied?.warning { return w.hasPrefix("Fake") ? "No buy: fake contract" : "No buy: risky token" }
         guard let n = Double(usd), n > 0 else { return "Enter an amount" }
         if let max = wallet?.maxUsd, n > max { return "Up to $\(Kallr.fmt(max)) per order" }
-        if let usdc = wallet?.usdcValue, usdc < n { return "Add USDC to your Kall wallet" }
+        if let usdc = wallet?.usdcValue, usdc < n {
+            let ethUsd = (wallet?.ethValue ?? 0) * ((feed?.prices["ETH"] ?? nil) ?? 0)
+            return ethUsd > n + 1 ? "Swap ETH to USDC in the Kall app" : "Deposit ETH in the Kall app"
+        }
         return nil
     }
 
@@ -251,8 +256,20 @@ final class KeyboardModel: ObservableObject {
         }
     }
 
+    /** Open the number pad on the amount bar. */
+    func startTyping() {
+        tap()
+        editingAmount = true
+        freshEntry = true
+    }
+
     func keypad(_ k: String) {
         tap()
+        if freshEntry {
+            freshEntry = false
+            usd = ""
+            if k == "⌫" { return }
+        }
         switch k {
         case "⌫": usd = String(usd.dropLast())
         case ".": if !usd.contains(".") { usd = (usd.isEmpty ? "0" : usd) + "." }
@@ -577,22 +594,9 @@ private struct TradeTab: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(model.source?.line ?? "Buy on Base · Definitive Flash")
                 .font(.system(size: 12, weight: .semibold)).foregroundStyle(model.source == nil ? Kallr.muted : Kallr.bone).lineLimit(1)
-            HStack(spacing: 6) {
-                ForEach(["ETH", "BTC"], id: \.self) { a in Chip(label: a, on: model.asset == a) { model.tap(); model.asset = a } }
-                Spacer(minLength: 4)
-                Button { model.tap(); model.editingAmount = true } label: {
-                    HStack(spacing: 4) {
-                        Text("$\(model.usd.isEmpty ? "0" : model.usd)").font(.system(size: 22, weight: .black).monospacedDigit()).foregroundStyle(Kallr.bone)
-                        Image(systemName: "pencil").font(.system(size: 11, weight: .bold)).foregroundStyle(Kallr.lime)
-                    }
-                    .padding(.horizontal, 10).frame(height: 36)
-                    .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(Press())
-            }
+            AmountBar(model: model, editing: false)
             HStack(spacing: 6) {
                 ForEach(["1", "5", "10", "25"], id: \.self) { a in Chip(label: "$\(a)", on: model.usd == a) { model.tap(); model.usd = a } }
-                Chip(label: "Custom", on: false) { model.tap(); model.editingAmount = true }
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
@@ -704,18 +708,68 @@ private extension String {
     func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
 }
 
+/**
+ * The dollar amount as an input field: tap it to type on the number pad. ETH or BTC sits at its end.
+ * While typing, a lime caret blinks; the amount is selected until the first key replaces it.
+ */
+private struct AmountBar: View {
+    @ObservedObject var model: KeyboardModel
+    let editing: Bool
+    @State private var blink = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 3) {
+                Text("$").font(.system(size: 20, weight: .black)).foregroundStyle(Kallr.muted)
+                Text(model.usd.isEmpty ? "0" : model.usd)
+                    .font(.system(size: 24, weight: .black).monospacedDigit())
+                    .foregroundStyle(model.usd.isEmpty ? Kallr.muted : Kallr.bone)
+                    .padding(.horizontal, editing && model.freshEntry ? 3 : 0)
+                    .background(editing && model.freshEntry ? Kallr.lime.opacity(0.25) : .clear, in: RoundedRectangle(cornerRadius: 4))
+                if editing {
+                    Rectangle().fill(Kallr.lime).frame(width: 2, height: 24).opacity(blink ? 1 : 0)
+                        .onAppear { withAnimation(.easeInOut(duration: 0.5).repeatForever()) { blink = true } }
+                }
+                Spacer(minLength: 4)
+                if !editing {
+                    Text("TYPE AMOUNT").font(.system(size: 9, weight: .heavy)).tracking(0.4).foregroundStyle(Kallr.muted)
+                }
+            }
+            .padding(.horizontal, 12).frame(height: 44)
+            .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(editing ? Kallr.lime : Kallr.hairline, lineWidth: editing ? 1.5 : 1))
+            .contentShape(Rectangle())
+            .onTapGesture { if !editing { model.startTyping() } }
+            if !editing {
+                HStack(spacing: 2) {
+                    ForEach(["ETH", "BTC"], id: \.self) { a in
+                        Button { model.tap(); model.asset = a } label: {
+                            Text(a).font(.system(size: 13, weight: .heavy))
+                                .foregroundStyle(model.asset == a ? Kallr.black : Kallr.bone)
+                                .frame(width: 48, height: 36)
+                                .background(model.asset == a ? Kallr.lime : .clear, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(Press())
+                    }
+                }
+                .padding(4)
+                .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+}
+
 private struct AmountPad: View {
     @ObservedObject var model: KeyboardModel
     private let keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "⌫"]
 
     var body: some View {
         VStack(spacing: 6) {
-            HStack {
-                Text("$\(model.usd.isEmpty ? "0" : model.usd)").font(.system(size: 30, weight: .black).monospacedDigit()).foregroundStyle(Kallr.bone)
-                Spacer()
-                Button { model.tap(.medium); model.editingAmount = false } label: {
+            HStack(spacing: 6) {
+                AmountBar(model: model, editing: true)
+                Button { model.tap(.medium); model.freshEntry = false; model.editingAmount = false } label: {
                     Text("DONE").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.black)
-                        .frame(width: 72, height: 34).background(Kallr.lime, in: RoundedRectangle(cornerRadius: 8))
+                        .frame(width: 64, height: 44).background(Kallr.lime, in: RoundedRectangle(cornerRadius: 10))
                 }
                 .buttonStyle(Press())
             }
@@ -724,7 +778,7 @@ private struct AmountPad: View {
                     Button { model.keypad(k) } label: {
                         Group { if k == "⌫" { Image(systemName: "delete.left") } else { Text(k) } }
                             .font(.system(size: 22, weight: .medium)).foregroundStyle(Kallr.bone)
-                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .frame(maxWidth: .infinity, minHeight: 42)
                             .background(k == "⌫" || k == "." ? Kallr.keyDark : Kallr.graphite, in: RoundedRectangle(cornerRadius: 7))
                     }
                     .buttonStyle(Press())
@@ -795,8 +849,8 @@ private struct WalletTab: View {
         VStack(alignment: .leading, spacing: 10) {
             if let w = model.wallet, let address = w.address {
                 HStack(spacing: 8) {
+                    Balance(label: "ETH", value: w.ethValue.map { String(format: "%.5f", $0) } ?? "…")
                     Balance(label: "USDC TO TRADE", value: w.usdcValue.map { String(format: "%.2f", $0) } ?? "…")
-                    Balance(label: "ETH FOR GAS", value: w.ethValue.map { String(format: "%.5f", $0) } ?? "…")
                 }
                 HStack(spacing: 8) {
                     Text(address).font(.system(size: 11, design: .monospaced)).foregroundStyle(Kallr.bone).lineLimit(1).truncationMode(.middle)
@@ -813,7 +867,7 @@ private struct WalletTab: View {
                 }
                 .padding(10)
                 .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
-                Text("Fund it from your Privy wallet or MetaMask: send USDC, plus about $1 of ETH for gas, on Base only. The keyboard places orders from it, up to $\(Kallr.fmt(w.maxUsd ?? 25)) each.")
+                Text("Deposit ETH from the Kall Keyboard app (MetaMask opens with it filled in), then swap some to USDC there. About $1 of ETH stays for gas. Orders go up to $\(Kallr.fmt(w.maxUsd ?? 25)) each, Base only.")
                     .font(.system(size: 11)).foregroundStyle(Kallr.muted)
             } else {
                 Empty(text: model.fullAccess ? "Reading your Kall wallet…" : "Turn on Allow Full Access for Kall Keyboard in Settings.")

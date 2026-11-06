@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { getBalances } from "@/lib/chain";
-import { buildKeyboardOrder, keyboardOrderSchema, previewLines } from "@/lib/keyboard-trade";
+import { buildKeyboardOrder, keyboardOrderSchema, previewLines, quoteDetails } from "@/lib/keyboard-trade";
 import { recordTrade } from "@/lib/server/arkiv";
 import { errorResponse } from "@/lib/server/flash";
 import { authorized, keyboardWalletAddress, MAX_ORDER_USD, placeFromKeyboardWallet } from "@/lib/server/keyboard-wallet";
@@ -38,13 +38,7 @@ export async function POST(req: Request) {
     const placed = await placeFromKeyboardWallet(input, body.dryRun === true);
     const preview = previewLines(order, input, placed.quote, token.symbol);
     // What the review card shows next to the preview: Flash's own estimates for this quote.
-    const q = placed.quote;
-    const pct = (v: string | null | undefined) => (v === null || v === undefined || v === "" ? null : Number(v) * 100);
-    const details = {
-      impactPct: pct(q.estimatedPriceImpact),
-      slippagePct: pct(q.recommendedSlippage),
-      feeUsd: q.fees?.estimatedFeeNotional ? Number(q.fees.estimatedFeeNotional) : null,
-    };
+    const details = quoteDetails(placed.quote);
     if (placed.dryRun) return Response.json({ dryRun: true, preview, details, approvals: placed.approvals });
     after(() => recordTrade(input, placed.submitted.orderId, { source: "keyboard", caller: order.caller ?? null }));
     return Response.json({ dryRun: false, orderId: placed.submitted.orderId, preview, details, approvals: placed.approvals });

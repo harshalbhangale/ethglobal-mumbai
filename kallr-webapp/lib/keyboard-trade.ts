@@ -4,7 +4,7 @@ import { z } from "zod";
 /**
  * The keyboard's trade panel sends a simple order (token, dollars, percentages); the server turns it
  * into the shared Flash order input at the current price, so the Kotlin side never does price math.
- * Buys only: the keyboard spends USDC from the embedded wallet.
+ * Orders are buys that spend USDC; the app's swap sells the wallet's ETH for that USDC.
  */
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
@@ -69,6 +69,55 @@ const amount = (s: string) => {
   const n = Number(s);
   return n >= 1000 ? Math.round(n).toLocaleString("en-US") : n >= 1 ? n.toFixed(2) : n.toPrecision(4);
 };
+
+/** About $1 of ETH stays in the Kall wallet: the wrap and approvals are paid in ETH. */
+export const GAS_RESERVE_ETH = 0.0004;
+
+/** The app's Swap ETH to USDC: dollars of the Kall wallet's ETH to sell for USDC on Flash. */
+export const keyboardSwapSchema = z
+  .object({ usd: z.string().regex(/^(0|[1-9][0-9]*)(\.[0-9]{1,2})?$/, "Enter a dollar amount.") })
+  .strict()
+  .refine((o) => Number(o.usd) >= 1, { message: "Swap at least $1.", path: ["usd"] });
+
+/** ETH to sell for `usd` dollars, rounded down to 6 decimals so it never sells more than asked. */
+export function ethForUsd(usd: number, price: number): string {
+  if (!(price > 0) || !Number.isFinite(price)) throw new Error("ETH price unavailable");
+  const qty = Math.floor((usd / price) * 1e6) / 1e6;
+  if (!(qty > 0)) throw new Error("That amount is too small to swap.");
+  return qty.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+/** The most the wallet can swap and still keep gas, in dollars rounded down to cents. */
+export function maxSwapUsd(ethBalance: number, price: number): number {
+  return Math.max(0, Math.floor((ethBalance - GAS_RESERVE_ETH) * price * 100) / 100);
+}
+
+/** A market sell of the wallet's native ETH for USDC: Flash wraps it, then sells the WETH. */
+export function buildSwapOrder(usd: string, price: number, funder: string): FlashOrderInput {
+  return { asset: "ETH", side: "sell", qty: ethForUsd(Number(usd), price), orderType: "market", funderAddress: funder, native: true };
+}
+
+/** Flash's own estimates for a quote, for the review card. */
+export function quoteDetails(q: FlashQuote) {
+  const pct = (v: string | null | undefined) => (v === null || v === undefined || v === "" ? null : Number(v) * 100);
+  return {
+    impactPct: pct(q.estimatedPriceImpact),
+    slippagePct: pct(q.recommendedSlippage),
+    feeUsd: q.fees?.estimatedFeeNotional ? Number(q.fees.estimatedFeeNotional) : null,
+  };
+}
+
+/** The swap's review card, in the same shape as an order's. */
+export function swapPreviewLines(usd: string, input: FlashOrderInput, quote: FlashQuote) {
+  return {
+    title: `Swap $${usd} of ETH to USDC`,
+    kind: "Market swap on Base through Flash",
+    pay: `${input.qty} ETH`,
+    get: `about ${amount(quote.to.amount)} USDC`,
+    exits: "None",
+    approval: quote.wrap?.evmTx ? `Wrap ${input.qty} ETH, then approve it` : quote.evm.approveTx ? `${input.qty} WETH only` : "Not needed",
+  };
+}
 
 /** What the confirm sheet shows, in plain words. */
 export function previewLines(o: KeyboardOrder, input: FlashOrderInput, quote: FlashQuote, symbol: string) {

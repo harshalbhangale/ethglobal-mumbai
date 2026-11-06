@@ -8,7 +8,8 @@ panel; typing stays on the iPhone keyboard (the globe key switches between them)
   **Trade**. Caller chips with hit rates narrow the list; Active, Settled and starred Favorites filter it.
   **Explore** lists every caller Kall Markets tracks or has priced, with their record and Follow. The
   clipboard button checks a post or $TICKER message you copied.
-- **Trade:** ETH or BTC; $1, $5, $10, $25 or a custom amount on a number pad; Market, Limit (−3, −5 or
+- **Trade:** a dollar amount bar you type into (tap it for the number pad), ETH or BTC beside it, and $1,
+  $5, $10 and $25 presets under it; Market, Limit (−3, −5 or
   −10%) or TWAP (10 min, 1 hour, 4 hours); take-profit and stop-loss presets. **Review** gets a fresh
   Definitive Flash quote (you pay, you get, price impact and fee, exits, approval) without sending
   anything; **Confirm & place** sends it.
@@ -20,7 +21,7 @@ panel; typing stays on the iPhone keyboard (the globe key switches between them)
 **How a trade is placed.** The keyboard sends the order to `/api/keyboard/execute` with a secret only these
 builds carry. The server re-quotes on Flash, approves exactly this USDC amount, signs with the Kall wallet
 and submits, then records the trade on Arkiv as a keyboard trade. The Kall wallet is a demo hot wallet held
-by the server, funded with a little USDC and ETH on Base, with a per-order cap (`KALL_EXEC_MAX_USD`, $25).
+by the server, funded with ETH on Base (swapped to USDC in the app), with a per-order cap (`KALL_EXEC_MAX_USD`, $25).
 An order typed on the iPhone keyboard ("buy $20 of eth tp 10% sl 5%") is filled in when you switch to Kall.
 
 iOS doesn't let keyboards use the microphone, so voice orders are Android only, as are Base tokens beyond
@@ -28,12 +29,16 @@ ETH and BTC.
 
 ## The app
 
-- **Wallet:** the Kall wallet's USDC and ETH, its address (copy, or open it on BaseScan), ETH and BTC prices,
-  how many calls are open on Arkiv, the latest orders and the best callers by settled hit rate.
-  **Deposit USDC or ETH** picks an asset and amount, then opens MetaMask with the transfer to the Kall
+- **Wallet:** the Kall wallet's ETH and USDC, its address (copy, or open it on BaseScan), ETH and BTC
+  prices, how many calls are open on Arkiv, the latest orders and the best callers by settled hit rate.
+  **Deposit ETH** (USDC also works) picks an amount, then opens MetaMask with the transfer to the Kall
   wallet on Base filled in (an EIP-681 link), hands it to any other wallet app, or shows it as a QR code
   for a wallet on another device. Balances are read again when you come back from the wallet, and a
   deposit that landed is called out.
+- **Swap ETH to USDC:** type dollars (or $5, $10, $25, Max), review a fresh Definitive Flash quote, confirm.
+  The server (`/api/keyboard/swap`) sells that much of the Kall wallet's ETH for USDC: Flash's wrap to
+  WETH, an approval for exactly that amount, then the signed order. About $1 of ETH always stays for gas,
+  and one swap goes up to `KALL_EXEC_MAX_SWAP_USD` ($100). The keyboard's buys spend the USDC.
 - **History:** every Flash order the Kall wallet placed: totals, All / Working / Done, what each one filled
   at, and a detail sheet with the Flash order ID, the call it copied, whether the trade is recorded on
   Arkiv, and Cancel while it's working. Re-read every 5 seconds while an order is working.

@@ -3,11 +3,12 @@ import { timingSafeEqual } from "node:crypto";
 import {
   buildQuoteRequest,
   buildSubmitRequest,
+  FLASH_BASE_ASSETS,
   flashCancelMessage,
   type FlashOrderInput,
   type FlashSignatures,
 } from "@kallr/integrations/definitive";
-import { createPublicClient, createWalletClient, type Hex, http, isHex } from "viem";
+import { createPublicClient, createWalletClient, erc20Abi, type Hex, http, isHex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 import { parseTypedData } from "@/lib/typed-data";
@@ -16,7 +17,7 @@ import { flash } from "./flash";
 /**
  * The Kall keyboard wallet: a wallet the server holds so the iPhone keyboard can place an order in
  * one tap, the way a card works once it's topped up. It's a demo hot wallet: the user funds it with a
- * little USDC and ETH on Base, every order is capped (KALL_EXEC_MAX_USD), and only builds that carry
+ * little ETH on Base and swaps some to USDC, every order is capped (KALL_EXEC_MAX_USD), and only builds that carry
  * KALL_EXEC_TOKEN can spend from it. The same quote → approve → sign → submit as the desk, with the
  * server signing instead of a wallet prompt.
  */
@@ -47,11 +48,19 @@ async function sign(json: string): Promise<Hex> {
   return account.signTypedData(parseTypedData(json) as any);
 }
 
-async function approve(tx: { to: string; data: string }) {
+async function send(tx: { to: string; data: string; value?: string }, failure: string) {
   if (!walletClient) throw new Error("The keyboard wallet isn't set up.");
-  const hash = await walletClient.sendTransaction({ to: tx.to as Hex, data: tx.data as Hex });
+  const hash = await walletClient.sendTransaction({ to: tx.to as Hex, data: tx.data as Hex, value: tx.value ? BigInt(tx.value) : undefined });
   const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 90_000 });
-  if (receipt.status !== "success") throw new Error("The approval failed on Base.");
+  if (receipt.status !== "success") throw new Error(failure);
+}
+
+const approve = (tx: { to: string; data: string }) => send(tx, "The approval failed on Base.");
+
+/** WETH the wallet already holds, e.g. from a wrap whose order then failed. */
+async function wethBalance(): Promise<bigint> {
+  if (!account) return 0n;
+  return publicClient.readContract({ address: FLASH_BASE_ASSETS.ETH.address, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
 }
 
 /** Cancel an open order the keyboard wallet placed: a gasless signed message, no transaction. */
@@ -73,8 +82,14 @@ export function placeFromKeyboardWallet(input: FlashOrderInput, dryRun = false) 
     const quote = await flash.quote(request);
     const approvals: string[] = [];
 
+    // Selling native ETH: wrap it first, unless WETH from an earlier try already covers it.
+    const wrap = quote.wrap?.evmTx;
+    if (wrap) {
+      approvals.push("Wrap ETH to WETH");
+      if (!dryRun && (await wethBalance()) < BigInt(wrap.value)) await send(wrap, "Wrapping ETH failed on Base.");
+    }
     if (quote.evm.approveTx) {
-      approvals.push("USDC for this order");
+      approvals.push(input.side === "sell" ? "WETH for this swap" : "USDC for this order");
       if (!dryRun) await approve(quote.evm.approveTx);
     }
     const signatures: FlashSignatures = { quoteId: quote.quoteId, userSignature: "0x", evmOrderTypedData: quote.evm.orderTypedData };

@@ -167,7 +167,7 @@ private struct WalletHome: View {
                         .font(.footnote.weight(.semibold)).foregroundStyle(Kallr.lime)
                 }
                 Button { depositing = true } label: {
-                    Label("DEPOSIT USDC OR ETH", systemImage: "arrow.down.circle.fill")
+                    Label("DEPOSIT ETH", systemImage: "arrow.down.circle.fill")
                         .font(.system(size: 15, weight: .heavy)).tracking(0.5)
                         .foregroundStyle(Kallr.black)
                         .frame(maxWidth: .infinity, minHeight: 52)
@@ -175,6 +175,7 @@ private struct WalletHome: View {
                 }
                 .disabled(store.wallet?.address == nil)
                 hint
+                SwapCard(store: store)
                 Markets(store: store)
                 recent
                 callers
@@ -186,6 +187,7 @@ private struct WalletHome: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Kallr.black.ignoresSafeArea())
+        .scrollDismissesKeyboard(.interactively)
         .refreshable { await store.refresh() }
         .sheet(isPresented: $depositing, onDismiss: { Task { await store.refresh() } }) {
             if let address = store.wallet?.address { DepositSheet(address: address, ethPrice: store.ethPrice) }
@@ -194,15 +196,19 @@ private struct WalletHome: View {
 
     private var balances: some View {
         HStack(spacing: 10) {
-            Amount(label: "USDC TO TRADE", value: store.wallet?.usdcValue.map { String(format: "%.2f", $0) })
-            Amount(label: "ETH FOR GAS", value: store.wallet?.ethValue.map { String(format: "%.5f", $0) })
+            Amount(label: "ETH", value: store.wallet?.ethValue.map { String(format: "%.5f", $0) },
+                   sub: store.wallet?.ethValue.flatMap { eth in store.ethPrice.map { "≈ $" + (eth * $0).formatted(.number.precision(.fractionLength(2))) } })
+            Amount(label: "USDC TO TRADE", value: store.wallet?.usdcValue.map { String(format: "%.2f", $0) }, sub: "keyboard buys spend this")
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder private var hint: some View {
         if let w = store.wallet, let usdc = w.usdcValue, let eth = w.ethValue {
             if usdc < 1 || eth < 0.0002 {
-                Label(usdc < 1 ? "Add USDC to trade from the keyboard, plus a little ETH for gas." : "Add about $1 of ETH for gas.", systemImage: "info.circle")
+                Label(eth < 0.0008 ? "Deposit ETH. Swap some to USDC below and the keyboard trades with it; about $1 of ETH stays for gas."
+                      : usdc < 1 ? "Swap some ETH to USDC below to trade from the keyboard." : "Add about $1 of ETH for gas.",
+                      systemImage: "info.circle")
                     .font(.footnote).foregroundStyle(Kallr.muted)
             } else {
                 Label("Ready to trade from the Kall Keyboard.", systemImage: "checkmark.seal.fill")
@@ -253,6 +259,210 @@ private struct WalletHome: View {
     }
 }
 
+/**
+ * Swap ETH to USDC: type dollars (or pick), get a fresh Flash quote, confirm. The keyboard's buys spend
+ * the USDC; about $1 of ETH always stays for gas.
+ */
+private struct SwapCard: View {
+    enum Step { case idle, quoting, review(Kallr.Placed), swapping, done(String), failed(String) }
+    @ObservedObject var store: AppStore
+    @State private var usd = ""
+    @State private var step = Step.idle
+    @FocusState private var typing: Bool
+
+    /** ETH above the gas reserve, in dollars. */
+    private var most: Double? {
+        guard let eth = store.wallet?.ethValue, let p = store.ethPrice else { return nil }
+        return max(0, ((eth - 0.0004) * p * 100).rounded(.down) / 100)
+    }
+    private var blocked: String? {
+        guard let most else { return "Reading your wallet…" }
+        if most < 1 { return "Deposit ETH to swap" }
+        guard let n = Double(usd), n > 0 else { return "Enter an amount" }
+        if n < 1 { return "Swap at least $1" }
+        if n > most { return "Up to $\(String(format: "%.2f", most)), keeping gas" }
+        return nil
+    }
+    private var quoting: Bool { if case .quoting = step { return true }; return false }
+    private var busy: Bool { if case .swapping = step { return true }; return quoting }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("SWAP ETH TO USDC").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)
+                Spacer()
+                PoweredByDefinitive(height: 9, suffix: "Flash")
+            }
+            if case .review(let quote) = step {
+                review(quote)
+            } else {
+                form
+            }
+            switch step {
+            case .done(let line):
+                Label(line, systemImage: "checkmark.circle.fill").font(.footnote.weight(.semibold)).foregroundStyle(Kallr.lime)
+            case .failed(let message):
+                Text(message).font(.footnote).foregroundStyle(Kallr.danger)
+            default:
+                EmptyView()
+            }
+        }
+        .padding(16)
+        .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Kallr.hairline))
+    }
+
+    private var form: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 4) {
+                Text("$").font(.system(size: 26, weight: .black)).foregroundStyle(Kallr.muted)
+                TextField("0", text: $usd)
+                    .keyboardType(.decimalPad)
+                    .focused($typing)
+                    .font(.system(size: 30, weight: .black).monospacedDigit())
+                    .foregroundStyle(Kallr.bone)
+                    .onChange(of: usd) { _, v in
+                        let clean = Self.dollars(v)
+                        if clean != v { usd = clean }
+                    }
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button("Done") { typing = false }.font(.body.weight(.semibold)).tint(Kallr.lime)
+                        }
+                    }
+                Text("of ETH").font(.footnote.weight(.semibold)).foregroundStyle(Kallr.muted)
+            }
+            .padding(.horizontal, 14).frame(height: 58)
+            .background(Kallr.black, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(typing ? Kallr.lime : Kallr.hairline, lineWidth: typing ? 1.5 : 1))
+            .onTapGesture { typing = true }
+            HStack(spacing: 8) {
+                ForEach(["5", "10", "25"], id: \.self) { v in
+                    preset("$\(v)", on: usd == v) { usd = v }
+                }
+                preset("MAX", on: most.map { usd == String(format: "%.2f", $0) } ?? false) {
+                    if let most, most >= 1 { usd = String(format: "%.2f", most) }
+                }
+            }
+            if let most, most >= 1 {
+                Text("You can swap up to $\(String(format: "%.2f", most)). About $1 of ETH stays for gas.")
+                    .font(.caption).foregroundStyle(Kallr.muted)
+            }
+            Button(action: quote) {
+                Text(quoting ? "GETTING A QUOTE…" : blocked ?? "REVIEW SWAP  ↗")
+                    .font(.system(size: 14, weight: .heavy)).tracking(0.5)
+                    .foregroundStyle(blocked == nil ? Kallr.black : Kallr.muted)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(blocked == nil ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 11))
+            }
+            .disabled(blocked != nil || busy)
+        }
+    }
+
+    private func review(_ q: Kallr.Placed) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(q.preview.title).font(.system(size: 17, weight: .black)).foregroundStyle(Kallr.bone)
+            line("You pay", q.preview.pay)
+            line("You get", q.preview.get)
+            line("Impact · fee", [q.details?.impactPct.map { String(format: "%.2f%%", abs($0)) }, q.details?.feeUsd.map { String(format: "$%.2f", $0) }]
+                .compactMap { $0 }.joined(separator: " · "))
+            line("On Base", q.preview.approval)
+            HStack(spacing: 8) {
+                Button { step = .idle } label: {
+                    Text("BACK").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.bone)
+                        .frame(width: 80, height: 48).overlay(RoundedRectangle(cornerRadius: 11).stroke(Kallr.hairline))
+                }
+                Button(action: confirm) {
+                    Text("CONFIRM SWAP  ↗").font(.system(size: 14, weight: .heavy)).tracking(0.5)
+                        .foregroundStyle(Kallr.black)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 11))
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private func line(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label).font(.footnote).foregroundStyle(Kallr.muted)
+            Spacer(minLength: 8)
+            Text(value.isEmpty ? "—" : value).font(.system(size: 14, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.bone)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func preset(_ label: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            typing = false
+            action()
+        } label: {
+            Text(label).font(.system(size: 14, weight: .bold))
+                .foregroundStyle(on ? Kallr.black : Kallr.bone)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .background(on ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 9))
+        }
+    }
+
+    private func quote() {
+        guard blocked == nil, !busy else { return }
+        typing = false
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        step = .quoting
+        Task {
+            switch await Kallr.swap(usd: usd, dryRun: true) {
+            case .success(let q): step = .review(q)
+            case .failure(let e):
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                step = .failed(e.message)
+            }
+        }
+    }
+
+    private func confirm() {
+        guard !busy else { return }
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        step = .swapping
+        Task {
+            switch await Kallr.swap(usd: usd) {
+            case .success(let placed):
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                step = .done("Swapped on Flash: \(placed.preview.get) is on its way.")
+                usd = ""
+                // The fill takes a moment: read the balances until the USDC shows.
+                for _ in 0..<8 {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    await store.refresh()
+                }
+            case .failure(let e):
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                step = .failed(e.message)
+            }
+        }
+    }
+
+    /** Digits and one dot, two decimals at most. */
+    static func dollars(_ v: String) -> String {
+        var out = ""
+        var dot = false
+        var decimals = 0
+        for ch in v.replacingOccurrences(of: ",", with: ".") {
+            if ch == "." {
+                if dot { continue }
+                dot = true
+                out.append(out.isEmpty ? "0." : ".")
+            } else if ch.isNumber {
+                if dot { if decimals >= 2 { continue }; decimals += 1 }
+                if out.count >= 7 { continue }
+                out.append(ch)
+            }
+        }
+        return out
+    }
+}
+
 /** ETH and BTC on Base right now, and how many calls are open on Arkiv. */
 private struct Markets: View {
     @ObservedObject var store: AppStore
@@ -289,12 +499,15 @@ enum BaseScan {
 private struct Amount: View {
     let label: String
     let value: String?
+    var sub: String? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
             Text(value ?? "…").font(.system(size: 30, weight: .black).monospacedDigit()).foregroundStyle(Kallr.lime)
                 .minimumScaleFactor(0.6).lineLimit(1)
+            if let sub { Text(sub).font(.system(size: 11, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted).lineLimit(1).minimumScaleFactor(0.8) }
         }
+        .frame(maxHeight: .infinity, alignment: .topLeading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 14))
@@ -310,7 +523,7 @@ private struct DepositSheet: View {
     let ethPrice: Double?
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
-    @State private var asset = "USDC"
+    @State private var asset = "ETH"
     @State private var usd = 10.0
     @State private var note: String?
 
@@ -325,12 +538,12 @@ private struct DepositSheet: View {
                     Button("Done") { dismiss() }.tint(Kallr.lime)
                 }
                 Picker("Asset", selection: $asset) {
-                    Text("USDC to trade").tag("USDC")
-                    Text("ETH for gas").tag("ETH")
+                    Text("ETH").tag("ETH")
+                    Text("USDC").tag("USDC")
                 }
                 .pickerStyle(.segmented)
                 HStack(spacing: 8) {
-                    ForEach(asset == "USDC" ? [5.0, 10, 25, 50] : [1.0, 2, 5], id: \.self) { v in
+                    ForEach([5.0, 10, 25, 50], id: \.self) { v in
                         Button { usd = v } label: {
                             Text("$\(Kallr.fmt(v))").font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(usd == v ? Kallr.black : Kallr.bone)
@@ -375,7 +588,7 @@ private struct DepositSheet: View {
                 if let note { Text(note).font(.footnote).foregroundStyle(Kallr.lime) }
                 Label("Base network only. Funds sent on another network are lost.", systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote).foregroundStyle(Kallr.danger)
-                Text("From your Privy wallet on the Kall Web App, send to the address above on Base.")
+                Text("Or from your Privy wallet on the Kall Web App: send ETH to this address on Base.")
                     .font(.footnote).foregroundStyle(Kallr.muted)
             }
             .padding(20)
@@ -385,9 +598,9 @@ private struct DepositSheet: View {
     }
 
     private var amountLine: String {
-        if asset == "USDC" { return "\(Kallr.fmt(usd)) USDC on Base, to your Kall wallet." }
+        if asset == "USDC" { return "\(Kallr.fmt(usd)) USDC on Base, to your Kall wallet. Ready to trade as it lands." }
         guard let p = ethPrice, p > 0 else { return "Reading the ETH price…" }
-        return String(format: "About %.5f ETH ($%@) on Base, for gas.", usd / p, Kallr.fmt(usd))
+        return String(format: "About %.5f ETH ($%@) on Base. Swap it to USDC in the Wallet tab; about $1 stays for gas.", usd / p, Kallr.fmt(usd))
     }
 
     private func open(_ url: URL?) {
@@ -671,7 +884,7 @@ private struct KeyboardSetup: View {
             Label("SET UP", systemImage: "keyboard").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)
             Step(n: 1, text: "Settings → General → Keyboard → Keyboards → Add New Keyboard → Kall Keyboard")
             Step(n: 2, text: "Tap Kall Keyboard and turn on Allow Full Access, so it can reach Kall Markets, read what you copy when you tap Check, and use haptics.")
-            Step(n: 3, text: "Deposit to your Kall wallet, then in X or Telegram hold the globe key and pick Kall Keyboard.")
+            Step(n: 3, text: "Deposit ETH in the Wallet tab and swap some to USDC, then in X or Telegram hold the globe key and pick Kall Keyboard.")
             Button { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } } label: {
                 Text("OPEN KALL SETTINGS  ↗")
                     .font(.system(size: 14, weight: .heavy)).tracking(0.6)
