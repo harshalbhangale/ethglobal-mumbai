@@ -90,7 +90,7 @@
   .base:after { content:""; position:absolute; top:0; left:50%; width:150px; margin-left:-75px; height:7px; border-radius:0 0 8px 8px; background:#0d100d; }
 
   /* Extension card floating */
-  .ext { position:absolute; left:770px; top:640px; width:430px; border-radius:18px; background:#000; border:1px solid #2f3336;
+  .ext { position:absolute; left:770px; top:610px; width:430px; border-radius:18px; background:#000; border:1px solid #2f3336;
     box-shadow:0 40px 90px rgba(0,0,0,.7), 0 0 0 1px rgba(198,242,90,.08); padding:16px 18px; font-size:14px; }
   .ext .tag { z-index:2; position:absolute; top:-14px; left:18px; background:var(--lime); color:var(--on-lime); font-weight:800; font-size:12px; padding:5px 10px; border-radius:7px; letter-spacing:.04em; }
   .ext .hd { display:flex; align-items:center; gap:10px; }
@@ -140,6 +140,48 @@
   .ext .pw .by { display:flex; align-items:center; gap:7px; }
   .ext .pw .by img { height:10px; }
   .built img { height:17px; }
+
+  /* Orders screen */
+  .oh { display:flex; align-items:baseline; gap:12px; } .oh b { font-size:18px; } .oh span { color:var(--slate); font-size:12px; }
+  .tiles { margin:12px 0 14px; display:grid; grid-template-columns:1fr 1fr 1.4fr; gap:8px; }
+  .tiles div { border:1px solid var(--rule); border-radius:9px; background:var(--card); padding:9px 11px; }
+  .tiles small { display:block; color:var(--slate); font-size:10.5px; } .tiles b { display:flex; gap:5px; align-items:center; margin-top:3px; font-size:19px; }
+  .s { font-style:normal; display:inline-grid; place-items:center; min-width:26px; height:22px; padding:0 6px; border-radius:6px; font-size:11px; font-weight:800; }
+  .s.x { background:#fff; color:#000; } .s.kb { background:var(--lime); color:var(--on-lime); } .s.web { background:#1d2a20; color:var(--lime); border:1px solid #2f4a33; }
+  .day { margin:14px 0 8px; font-size:9.5px; letter-spacing:.12em; color:var(--slate); }
+  .trade { display:grid; grid-template-columns:30px 24px 1fr auto auto; gap:10px; align-items:center; padding:10px 12px; margin-bottom:7px;
+    border:1px solid var(--rule); border-radius:10px; background:var(--card); font-size:12px; }
+  .trade .coin-i { width:22px; height:22px; border-radius:50%; }
+  .trade b { display:block; font-size:13px; } .trade span { color:var(--slate); font-size:11px; } .trade a { color:#1d9bf0; }
+  .trade .amt { text-align:right; } .trade .st { text-align:right; min-width:86px; } .trade .st b { color:var(--up); }
+  .route { margin-top:12px; display:flex; align-items:center; gap:7px; color:var(--slate); font-size:11.5px; } .route img { height:11px; }
+
+  /* Extension: a filled swap under the post */
+  .post-x { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid #2f3336; }
+  .post-x .pf { width:36px; height:36px; border-radius:50%; object-fit:cover; background:#fff; }
+  .post-x b { display:block; font-size:15px; } .post-x span { color:#71767b; font-size:13px; }
+  .post-x .xl { margin-left:auto; width:18px; filter:invert(1); }
+  .done { margin-top:12px; display:flex; align-items:center; gap:12px; }
+  .done .tick { width:38px; height:38px; border-radius:50%; background:var(--lime); color:var(--on-lime); display:grid; place-items:center; font-weight:900; font-size:20px; }
+  .done b { display:block; font-size:16px; } .done span { color:var(--lime); font-weight:700; font-size:13.5px; }
+  .swap-rows { margin-top:12px; border-radius:12px; background:#16181c; padding:4px 12px; }
+  .swap-rows > div { display:grid; grid-template-columns:30px 1fr auto; align-items:center; gap:10px; padding:6px 0; }
+  .swap-rows .c { width:28px; height:28px; border-radius:50%; }
+  .swap-rows small { color:#71767b; font-size:12px; } .swap-rows b { font-size:16px; }
+  .swap-rows .arrow { display:block; text-align:center; color:#71767b; padding:0; height:12px; line-height:12px; font-size:12px; }
+  .ext .strip span { color:#71767b; }
+  .ext .net { margin-left:auto; display:flex; align-items:center; gap:6px; background:#0052ff; color:#fff; font-weight:800; font-size:12px; padding:5px 10px 5px 6px; border-radius:999px; }
+  .ext .net img { width:16px; height:16px; border-radius:50%; }
+
+  /* Phone */
+  .chat-h .g { width:30px; height:30px; border-radius:50%; background:#fff; padding:0; filter:none; }
+  .kb.swap { height:316px; overflow:hidden; }
+  .kb.swap img { width:306px; display:block; margin-top:-350px; }
+  img.av { width:18px; height:18px; border-radius:50%; object-fit:cover; }
+  .s.x img { width:11px; filter:invert(0); }
+  .s.kb { font-size:10px; }
+  .trade { grid-template-columns:62px 24px 1fr auto auto; }
+  .tiles .srcs .s { min-width:0; }
 </style>
 </head>
 <body>
@@ -169,29 +211,40 @@
         <div class="app">
           <aside class="side">
             <div class="lg"><div class="t"><img src="mark.png" alt=""></div>Kall Markets</div>
-            <div class="nav"><div class="on">Feed</div><div>Orders</div><div>Wallet</div></div>
+            <div class="nav"><div>Feed</div><div class="on">Orders</div><div>Wallet</div></div>
             <h6>FOLLOWING</h6>
-            <div class="who"><div class="av">C</div><span>@cryptokaleo</span><em>2 live</em></div>
-            <div class="who"><div class="av">A</div><span>@altcoinsherpa</span><em>33%</em></div>
-            <div class="who"><div class="av">I</div><span>@inmortalcrypto</span><em>25%</em></div>
+            <div class="who"><img class="av" src="real/av-cryptokaleo.jpg" alt=""><span>@cryptokaleo</span><em>2 live</em></div>
+            <div class="who"><img class="av" src="real/av-altcoinsherpa.jpg" alt=""><span>@altcoinsherpa</span><em>33%</em></div>
+            <div class="who"><img class="av" src="real/av-inmortalcrypto.jpg" alt=""><span>@inmortalcrypto</span><em>25%</em></div>
           </aside>
           <main class="feed">
-            <div class="tabs"><div class="on">Following</div><div>Explore</div></div>
-            <div class="filters"><div class="on">Active 7</div><div>Settled 11</div><div>★ Favorites</div></div>
-            <div class="post">
-              <div class="tweet">
-                <div class="th"><div class="pf">K</div><div><b>K A L E O</b><span>@CryptoKaleo · 2h</span></div><div class="x">𝕏</div></div>
-                <p><span class="tag">#Ethereum</span> / <span class="tag">$ETH</span><br><br>BOUNCE<br><br>BE MORE BULLISH</p>
-              </div>
-              <div class="verdict"><span class="l"><b>LONG</b> $ETH</span><span>Entry $2,301</span><span>Open · settles in 14h</span><div class="btn">Copy call</div></div>
+            <div class="oh"><b>Orders</b><span>Every trade, wherever you placed it</span></div>
+            <div class="tiles">
+              <div><small>Filled on Flash</small><b>3</b></div>
+              <div><small>Volume</small><b>$1.83</b></div>
+              <div><small>Placed from</small><b class="srcs"><i class="s x"><img src="real/x.svg" alt="X"></i><i class="s kb">Keyboard</i><i class="s web">Web</i></b></div>
             </div>
-            <div class="post">
-              <div class="tweet">
-                <div class="th"><div class="pf">A</div><div><b>Altcoin Sherpa</b><span>@AltcoinSherpa · 1d</span></div><div class="x">𝕏</div></div>
-                <p>let's liquidate Ansem, this should be easy work. Time to pump <span class="tag">$SOL</span></p>
-              </div>
-              <div class="verdict"><span class="l"><b>LONG</b> $SOL</span><span>Entry $186</span><span class="hit">HIT +1.20%</span></div>
+            <div class="tabs"><div>Open</div><div>History</div><div class="on">Trades</div></div>
+            <h6 class="day">TODAY · 6 NOV</h6>
+            <div class="trade">
+              <i class="s kb">Keyboard</i>
+              <img class="coin-i" src="real/eth.png" alt="ETH"><div class="what"><b>Sold 0.000449 ETH</b><span>Kall Keyboard on iPhone</span></div>
+              <div class="amt"><b>$0.97</b><span>at $2,171.03</span></div>
+              <div class="st"><b>Filled</b><span>Basescan · Arkiv</span></div>
             </div>
+            <div class="trade">
+              <i class="s x"><img src="real/x.svg" alt="X"></i>
+              <img class="coin-i" src="real/eth.png" alt="ETH"><div class="what"><b>Sold 0.0001 ETH</b><span>On X · copied <a>@lookonchain</a></span></div>
+              <div class="amt"><b>$0.20</b><span>at $2,045.26</span></div>
+              <div class="st"><b>Filled</b><span>Basescan · Arkiv</span></div>
+            </div>
+            <div class="trade">
+              <i class="s web">Web</i>
+              <img class="coin-i" src="real/eth.png" alt="ETH"><div class="what"><b>Sold 0.0003 ETH</b><span>Kall Web App</span></div>
+              <div class="amt"><b>$0.66</b><span>at $2,188.95</span></div>
+              <div class="st"><b>Filled</b><span>Basescan</span></div>
+            </div>
+            <div class="route">✓ Every fill routed by <img src="definitive.svg" alt="Definitive"> Flash on Base</div>
           </main>
           
         </div>
@@ -203,11 +256,14 @@
   <!-- Chrome extension card on X -->
   <div class="ext">
     <div class="tag">KALL EXTENSION · ON X</div>
-    <div class="hd"><div class="coin">Ξ</div><div><b>Ethereum</b><span>$ETH · WETH on Base</span></div><div class="px"><b>$2,245</b><br><span>+1.8%</span></div></div>
-    <div class="strip"><a>@CryptoKaleo</a><span class="l">Long $ETH</span><div class="f">Follow</div></div>
-    <div class="facts"><div><small>You get</small><b>0.0022 ETH</b></div><div><small>Price impact</small><b class="l" style="color:#8ad97c">0.03%</b></div><div><small>Flash fee</small><b>Free</b></div></div>
-    <div class="go"><div class="cta">Buy ETH · $5 <img src="definitive-icon-dark.svg" alt=""></div><div class="net"><i></i>Base</div></div>
-    <div class="pw"><span>Signed in MetaMask · Basescan receipt</span><span class="by">Powered by <img src="definitive.svg" alt="Definitive"></span></div>
+    <div class="post-x"><img class="pf" src="real/av-lookonchain.jpg" alt=""><div><b>Lookonchain</b><span>@lookonchain · call copied from X</span></div><img class="xl" src="real/x.svg" alt="X"></div>
+    <div class="done"><div class="tick">✓</div><div><b>Swapped on Definitive Flash</b><span>Sold 0.0001 ETH for $0.20 at $2,045</span></div><div class="net"><img src="real/base.png" alt="">Base</div></div>
+    <div class="swap-rows">
+      <div><img class="c" src="real/eth.png" alt="ETH"><small>You paid</small><b>0.0001 ETH</b></div>
+      <div class="arrow">↓</div>
+      <div><img class="c" src="real/usdc.png" alt="USDC"><small>You got</small><b>0.2045 USDC</b></div>
+    </div>
+        <div class="pw"><span>Signed in MetaMask · on Arkiv</span><span class="by">Powered by <img src="definitive.svg" alt="Definitive"></span></div>
   </div>
 
   <!-- iPhone: the keyboard -->
@@ -215,16 +271,13 @@
   <div class="phone"><div class="ph-screen">
     <div class="island"></div>
     <div class="status"><span>9:41</span><span>● ● ▮</span></div>
-    <div class="chat-h"><div class="g">α</div><div><b>Alpha Calls</b><span>1,284 members · Telegram</span></div></div>
+    <div class="chat-h"><img class="g" src="real/telegram.svg" alt="Telegram"><div><b>Crypto calls</b><span>Telegram group</span></div></div>
     <div class="msgs">
-      <div class="bubble"><small>@CryptoKaleo</small>$ETH bounce. Be more bullish 🚀</div>
-      <div class="read">✓ Kall read: LONG $ETH · caller 2 open</div>
-      <div class="bubble me">copy $25 tp 10% sl 5%</div>
+      <div class="bubble"><small>forwarded from @CryptoKaleo on X</small>$ETH Up only.</div>
+      <div class="read">✓ Kall read: LONG $ETH · it missed −6.47%</div>
+      <div class="bubble me">swapping my ETH to USDC first 👇</div>
     </div>
-    <div class="kb"><div class="rows-crop"><img src="keyboard.png" alt=""></div>
-      <div class="signin">SIGN IN TO TRADE <img src="definitive-icon-dark.svg" alt="Definitive"></div>
-      <div class="pw2">Powered by <img src="definitive.svg" alt="Definitive"> · on Base</div>
-      <div class="bar"></div></div>
+    <div class="kb swap"><img src="keyboard-swap.png" alt="Kall Keyboard: swap 0.000489 ETH for 1.04 USDC on Definitive Flash"></div>
   </div></div>
 </div>
 </body>
