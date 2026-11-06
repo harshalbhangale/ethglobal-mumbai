@@ -157,6 +157,8 @@ Environment (`kallr-webapp/.env.local`):
 | `ELEVENLABS_API_KEY` | Keyboard voice orders (Scribe) | OpenAI transcription, if set |
 | `SWARM_API_URL`, `SWARM_POSTAGE_BATCH_ID` | Your own Bee node and batch for snapshots | Swarm's public gateway |
 | `UNISWAP_API_KEY` | The "Best price" line: each Flash quote set beside Uniswap's | The line is hidden; trading is unchanged |
+| `NEXT_PUBLIC_ANON_RPC` | Which Anon-RPC network the web app's reads use: `nym` (default), `tor`, `passthrough` or `off` | Nym |
+| `NEXT_PUBLIC_ETH_RPC_URL` | The one Ethereum mainnet read that finds the Anon-RPC worker's hash | publicnode, drpc, 1rpc |
 
 Hosted on Vercel (project `kallr`, root `kallr-webapp`): <https://kall-markets.vercel.app> (kallr.vercel.app still answers, for builds made before the rename), deployed on every push to `main`.
 
@@ -203,6 +205,41 @@ key is missing, the line is hidden and nothing else changes.
 - Shown in the Kall Extension ([`bestPrice`](kallr-extension/src/flash-card.ts#L626)) and the Kall Web App's
   ticket ([`trade-ticket.tsx`](kallr-webapp/components/trade-ticket.tsx#L471)).
 - Feedback for the Uniswap team: [FEEDBACK.md](FEEDBACK.md).
+
+## Anon-RPC: the web app reads the chain privately
+
+Checking your balance right before you copy a call tells an RPC provider what you're about to trade, from
+which IP. So the Kall Web App sends its chain reads through
+[Anon-RPC](https://ethereum.github.io/anon-rpc/) by default, over the **Nym mixnet**: the RPC still answers,
+but it can't tell who asked.
+
+What goes through it, and what doesn't:
+
+| Traffic | Through Anon-RPC? | Why |
+| --- | --- | --- |
+| Base reads in the browser: USDC/ETH balances, Chainlink ETH/BTC prices, transaction receipts after a trade | **Yes**, straight through Nym to Base | All of it goes through one viem client ([`chain.ts`](kallr-webapp/lib/chain.ts)) |
+| Arkiv reads in the browser: the feed, caller records, your trade history | **Yes**, through Nym to Kall's [Arkiv relay](kallr-webapp/app/api/arkiv/rpc/route.ts), which forwards to Arkiv | The Nym worker drops request headers and Arkiv's RPC refuses a request without `content-type: application/json`. The relay adds it. Arkiv sees Kall's server; Kall's server sees a Nym exit. Read methods only, so it isn't an open proxy |
+| The one bootstrap read on Ethereum mainnet (the worker's pinned hash) | No | It finds the worker; it carries nothing about the user |
+| Signing and sending transactions | No | They stay in the user's wallet (Privy or MetaMask), which uses its own connection |
+| Flash quotes and orders | No | They're calls to Definitive's API through Kall's server, not RPC reads |
+| Kall Keyboard (Android, iPhone) | No | Anon-RPC's harness runs only in browsers; there's no native harness yet |
+| Kall's server routes | No | They read with Kall's own keys, so they reveal nothing about a user |
+
+How it works ([`lib/anon-rpc.ts`](kallr-webapp/lib/anon-rpc.ts)):
+
+- One `@anon-rpc/browser-harness` worker per page, started on load. Reads made while it boots are buffered.
+- viem's `http` transport takes the worker's `fetch` (`fetchFn`), with JSON-RPC **batching** on: the harness
+  hands calls to the worker one at a time, so batching puts a whole refresh (balances, prices, four Arkiv
+  queries) into one or two mixnet round trips instead of a queue.
+- Nym picks a random gateway and some can't serve browsers. A worker that doesn't connect in 40 s, or whose
+  tunnel fails, is replaced by a fresh one (up to 3 tries).
+- If it still can't connect, reads go direct so the app keeps working, and the sidebar badge says so.
+  A read is never sent direct without it showing.
+- The badge shows the network, how many reads went private, how many went direct, and the boot time.
+  `window.__anonRpc` and `window.__anonRpcTrace` show the same in the console.
+
+Measured on the deployed preview (Nym): connected in about 14 s; once connected, a batched read takes
+0.7–2.3 s; 100% of the web app's reads went through Nym.
 
 ## Kall Keyboard on iPhone
 

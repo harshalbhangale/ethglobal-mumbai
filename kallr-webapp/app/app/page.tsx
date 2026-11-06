@@ -7,6 +7,7 @@ import { OPEN_STATUSES } from "@kallr/integrations/definitive";
 import { useWallets } from "@privy-io/react-auth";
 import { Logo, LogoMark } from "@/components/logo";
 import { SignInButton, WithSession, type Session } from "@/components/auth";
+import { AnonRpcBadge } from "@/components/anon-rpc-badge";
 import { InstallButton } from "@/components/install-button";
 import { CallsBoard, type Row, type Scope } from "@/components/calls-board";
 import { KolAvatar } from "@/components/kol-avatar";
@@ -168,6 +169,7 @@ function Terminal({ session }: { session: Session }) {
         />
 
         <div className="shrink-0 space-y-3 border-t border-rule pt-4">
+          <AnonRpcBadge />
           <InstallButton />
           {signedIn ? (
             <AccountCard session={session} onWallet={() => setView("wallet")} />
@@ -181,6 +183,7 @@ function Terminal({ session }: { session: Session }) {
       <div className="min-w-0">
         <header className="flex items-center justify-between border-b border-rule bg-card px-5 py-3 xl:hidden">
           <Logo href="/app" />
+          <AnonRpcBadge compact />
           {signedIn ? (
             <button type="button" onClick={() => session.logout()} className="text-sm text-slate hover:text-ink">
               Sign out
