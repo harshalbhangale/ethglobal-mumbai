@@ -77,11 +77,11 @@ const bg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" hei
     </radialGradient>
   </defs>
   <rect width="${W}" height="${H}" fill="url(#g)"/>
-  <text x="142" y="142" fill="#ffffff" font-family="${font}" font-size="40" font-weight="700" letter-spacing="-0.5">Kallr</text>
+  <text x="142" y="142" fill="#ffffff" font-family="${font}" font-size="40" font-weight="700" letter-spacing="-0.5">Kall Markets</text>
   <text x="80" y="300" fill="#ffffff" font-family="${font}" font-size="76" font-weight="700" letter-spacing="-2.5">Every call on X</text>
   <text x="80" y="388" fill="#ffffff" font-family="${font}" font-size="76" font-weight="700" letter-spacing="-2.5">has an after market.</text>
   <text x="80" y="470" fill="#b9c3d6" font-family="${font}" font-size="28" letter-spacing="-0.2">Priced at posting. Copy it with TP/SL on Base.</text>
-  <text x="80" y="560" fill="#f2a93b" font-family="${font}" font-size="24" font-weight="600">Tag @Kallr under any call</text>
+  <text x="80" y="560" fill="#f2a93b" font-family="${font}" font-size="24" font-weight="600">kallr.vercel.app</text>
 </svg>`);
 const mark = await sharp(`${REPO}/kallr-webapp/public/brand/mark.png`).resize(360, 360).png().toBuffer();
 const markSmall = await sharp(`${REPO}/kallr-webapp/public/brand/mark.png`).resize(48, 48).png().toBuffer();

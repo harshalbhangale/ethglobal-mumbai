@@ -92,7 +92,7 @@ object KallrWallet {
 
     /** The user's embedded Ethereum wallet, created on first use, switched to Base. */
     suspend fun wallet(context: Context): EmbeddedEthereumWallet {
-        val user = user() ?: error("Sign in to Kallr Markets first.")
+        val user = user() ?: error("Sign in to Kall Markets first.")
         return walletOf(user).also { remember(context, it.address) }
     }
 

@@ -127,7 +127,7 @@
 
         <activity
             android:name="dev.patrickgold.florisboard.ime.kallr.KallrWalletActivity"
-            android:label="Kallr Wallet"
+            android:label="Kall Markets"
             android:icon="@mipmap/floris_app_icon"
             android:theme="@style/FlorisAppTheme"
             android:exported="true">
@@ -137,10 +137,10 @@
             </intent-filter>
         </activity>
 
-        <!-- Kallr: Share → "Check with Kallr Markets" from X, Telegram or any app -->
+        <!-- Kallr: Share → "Check with Kall Markets" from X, Telegram or any app -->
         <activity
             android:name="dev.patrickgold.florisboard.ime.kallr.KallrShareActivity"
-            android:label="Check with Kallr Markets"
+            android:label="Check with Kall Markets"
             android:theme="@style/FlorisAppTheme.Transparent"
             android:excludeFromRecents="true"
             android:taskAffinity="app.kallr.keyboard.share"

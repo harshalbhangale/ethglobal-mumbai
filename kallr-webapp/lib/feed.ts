@@ -92,7 +92,7 @@ export function useKallrData(address: Address | null) {
   useEffect(() => {
     fetch("/api/arkiv")
       .then((r) => r.json() as Promise<Config>)
-      .then(setConfig, () => setError("Couldn’t reach the Kallr Markets server."));
+      .then(setConfig, () => setError("Couldn’t reach the Kall Markets server."));
   }, []);
 
   const client = useMemo(() => (config ? arkivPublic(config.accessKey) : null), [config]);

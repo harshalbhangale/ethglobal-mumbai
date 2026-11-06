@@ -34,7 +34,7 @@ const readActive = () => {
 
 /** "metamask" → "MetaMask", "rabby_wallet" → "Rabby Wallet". */
 export function walletLabel(clientType: string) {
-  if (clientType === "privy") return "Kallr wallet (Privy)";
+  if (clientType === "privy") return "Kall Markets wallet (Privy)";
   if (clientType === "metamask") return "MetaMask";
   if (clientType === "coinbase_wallet") return "Coinbase Wallet";
   return clientType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -63,7 +63,7 @@ export function usePrivySession(): Session {
     handle: user?.twitter?.username ?? user?.email?.address ?? null,
     address,
     embedded: chosen?.embedded ?? true,
-    walletName: chosen?.name ?? (address ? "Kallr wallet (Privy)" : null),
+    walletName: chosen?.name ?? (address ? "Kall Markets wallet (Privy)" : null),
     wallets: list,
     selectWallet: (a) => {
       try {

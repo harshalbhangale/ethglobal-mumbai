@@ -162,7 +162,7 @@ object Kallr {
                 (json.parseToJsonElement(text) as kotlinx.serialization.json.JsonObject)["error"]?.toString()?.trim('"')
             }.getOrNull() ?: "Voice failed (${connection.responseCode})"))
         } catch (e: Exception) {
-            Result.failure(Exception("Couldn't reach Kallr Markets at $origin"))
+            Result.failure(Exception("Couldn't reach Kall Markets at $origin"))
         } finally {
             connection.disconnect()
         }
@@ -185,9 +185,9 @@ object Kallr {
             if (ok) Result.success(text)
             else Result.failure(Exception(runCatching {
                 json.parseToJsonElement(text).let { (it as kotlinx.serialization.json.JsonObject)["error"]?.toString()?.trim('"') }
-            }.getOrNull() ?: "Kallr Markets server error (${connection.responseCode})"))
+            }.getOrNull() ?: "Kall Markets server error (${connection.responseCode})"))
         } catch (e: Exception) {
-            Result.failure(Exception("Couldn't reach Kallr Markets at $origin"))
+            Result.failure(Exception("Couldn't reach Kall Markets at $origin"))
         } finally {
             connection.disconnect()
         }

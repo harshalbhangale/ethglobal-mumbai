@@ -14,7 +14,7 @@
   "themes": [
     {
       "id": "kallr_day",
-      "label": "Kallr Paper",
+      "label": "Kall Markets Paper",
       "authors": [
         "kallr"
       ],
@@ -22,7 +22,7 @@
     },
     {
       "id": "kallr_night",
-      "label": "Kallr Black",
+      "label": "Kall Markets Black",
       "authors": [
         "kallr"
       ],

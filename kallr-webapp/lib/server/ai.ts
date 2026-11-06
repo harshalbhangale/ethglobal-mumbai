@@ -117,7 +117,7 @@ export async function readCall(text: string): Promise<CallRead | null> {
 /** Coin and order words spoken orders use; under 100 so short clips aren't billed at a 20s minimum. */
 const KEYTERMS = [
   "ETH", "BTC", "USDC", "DEGEN", "PEPE", "BRETT", "TOSHI", "AERO", "VIRTUAL", "MOG", "HIGHER", "KEYCAT",
-  "WETH", "cbBTC", "Base", "Kallr", "Kallr Markets", "take profit", "stop loss", "limit order", "TWAP", "buy the dip", "dollars",
+  "WETH", "cbBTC", "Base", "Kallr", "Kall Markets", "take profit", "stop loss", "limit order", "TWAP", "buy the dip", "dollars",
 ]
 
 /** Speech to text with ElevenLabs Scribe; OpenAI transcription if ElevenLabs isn't available. */

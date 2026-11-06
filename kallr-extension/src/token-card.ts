@@ -45,7 +45,7 @@ export function tokenCheckCard(t: TokenCheck) {
   return el(
     "section",
     { class: "token-card", "aria-label": `Token check for ${name}` },
-    el("div", { class: "tc-head" }, `Kallr Markets · token check ${name}`, el("span", { class: "tc-muted" }, "not advice")),
+    el("div", { class: "tc-head" }, `Kall Markets · token check ${name}`, el("span", { class: "tc-muted" }, "not advice")),
     verdict,
     info.length ? el("div", { class: "tc-line tc-muted" }, info.join(" · ")) : null,
     el("div", { class: "tc-line tc-muted" }, "Shares a contract address, so no copy is offered."),
