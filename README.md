@@ -18,6 +18,7 @@ their records on Arkiv; you sign with MetaMask or the Privy wallet you get when 
 | **Kall Web App** ([kallr.vercel.app/app](https://kallr.vercel.app/app), PWA) | One screen: the callers you follow, their real posts from X with Kall Markets' verdict (entry, hit or miss, return) from Arkiv, Following / Explore / Favorites, and the trade ticket always beside them; Copy call fills it. Orders (open, closed, history with Arkiv proofs) and Wallet (MetaMask or the embedded wallet, balances on Base) | Live; reads Arkiv and quotes Flash on mainnet |
 | **Kall Extension** (Chrome, X only for now) | On x.com: a trade card under call posts with live prices, the caller's record and the Call receipt; Flash's price impact, slippage and fee before you sign; a Basescan receipt with the route after; signed on X with MetaMask or Rabby | Built; loads unpacked |
 | **Kall Keyboard** (Android, built on [FlorisBoard](https://github.com/florisboard/florisboard)) | Works wherever calls are posted (Telegram, X, WhatsApp): reads a call from a copied or shared message, shows the caller's record, and trades it in the keyboard's panel with the Privy wallet | Built; debug APK, talks to the web app's `/api/keyboard` |
+| **Kall Keyboard** (iPhone, `kallr-ios`) | A trading panel keyboard in any app: Following (calls from the callers you follow, with the post text, live move and record; Following / Explore; Active, Settled, Favorites), Trade (Market, Limit or TWAP, any amount, exits, a review with a fresh Flash quote, then one tap to place), Orders (live Flash status, Cancel) and Wallet. Orders are placed from a capped Kall wallet the server holds | Built; installed from Xcode; see [kallr-ios/README.md](kallr-ios/README.md) |
 | **Safety checks** | Token: honeypot, owner powers, taxes, liquidity, age. Caller: did their wallet sell what they called? | Token checks live (no key); wallet check needs a free Etherscan key |
 
 ## Run it
@@ -58,6 +59,25 @@ The service worker only registers in production builds: `npm run build && npm st
 4. `/api/flash/order` submits; the TP/SL arms on the first fill. The API key stays on the server.
 
 TP/SL attach to buys only (a spot sell leaves you in USDC). Tradable today: ETH (as WETH) and BTC (as cbBTC) against USDC on Base.
+
+## Kall Keyboard on iPhone
+
+The demo surface. `kallr-ios` is a SwiftUI app plus a keyboard extension; typing stays on the iPhone
+keyboard and the globe key switches to Kall:
+
+- **Following:** calls from the callers you follow (kept on the phone), with each post's text from its
+  Swarm snapshot, the move since the post and the caller's record. Explore lists everyone Kall Markets
+  tracks or has priced, with Follow. Filters for Active, Settled and starred Favorites.
+- **Trade:** a call's coin is filled in; pick an amount (or type one), Market, Limit or TWAP, and exits.
+  **Review** gets a fresh Definitive Flash quote (pay, get, price impact, fee, exits, approval) without
+  sending anything; **Confirm & place** sends it.
+- **Orders:** the Kall wallet's Flash orders with live status, the call each one copied, and Cancel for
+  working limit and TWAP orders (Flash's signed, gasless cancel).
+
+Orders go through `/api/keyboard/execute`: the server re-quotes, approves exactly the order's USDC, signs
+with the Kall keyboard wallet and submits on Flash, then records the trade on Arkiv. The Kall wallet is a
+demo hot wallet the server holds; only builds carrying `KALL_EXEC_TOKEN` can spend from it, and each order
+is capped by `KALL_EXEC_MAX_USD`. Build and install: [kallr-ios/README.md](kallr-ios/README.md).
 
 ## Kall Keyboard
 
@@ -212,6 +232,7 @@ The X API is pay-per-use: about $0.001 per mention read, $0.005 per post read, $
 kallr-webapp/       Next.js PWA: landing (/), desk (/app), /trades, Flash + after market + checks + Arkiv APIs
 kallr-extension/    Chrome extension for x.com: trade cards, records, profiles, follow, safety checks
 kallr-keyboard/     Android keyboard: FlorisBoard fork with a Kall Markets row
+kallr-ios/          Kall Keyboard for iPhone: SwiftUI app + keyboard extension (XcodeGen)
 kallr-xbot/         @Kallr on X (parked)
 packages/
   domain/           order parser, reputation, signals
@@ -225,6 +246,7 @@ docs/PLAN.md        what we are building next, and what is parked
 
 - First funded order on Base mainnet (needs a Privy app ID and a few USDC on Base)
 - The Terminal: live calls, your trades, chat rules with notify / ask-to-approve / ignore
+- iPhone keyboard: the first funded order from the Kall wallet (dry runs quote and sign on mainnet)
 - Kall Keyboard: a real trade from a phone (sign-in works on the emulator); release build
 - Swarm dashboard: the public gateway serves the snapshots, but the HTML page waits for Swarm's approval or an ENS name
 

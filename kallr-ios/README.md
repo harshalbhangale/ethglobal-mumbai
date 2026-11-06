@@ -3,15 +3,18 @@
 A small app plus the Kall Keyboard extension, in Kall Markets black and lime. The keyboard is a trading
 panel; typing stays on the iPhone keyboard (the globe key switches between them).
 
-- **Calls:** open calls from the callers Kall Markets tracks (read from Arkiv by `/api/keyboard/feed`),
-  each with the move since the post and time left, and **Copy** to trade it. Settled calls below, and
-  **Check** for a post or $TICKER message you copied.
+- **Following:** calls from the callers you follow (kept on the phone), read from Arkiv by
+  `/api/keyboard/feed`: the post's text from its Swarm snapshot, the move since the post, time left, and
+  **Trade**. Caller chips with hit rates narrow the list; Active, Settled and starred Favorites filter it.
+  **Explore** lists every caller Kall Markets tracks or has priced, with their record and Follow. The
+  clipboard button checks a post or $TICKER message you copied.
 - **Trade:** ETH or BTC; $1, $5, $10, $25 or a custom amount on a number pad; Market, Limit (−3, −5 or
   −10%) or TWAP (10 min, 1 hour, 4 hours); take-profit and stop-loss presets. **Review** gets a fresh
   Definitive Flash quote (you pay, you get, price impact and fee, exits, approval) without sending
   anything; **Confirm & place** sends it.
 - **Orders:** the Kall wallet's Flash orders with live status (re-read every 5 seconds while one is
-  working) and which call each one copied.
+  working), which call each one copied, and **Cancel** for working limit and TWAP orders. Cancelling is
+  Flash's gasless signed message and is final.
 - **Wallet:** the Kall wallet's address and balances.
 
 **How a trade is placed.** The keyboard sends the order to `/api/keyboard/execute` with a secret only these
