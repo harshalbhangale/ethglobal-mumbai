@@ -1548,18 +1548,17 @@ private struct ReviewCard: View {
             .buttonStyle(Press())
             .disabled(quote == nil)
             .accessibilityLabel("Back")
-            Button { model.confirm() } label: {
+            if quote == nil {
                 HStack(spacing: 8) {
-                    if quote == nil { ProgressView().tint(Kallr.black) }
-                    Text(quote == nil ? "Placing on Flash…" : model.payingETH ? "Confirm swap" : "Confirm buy")
-                        .font(TradeFont.bold)
+                    ProgressView().tint(Kallr.black)
+                    Text("Placing on Flash…").font(TradeFont.bold)
                 }
                 .foregroundStyle(Kallr.black)
                 .frame(maxWidth: .infinity, minHeight: 52)
                 .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 14))
+            } else {
+                HoldToConfirm(label: model.payingETH ? "Hold to swap" : "Hold to buy", font: TradeFont.bold) { model.confirm() }
             }
-            .buttonStyle(Press())
-            .disabled(quote == nil)
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 8)

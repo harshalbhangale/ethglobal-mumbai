@@ -411,12 +411,7 @@ private struct SwapCard: View {
                     Text("BACK").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.bone)
                         .frame(width: 80, height: 48).overlay(RoundedRectangle(cornerRadius: 11).stroke(Kallr.hairline))
                 }
-                Button(action: confirm) {
-                    Text("CONFIRM SWAP  ↗").font(.system(size: 14, weight: .heavy)).tracking(0.5)
-                        .foregroundStyle(Kallr.black)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 11))
-                }
+                HoldToConfirm(label: "HOLD TO SWAP", height: 48, cornerRadius: 11, action: confirm)
             }
             .padding(.top, 4)
         }
