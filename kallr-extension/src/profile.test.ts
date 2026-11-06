@@ -220,3 +220,33 @@ describe("addFollowBadge", () => {
     expect(article.querySelector(".kallr-badge-host")).toBeNull();
   });
 });
+
+describe("tabsBlock", () => {
+  it("mounts before X's whole tab nav, not inside the swipeable strip that clips it", async () => {
+    const { tabsBlock } = await import("./profile");
+    // X's profile, Nov 2026: column > … > div(1 child) > nav > div > SwipeableList > tablist.
+    document.body.innerHTML = `
+      <div data-testid="primaryColumn"><div id="header">
+        <div data-testid="UserName"></div>
+        <div id="wrap"><nav role="navigation"><div><div data-testid="ScrollSnap-SwipeableList">
+          <div data-testid="ScrollSnap-List" role="tablist"><a role="tab">Posts</a></div>
+        </div></div></nav></div>
+      </div></div>`;
+    const column = document.querySelector<HTMLElement>('[data-testid="primaryColumn"]')!;
+    const tabs = column.querySelector<HTMLElement>('[role="tablist"]')!;
+    const block = tabsBlock(tabs, column);
+    expect(block.id).toBe("wrap");
+    const host = document.createElement("div");
+    block.before(host);
+    expect(host.parentElement?.id).toBe("header");
+    expect(host.closest('[data-testid="ScrollSnap-SwipeableList"]')).toBeNull();
+  });
+
+  it("falls back to the tablist when there is no nav around it", async () => {
+    const { tabsBlock } = await import("./profile");
+    document.body.innerHTML = `<div data-testid="primaryColumn"><div role="tablist"></div><p></p></div>`;
+    const column = document.querySelector<HTMLElement>('[data-testid="primaryColumn"]')!;
+    const tabs = column.querySelector<HTMLElement>('[role="tablist"]')!;
+    expect(tabsBlock(tabs, column)).toBe(tabs);
+  });
+});
