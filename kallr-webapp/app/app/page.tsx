@@ -8,6 +8,7 @@ import { useWallets } from "@privy-io/react-auth";
 import { Logo, LogoMark } from "@/components/logo";
 import { SignInButton, WithSession, type Session } from "@/components/auth";
 import { AnonRpcBadge } from "@/components/anon-rpc-badge";
+import { DownloadApp } from "@/components/download-app";
 import { InstallButton } from "@/components/install-button";
 import { CallsBoard, type Row, type Scope } from "@/components/calls-board";
 import { KolAvatar } from "@/components/kol-avatar";
@@ -171,6 +172,7 @@ function Terminal({ session }: { session: Session }) {
         <div className="shrink-0 space-y-3 border-t border-rule pt-4">
           <AnonRpcBadge />
           <InstallButton />
+          <DownloadApp full align="left" label="Download our mobile app" />
           {signedIn ? (
             <AccountCard session={session} onWallet={() => setView("wallet")} />
           ) : (

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DownloadApp } from "@/components/download-app";
 import { LogoMark } from "@/components/logo";
 import { HeroStory } from "@/components/hero-story";
 import { SignalField } from "@/components/signal-field";
@@ -69,6 +70,9 @@ export default function Landing() {
             <Link href="/app#feed" className="hidden text-slate hover:text-ink sm:inline">
               Callers
             </Link>
+            <span className="hidden md:inline-block">
+              <DownloadApp label="Get the app" />
+            </span>
             <Link href="/app" className="shrink-0 rounded-md bg-lime px-4 py-2.5 font-semibold whitespace-nowrap text-on-lime transition-colors hover:bg-lime-strong">
               <span className="hidden sm:inline">Open Kall Markets</span>
               <span className="sm:hidden">Open app</span> <span aria-hidden="true">↗</span>
@@ -106,10 +110,11 @@ export default function Landing() {
                 Every call on X is priced the minute it’s posted and scored when it ends, on Arkiv for anyone to check. Fake
                 contracts get flagged. The real calls are one tap from a trade.
               </p>
-              <div className="lp-rise mt-9 flex flex-wrap items-center gap-x-7 gap-y-4" style={{ ["--d" as string]: "700ms" }}>
+              <div className="lp-rise relative z-30 mt-9 flex flex-wrap items-center gap-x-7 gap-y-4" style={{ ["--d" as string]: "700ms" }}>
                 <Link href="/app" className="cta-pulse inline-flex items-center gap-3 rounded-md bg-lime px-6 py-3.5 font-semibold text-on-lime transition-colors hover:bg-lime-strong">
                   See live calls <span aria-hidden="true">↗</span>
                 </Link>
+<DownloadApp align="left" label="Download our mobile app" />
                 <a href="#products" className="border-b border-rule-strong py-2 font-medium hover:border-ink">
                   Extension · Keyboard · Web app <span aria-hidden="true">↓</span>
                 </a>
@@ -223,6 +228,9 @@ export default function Landing() {
             <Link href="/app" className="cta-pulse mt-10 inline-flex items-center gap-3 rounded-md bg-lime px-7 py-4 text-lg font-semibold text-on-lime hover:bg-lime-strong">
               Open Kall Markets <span aria-hidden="true">↗</span>
             </Link>
+            <div className="mt-5">
+              <DownloadApp align="left" label="Download our mobile app" />
+            </div>
           </div>
         </section>
       </main>
