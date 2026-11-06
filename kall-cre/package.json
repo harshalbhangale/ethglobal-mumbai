@@ -1,0 +1,1 @@
+{ "name": "kall-cre", "private": true, "type": "module", "dependencies": { "@chainlink/cre-sdk": "^1.6.0", "viem": "2.34.0" } }
