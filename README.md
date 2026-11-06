@@ -130,7 +130,8 @@ feedback/          notes for the Definitive team
 
 - The CRE workflows run through the CRE CLI's simulator, which signs and broadcasts real reports to `KallVerdicts`;
   they aren't deployed to a live Chainlink DON yet, and `score-calls` hasn't written its first score on chain.
-- The iPhone keyboard trades from a small demo wallet our server holds (capped per order), not the user's own.
+- The keyboard trades from your own Kall wallet once you link it in the web app, signed on our server through
+  Privy and capped per order. Older keyboard builds still use the shared demo wallet until its funds move.
 
 ## What we reused
 
