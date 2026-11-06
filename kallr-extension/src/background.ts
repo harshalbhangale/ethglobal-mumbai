@@ -25,7 +25,7 @@ type Request =
   | { type: "flash-quote"; order: unknown }
   | { type: "flash-order"; order: unknown; signatures: unknown; context?: unknown }
   | { type: "token-search"; query: unknown }
-  | { type: "flash-order-status"; orderId: unknown };
+  | { type: "flash-order-status"; orderId: unknown; funder?: unknown };
 
 const HANDLE = /^[a-z0-9_]{1,15}$/;
 
@@ -122,7 +122,9 @@ chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
       context: message.context,
     });
   } else if (message?.type === "flash-order-status" && fromX && typeof message.orderId === "string" && /^[0-9a-f-]{36}$/i.test(message.orderId)) {
-    job = fetch(`${appOrigin}/api/flash/orders/${message.orderId}`).then((r) => (r.ok ? r.json() : { status: null, fills: [] }));
+    // Flash finds an order by its funder wallet too; the card knows it from placing the order.
+    const funder = typeof message.funder === "string" && /^0x[0-9a-fA-F]{40}$/.test(message.funder) ? `?funder=${message.funder}` : "";
+    job = fetch(`${appOrigin}/api/flash/orders/${message.orderId}${funder}`).then((r) => (r.ok ? r.json() : { status: null, fills: [] }));
   } else if (message?.type === "observe-follows" && fromX && Array.isArray(message.observations)) {
     const observations = message.observations.filter(
       (o) => o && typeof o.handle === "string" && typeof o.following === "boolean",

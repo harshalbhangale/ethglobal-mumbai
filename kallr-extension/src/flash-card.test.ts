@@ -367,6 +367,10 @@ describe("sign on X with a browser wallet", () => {
     await vi.waitFor(() => expect(card.textContent).toContain("Bought ETH with $25.00"));
     expect([...card.querySelectorAll(".steps .step")].map((s) => s.className)).toEqual(Array(6).fill("step done"));
     expect(open).not.toHaveBeenCalled();
+    // The receipt asks Flash for the fill with the wallet that placed it (Flash needs the funder).
+    await vi.waitFor(() =>
+      expect(worker).toHaveBeenCalledWith(expect.objectContaining({ type: "flash-order-status", orderId: "887ccf13-aaaa-bbbb-cccc-000000000000", funder: from })),
+    );
     expect(calls.map((c) => c.method)).toEqual([
       "kallr_ping",
       "eth_requestAccounts",

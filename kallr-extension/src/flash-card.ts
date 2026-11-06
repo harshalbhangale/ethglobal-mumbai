@@ -702,7 +702,7 @@ export function receipt(r: {
       ...(r.exits ? row("TP/SL", r.exits === "pending_activation" ? "Arms on the first fill" : r.exits) : []),
     ),
   );
-  void waitForFill(r.orderId).then((fill) => {
+  void waitForFill(r.orderId, r.from).then((fill) => {
     if (!fill) {
       swap.replaceChildren("Still filling: check the order page");
       burst?.setLink(`${BASESCAN}/address/${r.from}`, "Your wallet on Basescan ↗");

@@ -130,13 +130,15 @@ export type SwapFill = { hash: string; venues: string[] };
 
 /**
  * Waits for Definitive to execute the signed order on Base and returns the swap's transaction hash and
- * the venues it routed through. Null when no fill shows up in time (the order page still has it).
+ * the venues it routed through. `funder` is the wallet that placed it: Flash needs it to find the order.
+ * Null when no fill shows up in time (the order page still has it).
  */
-export async function waitForFill(orderId: string, tries = 20, everyMs = 3000): Promise<SwapFill | null> {
+export async function waitForFill(orderId: string, funder: string, tries = 20, everyMs = 3000): Promise<SwapFill | null> {
   for (let i = 0; i < tries; i++) {
     const res = await send<{ status: string | null; fills?: Array<{ transactionId: string | null; venues: string[] }> }>({
       type: "flash-order-status",
       orderId,
+      funder,
     }).catch(() => null);
     const fill = res?.fills?.find((f) => f.transactionId && /^0x[0-9a-fA-F]{64}$/.test(f.transactionId));
     if (fill?.transactionId) return { hash: fill.transactionId, venues: fill.venues ?? [] };
