@@ -1,7 +1,7 @@
 import type { Answer, PostRef } from "./call-view";
 import { appOrigin } from "./config";
-import { el, openDesk, safeLink } from "./dom";
-import { BASESCAN, placeOnX, type QuoteFacts, type Step, waitForFill } from "./flash-direct";
+import { el, openDesk, safeLink, send } from "./dom";
+import { BASESCAN, type CardOrder, placeOnX, type QuoteFacts, type Step, toFlashInput, waitForFill } from "./flash-direct";
 import { followButton } from "./follows";
 import { definitiveLogo, tokenIcon } from "./logos";
 import { cardOrderText, COPYABLE, DECIMAL, deskOrderUrl } from "./post";
@@ -9,14 +9,16 @@ import { type SuccessSummary, successBurst } from "./success-burst";
 import { ALIASES, formatPrice, type LivePrice, livePrice } from "./ticker-price";
 import { type Choice, choiceIcon, plainPrice, searchTokens, tokenPicker } from "./token-picker";
 import { hasBrowserWallet, rejected } from "./wallet";
+import type { Signer, XStatus } from "./x-trading";
 
 export { tokenIcon } from "./logos";
 
 /**
  * The post card: live price header, the caller strip (call + Follow), then
  * the trade flow. Trades on Base through Definitive Flash with take-profit / stop-loss attached as
- * one bracket. With MetaMask / Rabby on the page every step is signed right here, with a step
- * tracker; otherwise the Kall Markets desk opens to sign with the Privy wallet.
+ * one bracket. Your Kall wallet signs by default, on Kall's server with no pop-up, once "Trade from
+ * X" is on in Kall Markets. Pick MetaMask instead and every step is signed right here in it. With
+ * neither set up, the order opens in Kall Markets to sign there.
  */
 
 const NAMES: Record<string, string> = { ETH: "Ethereum", BTC: "Bitcoin" };
@@ -48,15 +50,21 @@ const TRACK: Array<{ step: Step; label: string; optional?: boolean }> = [
   { step: "submitting", label: "Place on Base" },
 ];
 
+/** The Kall wallet signs on the server in one go: no wallet prompts to walk through. */
+const KALL_TRACK: typeof TRACK = [
+  { step: "signing", label: "Your Kall wallet signs · no pop-up" },
+  { step: "submitting", label: "Place on Base" },
+];
+
 /** The live step list: done ✓, current ●, upcoming ○; optional steps show only once reached. */
-export function stepTracker() {
+export function stepTracker(track = TRACK) {
   const list = el("ol", { class: "steps", "aria-live": "polite" });
   const reached = new Set<Step>();
   let current: Step | null = null;
   let failed = false;
   let failMessage = "";
   const render = () => {
-    const order = TRACK.filter((t) => !t.optional || reached.has(t.step));
+    const order = track.filter((t) => !t.optional || reached.has(t.step));
     const at = current ? order.findIndex((t) => t.step === current) : -1;
     list.replaceChildren(
       ...order.map((t, i) => {
@@ -88,7 +96,7 @@ export function stepTracker() {
     finish() {
       current = null;
       list.replaceChildren(
-        ...TRACK.filter((t) => !t.optional || reached.has(t.step)).map((t) =>
+        ...track.filter((t) => !t.optional || reached.has(t.step)).map((t) =>
           el("li", { class: "step done" }, el("span", { class: "step-dot", "aria-hidden": "true" }, "✓"), el("span", {}, t.label)),
         ),
       );
@@ -137,6 +145,15 @@ export function flashCard(input: {
     walletOnPage = v;
     if (!panel.hidden) update();
   });
+  // Who signs: the Kall wallet on Kall's server by default, MetaMask on this page if picked.
+  let signing: XStatus = { kall: null, signer: "kall" };
+  const readSigning = () =>
+    send<XStatus>({ type: "x-status" }).then((s) => {
+      if (s) signing = s;
+      if (!panel.hidden) update();
+    });
+  void readSigning();
+  const useMetaMask = () => signing.signer === "metamask" && walletOnPage === true;
 
   const card = el("section", {
     class: `inline-card swap-card${input.attached ? " inline-attached" : ""}`,
@@ -312,10 +329,10 @@ export function flashCard(input: {
         : side === "buy"
           ? row("Exits", "None · plain swap")
           : []),
-      ...row("Steps", withExits ? "Approve twice, sign twice (first time)" : "Approve once (first time), sign once"),
+      ...(useMetaMask() ? row("Steps", withExits ? "Approve twice, sign twice (first time)" : "Approve once (first time), sign once") : []),
       ...row("Route", "Best route by Definitive · MEV-protected"),
       ...row("Network", "Base mainnet · real funds"),
-      ...row("Sign in", walletOnPage === false ? "Kall Markets desk (Privy wallet)" : "Your browser wallet"),
+      ...row("Signed by", signedBy()),
     );
 
     const pairBroken = side === "buy" && (tp === null) !== (sl === null);
@@ -358,35 +375,51 @@ export function flashCard(input: {
 
   amount.addEventListener("input", update);
 
+  /** Who signs, as the review shows it, with a switch when MetaMask is on the page. */
+  function signedBy() {
+    const metamask = useMetaMask();
+    const label = metamask ? "MetaMask · you confirm each step" : signing.kall ? "Your Kall wallet · no pop-up" : "Your Kall wallet, in Kall Markets";
+    if (!walletOnPage) return label;
+    const other: Signer = metamask ? "kall" : "metamask";
+    const toggle = el("button", { type: "button", class: "signer-switch" }, metamask ? "Use Kall wallet" : "Use MetaMask");
+    toggle.addEventListener("click", () => {
+      void send<XStatus>({ type: "signer", signer: other }).then((s) => {
+        if (s) signing = s;
+        update();
+      });
+    });
+    return el("span", {}, label, " ", toggle);
+  }
+
+  const cardOrder = (): CardOrder => ({
+    asset: choice?.kind === "token" ? choice.token.address : (sym() as "ETH" | "BTC"),
+    decimals: choice?.kind === "token" ? choice.token.decimals : undefined,
+    side,
+    amount: amount.value,
+    tpPct: side === "buy" ? tp : null,
+    slPct: side === "buy" ? sl : null,
+    price: price(),
+    postId: post.postId,
+    caller: post.handle,
+    // Selling ETH spends the wallet's native ETH: most wallets hold ETH, not WETH.
+    native: side === "sell" && choice?.kind === "known" && choice.key === "ETH",
+  });
+
+  type Placed = { orderId: string; from: string; exits: string | null; txs: Array<{ label: string; hash: string }>; signature: string | null };
+
   let busy = false;
-  /** With MetaMask / Rabby on the page: quote, approve, sign and submit right here on X. */
-  async function placeHere() {
+  /** Runs one placement with its step list, then shows the receipt (or the error under the failed step). */
+  async function place(track: typeof TRACK, signer: string, go: (tracker: ReturnType<typeof stepTracker>) => Promise<Placed>) {
     busy = true;
     submit.setAttribute("disabled", "");
-    const tracker = stepTracker();
+    const tracker = stepTracker(track);
     progress.replaceChildren(tracker.root);
     progress.hidden = false;
     review.hidden = true;
     status.textContent = "";
     const spent = side === "buy" ? money(Number(amount.value)) : `${amount.value} ${tokenSym()}`;
     try {
-      const result = await placeOnX(
-        {
-          asset: choice?.kind === "token" ? choice.token.address : (sym() as "ETH" | "BTC"),
-          decimals: choice?.kind === "token" ? choice.token.decimals : undefined,
-          side,
-          amount: amount.value,
-          tpPct: side === "buy" ? tp : null,
-          slPct: side === "buy" ? sl : null,
-          price: price(),
-          postId: post.postId,
-          caller: post.handle,
-          // Selling ETH spends the wallet's native ETH: most wallets hold ETH, not WETH.
-          native: side === "sell" && choice?.kind === "known" && choice.key === "ETH",
-        },
-        (step) => tracker.to(step),
-        (facts) => progress.prepend(quoteSummary(facts, side === "buy" ? tokenSym() : "USDC")),
-      );
+      const result = await go(tracker);
       tracker.finish();
       walletChip.textContent = `${result.from.slice(0, 6)}…${result.from.slice(-4)}`;
       walletChip.hidden = false;
@@ -406,6 +439,8 @@ export function flashCard(input: {
           exits: result.exits,
           orderId: result.orderId,
           from: result.from,
+          signer,
+          signature: result.signature,
           txs: result.txs,
         }),
       );
@@ -424,27 +459,50 @@ export function flashCard(input: {
     }
   }
 
+  /** MetaMask on the page: quote, approve, sign and submit right here on X, one prompt per step. */
+  const placeHere = () =>
+    place(TRACK, "MetaMask", (tracker) =>
+      placeOnX(
+        cardOrder(),
+        (step) => tracker.to(step),
+        (facts) => progress.prepend(quoteSummary(facts, side === "buy" ? tokenSym() : "USDC")),
+      ),
+    );
+
+  /** The Kall wallet: Kall's server quotes, signs and places it with no pop-up. */
+  const placeWithKall = (from: string) =>
+    place(KALL_TRACK, "Your Kall wallet", async (tracker) => {
+      tracker.to("signing");
+      const built = toFlashInput(cardOrder(), from);
+      if (!built.ok) throw new Error(built.error);
+      const res = await send<Placed & { failed?: string }>({ type: "x-order", order: built.input, caller: post.handle });
+      if (!res) throw new Error("Couldn't reach Kall Markets. Check the app is running, then try again.");
+      if (res.failed) throw new Error(res.failed);
+      tracker.to("submitting");
+      return res;
+    });
+
   submit.addEventListener("click", async () => {
     if (busy) return;
     const usd = usdValue();
     if (usd === null || !Number.isFinite(usd)) return;
-    if (await hasBrowserWallet()) return placeHere();
-    if (choice?.kind === "token") {
-      // The desk's typed orders only know ETH and BTC; other tokens trade with a wallet on the page.
-      status.textContent = `Trading ${sym()} needs MetaMask or Rabby in this browser.`;
-      return;
-    }
+    await readSigning();
+    if (signing.signer === "metamask" && (await hasBrowserWallet())) return placeHere();
+    if (signing.kall) return placeWithKall(signing.kall.address);
+    // Not set up yet: the order opens in Kall Markets, where the Kall wallet signs it.
+    const token = choice?.kind === "token" ? choice.token.address : null;
     const text = cardOrderText({
       side,
-      asset: sym(),
+      // Any other token goes by its contract; the order text then names no coin.
+      asset: token ? null : sym(),
       usd: side === "buy" ? amount.value : usd.toFixed(2),
       tpPct: side === "buy" ? tp : null,
       slPct: side === "buy" ? sl : null,
     });
     if (!text) return;
-    const url = deskOrderUrl(appOrigin, text, post);
+    const url = deskOrderUrl(appOrigin, text, post, token);
     openDesk(url);
-    status.replaceChildren("No browser wallet here: review the quote and sign in the Kall Markets desk. ", safeLink(url, "Open desk ↗"));
+    status.replaceChildren("Opened in Kall Markets: your Kall wallet signs it there. Turn on Trade from X in Wallet to sign right here. ", safeLink(url, "Open again ↗"));
   });
 
   // --- token picker, shown over the trade panel ---
@@ -637,6 +695,10 @@ export function receipt(r: {
   exits: string | null;
   orderId: string;
   from: string;
+  /** Who signed: "Your Kall wallet" or "MetaMask". */
+  signer?: string;
+  /** The order's EIP-712 signature, when known. */
+  signature?: string | null;
   txs: Array<{ label: string; hash: string }>;
 }) {
   const row = (k: string, v: Node | string) => [el("dt", {}, k), el("dd", {}, v)];
@@ -657,6 +719,8 @@ export function receipt(r: {
       venue,
       ...r.txs.flatMap((t) => row(t.label, safeLink(`${BASESCAN}/tx/${t.hash}`, `${short(t.hash)} ↗`))),
       ...row("Wallet", safeLink(`${BASESCAN}/address/${r.from}`, `${short(r.from)} ↗`)),
+      ...(r.signer ? row("Signed by", r.signer) : []),
+      ...(r.signature ? row("Signature", el("span", { class: "mono", title: `EIP-712 signature: ${r.signature}` }, short(r.signature))) : []),
       ...row("Order", safeLink(`${appOrigin}/app#orders`, `${r.orderId.slice(0, 8)}… ↗`)),
       ...(r.exits ? row("TP/SL", r.exits === "pending_activation" ? "Arms on the first fill" : r.exits) : []),
     ),

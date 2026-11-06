@@ -286,6 +286,9 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .definitive-logo { display: block; color: var(--foreground); }
 .exits-toggle { justify-self: start; border: 0; background: none; padding: 4px 2px; color: #1d9bf0; font: 600 14px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; }
 .exits-toggle:hover { text-decoration: underline; }
+.signer-switch { border: 0; background: none; padding: 0; margin-left: 4px; color: #1d9bf0; font: 600 12px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; }
+.signer-switch:hover { text-decoration: underline; }
+.review .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .step-error { display: block; margin-top: 2px; font-weight: 500; font-size: 13px; line-height: 1.4; color: var(--negative); }
 .card .title { gap: 12px; margin-bottom: 12px; }
 .title-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

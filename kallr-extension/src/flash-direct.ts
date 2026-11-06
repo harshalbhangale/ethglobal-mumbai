@@ -9,9 +9,10 @@ import { send } from "./dom";
 import { connect, ensureBase, sendAndWait, signTypedData } from "./wallet";
 
 /**
- * Places a Definitive Flash order on Base from X, signed by the user's browser wallet: the same
- * quote → approve → sign → submit as the desk, through the app's /api/flash routes (the server
- * re-validates the order and holds the API key). Every approval and signature is a wallet prompt.
+ * Places a Definitive Flash order on Base from X, signed in MetaMask (or another browser wallet)
+ * when the user picked it over the Kall wallet: the same quote → approve → sign → submit as the desk,
+ * through the app's /api/flash routes (the server re-validates the order and holds the API key).
+ * Every approval and signature is a wallet prompt.
  */
 
 /** Decimal string without exponent, truncated (never rounded up) to `dp` places. */
@@ -185,5 +186,5 @@ export async function placeOnX(o: CardOrder, onStep: (step: Step) => void, onQuo
     context: { source: "extension", caller: o.caller ?? null },
   });
   if (!res.orderId) throw new Error("Flash didn't return an order ID.");
-  return { orderId: res.orderId, from, exits: res.attachedBracket?.status ?? null, received: quote.to.amount, txs };
+  return { orderId: res.orderId, from, exits: res.attachedBracket?.status ?? null, received: quote.to.amount, txs, signature: signatures.userSignature };
 }

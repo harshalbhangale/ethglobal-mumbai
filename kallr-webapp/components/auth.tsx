@@ -1,79 +1,96 @@
 "use client";
 
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { useConnectWallet, usePrivy, useWallets } from "@privy-io/react-auth";
 import type { Address } from "viem";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useSyncExternalStore } from "react";
 import { PRIVY_ENABLED } from "@/app/providers";
 
-/** A wallet the user can trade from: Privy's embedded one, or one they connected (MetaMask, Rabby…). */
-export type SessionWallet = { address: Address; embedded: boolean; name: string };
+/** Which wallet signs trades: the Kall wallet unless you switch to MetaMask in Wallet. */
+export type SigningWallet = "kall" | "metamask";
 
 export type Session = {
   ready: boolean;
   authenticated: boolean;
   handle: string | null;
-  /** The wallet trades, orders and balances use. */
+  /** The wallet that trades: your Kall wallet, or MetaMask when you chose it. */
   address: Address | null;
-  embedded: boolean;
-  walletName: string | null;
-  wallets: SessionWallet[];
-  selectWallet: (address: Address) => void;
-  connectWallet: () => void;
+  signing: SigningWallet;
+  /** Your Kall wallet: the embedded wallet Privy made when you signed in. */
+  kallAddress: Address | null;
+  /** Connect MetaMask (if needed) and sign with it from now on. */
+  signWithMetaMask: () => void;
+  /** Back to the Kall wallet. */
+  signWithKall: () => void;
   login: () => void;
   logout: () => Promise<void>;
 };
 
-const ACTIVE_KEY = "kallr.activeWallet";
-const readActive = () => {
+// The choice is per browser; the Kall wallet is the default.
+const CHOICE_KEY = "kallr.signing";
+const CHOICE_EVENT = "kallr-signing";
+const readChoice = (): SigningWallet => {
   try {
-    return localStorage.getItem(ACTIVE_KEY);
+    return localStorage.getItem(CHOICE_KEY) === "metamask" ? "metamask" : "kall";
   } catch {
-    return null;
+    return "kall";
   }
 };
+function saveChoice(choice: SigningWallet) {
+  try {
+    if (choice === "kall") localStorage.removeItem(CHOICE_KEY);
+    else localStorage.setItem(CHOICE_KEY, choice);
+  } catch {}
+  window.dispatchEvent(new Event(CHOICE_EVENT));
+}
+function subscribe(onChange: () => void) {
+  window.addEventListener(CHOICE_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(CHOICE_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
 
-/** "metamask" → "MetaMask", "rabby_wallet" → "Rabby Wallet". */
-export function walletLabel(clientType: string) {
-  if (clientType === "privy") return "Kall Markets wallet (Privy)";
-  if (clientType === "metamask") return "MetaMask";
-  if (clientType === "coinbase_wallet") return "Coinbase Wallet";
-  return clientType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+/**
+ * The wallet that signs trades, and which one it is. MetaMask only when you chose it and it's
+ * connected; otherwise the Kall wallet, which signs without pop-ups.
+ */
+export function useTradingWallet() {
+  const { wallets } = useWallets();
+  const choice = useSyncExternalStore(subscribe, readChoice, () => "kall" as const);
+  const kall = wallets.find((w) => w.walletClientType === "privy") ?? null;
+  const metamask = wallets.find((w) => w.walletClientType === "metamask") ?? null;
+  return choice === "metamask" && metamask ? { wallet: metamask, signing: "metamask" as const, kall } : { wallet: kall, signing: "kall" as const, kall };
 }
 
 /** Reads the Privy session. Only call inside components rendered when PRIVY_ENABLED is true. */
 export function usePrivySession(): Session {
-  const { ready, authenticated, user, login, logout, connectWallet } = usePrivy();
+  const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
-  const [active, setActive] = useState<string | null>(null);
-  useEffect(() => setActive(readActive()), []);
-
-  const list: SessionWallet[] = wallets.map((w) => ({
-    address: w.address as Address,
-    embedded: w.walletClientType === "privy",
-    name: walletLabel(w.walletClientType),
-  }));
-  // The one you picked; else a wallet you connected yourself (it's the one with funds); else the embedded one.
-  const chosen =
-    list.find((w) => w.address.toLowerCase() === active?.toLowerCase()) ?? list.find((w) => !w.embedded) ?? list.find((w) => w.embedded) ?? null;
-  const address = (chosen?.address ?? user?.wallet?.address ?? null) as Address | null;
-
+  const { wallet, signing, kall } = useTradingWallet();
+  const { connectWallet } = useConnectWallet({
+    onSuccess: ({ wallet: connected }) => {
+      if (connected.walletClientType === "metamask") saveChoice("metamask");
+    },
+  });
+  const kallAddress = (kall?.address ?? user?.wallet?.address ?? null) as Address | null;
   return {
     ready,
     authenticated,
     handle: user?.twitter?.username ?? user?.email?.address ?? null,
-    address,
-    embedded: chosen?.embedded ?? true,
-    walletName: chosen?.name ?? (address ? "Kall Markets wallet (Privy)" : null),
-    wallets: list,
-    selectWallet: (a) => {
-      try {
-        localStorage.setItem(ACTIVE_KEY, a);
-      } catch {}
-      setActive(a);
+    address: (wallet?.address as Address | undefined) ?? kallAddress,
+    signing,
+    kallAddress,
+    signWithMetaMask: () => {
+      if (wallets.some((w) => w.walletClientType === "metamask")) saveChoice("metamask");
+      else connectWallet({ walletList: ["metamask"] });
     },
-    connectWallet: () => connectWallet(),
+    signWithKall: () => saveChoice("kall"),
     login,
-    logout,
+    logout: async () => {
+      saveChoice("kall");
+      await logout();
+    },
   };
 }
 

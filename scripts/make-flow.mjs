@@ -84,7 +84,7 @@ s += t(px, 736, "The caller’s record shows up in all three apps", 14.5, TEXT, 
 
 // Footer: who holds the keys
 s += `<line x1="70" y1="832" x2="${W - 70}" y2="832" stroke="${RULE}"/>`;
-s += `<circle cx="80" cy="862" r="6" fill="${LIME}"/>` + t(96, 867, "You sign every trade in your own wallet (MetaMask or Privy). Kall never holds your keys.", 14, MUTE);
+s += `<circle cx="80" cy="862" r="6" fill="${LIME}"/>` + t(96, 867, "Your Kall wallet (Privy, made when you sign in with X) signs every trade with no pop-up; pick MetaMask to sign yourself.", 14, MUTE);
 s += "</svg>\n";
 await writeFile(R + "docs/flow.svg", s);
 console.log("docs/flow.svg");

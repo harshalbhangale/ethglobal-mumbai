@@ -14,7 +14,7 @@ it swaps the keys for the Kall Markets trading panel; **ABC** goes back to typin
   (TP/SL), and Buy. "Powered by Flash · Definitive · on Base".
 - **Positions:** your Flash orders with status and TP/SL, and your USDC and ETH on Base.
 - **Wallet:** your Privy embedded wallet (the same as the Kall Markets desk), copy the address to fund it
-  from MetaMask, sign in with X.
+  from any wallet or exchange, sign in with X.
 
 When you copy a call (X post link, or a `$PEPE` message from Telegram), share a contract or type
 `copy $20 of btc tp 20% sl 10%`, a slim "Trade this call" suggestion appears above the toolbar and

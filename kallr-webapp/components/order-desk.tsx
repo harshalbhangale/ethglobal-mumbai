@@ -193,7 +193,7 @@ export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | 
 
 function friendlyError(err: unknown) {
   const msg = err instanceof Error ? err.message : String(err);
-  if (/rejected|denied|cancel/i.test(msg)) return "You cancelled in your wallet. Nothing was placed.";
+  if (/rejected|denied|cancel/i.test(msg)) return "The wallet didn't sign. Nothing was placed.";
   if (/insufficient|balance/i.test(msg)) return "Not enough USDC (or ETH for gas) in your wallet on Base.";
   return msg;
 }

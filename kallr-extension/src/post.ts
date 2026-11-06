@@ -45,9 +45,11 @@ export function deskUrl(origin: string, asset: string, p: CopyPreset | null, pos
   return deskOrderUrl(origin, p ? copyOrderText(asset, p) : `copy $ of ${asset} tp 10% sl 5%`, post);
 }
 
-export function deskOrderUrl(origin: string, order: string, post: { handle: string; postId: string }) {
+export function deskOrderUrl(origin: string, order: string, post: { handle: string; postId: string }, token: string | null = null) {
   const q = new URLSearchParams();
   q.set("order", order);
+  // Any Base token beyond ETH and BTC: the ticket picks it by contract.
+  if (token) q.set("token", token);
   q.set("post", post.postId);
   q.set("caller", post.handle);
   q.set("src", "extension");
@@ -65,16 +67,18 @@ export const DECIMAL = /^(0|[1-9][0-9]*)(\.[0-9]+)?$/;
  */
 export function cardOrderText(input: {
   side: "buy" | "sell";
-  asset: string;
+  /** Null for a token that travels by contract address instead. */
+  asset: string | null;
   usd: string;
   tpPct: number | null;
   slPct: number | null;
 }): string | null {
   if (!DECIMAL.test(input.usd) || !(Number(input.usd) > 0)) return null;
-  if (input.side === "sell") return `sell $${input.usd} of ${input.asset}`;
+  const of = input.asset ? ` of ${input.asset}` : "";
+  if (input.side === "sell") return `sell $${input.usd}${of}`;
   if ((input.tpPct === null) !== (input.slPct === null)) return null;
   const exits = input.tpPct !== null && input.slPct !== null ? ` tp ${input.tpPct}% sl ${input.slPct}%` : "";
-  return `copy $${input.usd} of ${input.asset}${exits}`;
+  return `copy $${input.usd}${of}${exits}`;
 }
 
 /** Keeps the newest posts per caller, deduplicated, capped. */

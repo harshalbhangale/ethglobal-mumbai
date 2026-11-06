@@ -109,7 +109,7 @@ describe("flashCard", () => {
     expect(submit.textContent).toBe("Buy ETH · $25.00");
     submit.click();
     await vi.waitFor(() => expect(open).toHaveBeenCalled());
-    expect(card.textContent).toContain("No browser wallet here");
+    expect(card.textContent).toContain("Opened in Kall Markets: your Kall wallet signs it there.");
     const url = new URL(open.mock.calls[0]?.[0] as string);
     expect(url.origin + url.pathname).toBe("https://kallr.test/app");
     expect(url.searchParams.get("order")).toBe("copy $25 of ETH tp 10% sl 5%");
@@ -215,7 +215,7 @@ describe("any Base token", () => {
     expect(q(made.card, ".untradable").hidden).toBe(true);
   });
 
-  it("picks any token from search and orders it by contract address", async () => {
+  it("picks any token from search and orders it by contract address in MetaMask", async () => {
     const sendMessage = worker([DEGEN, FAKE]);
     const calls = fakeWallet({
       eth_requestAccounts: () => ["0x00000000000000000000000000000000000000a1"],
@@ -225,6 +225,7 @@ describe("any Base token", () => {
     sendMessage.mockImplementation(async (m: { type: string }): Promise<unknown> => {
       if (m.type === "prices") return { prices: [{ asset: "ETH", price: "2500", source: "chainlink-base" }] };
       if (m.type === "token-search") return { tokens: [DEGEN, FAKE] };
+      if (m.type === "x-status") return { kall: null, signer: "metamask" };
       if (m.type === "flash-quote") return { quote: { quoteId: "q", from: { amount: "1" }, to: { amount: "1124" }, evm: { approveTx: null, permitTypedData: "", orderTypedData: "{}" } } };
       if (m.type === "flash-order") return { orderId: "11111111-2222-3333-4444-555555555555" };
       return null;
@@ -309,7 +310,7 @@ describe("decorate", () => {
   });
 });
 
-describe("sign on X with a browser wallet", () => {
+describe("sign on X in MetaMask, when picked", () => {
   const typed = (name: string) => JSON.stringify({ primaryType: name, domain: { chainId: "8453" }, types: {}, message: {} });
   const quote = {
     quoteId: "q1",
@@ -330,6 +331,7 @@ describe("sign on X with a browser wallet", () => {
     const worker = stubWorker();
     worker.mockImplementation(async (m: { type: string }): Promise<unknown> => {
       if (m.type === "prices") return { prices: [{ asset: "ETH", price: "2500", source: "chainlink-base" }] };
+      if (m.type === "x-status") return { kall: null, signer: "metamask" };
       if (m.type === "flash-quote") return { quote };
       if (m.type === "flash-order") return { orderId: "887ccf13-aaaa-bbbb-cccc-000000000000", attachedBracket: { status: "pending_activation" } };
       if (m.type === "flash-order-status")
@@ -432,6 +434,74 @@ describe("sign on X with a browser wallet", () => {
   });
 });
 
+describe("sign on X with the Kall wallet, by default", () => {
+  const KALL = "0x00000000000000000000000000000000000000c4";
+  const signature = `0x${"ef".repeat(65)}`;
+
+  it("places on Kall's server with no wallet prompt, even with MetaMask on the page, and shows the signature", async () => {
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
+    const calls = fakeWallet({ eth_requestAccounts: () => ["0x00000000000000000000000000000000000000a1"] });
+    const worker = stubWorker();
+    worker.mockImplementation(async (m: { type: string }): Promise<unknown> => {
+      if (m.type === "prices") return { prices: [{ asset: "ETH", price: "2500", source: "chainlink-base" }] };
+      if (m.type === "x-status") return { kall: { address: KALL, expires: Date.now() + 86_400_000 }, signer: "kall" };
+      if (m.type === "x-order")
+        return { orderId: "99999999-aaaa-bbbb-cccc-000000000000", from: KALL, exits: null, txs: [{ label: "Approve", hash: `0x${"cd".repeat(32)}` }], signature };
+      if (m.type === "flash-order-status") return { status: "ORDER_STATUS_FILLED", fills: [{ transactionId: `0x${"ab".repeat(32)}`, venues: [] }] };
+      if (m.type === "signer") return { kall: { address: KALL, expires: Date.now() + 86_400_000 }, signer: "metamask" };
+      return null;
+    });
+    const { flashCard } = await import("./flash-card");
+    const made = flashCard({ post, asset: "ETH", answer: answer() });
+    document.body.append(made.card);
+    await vi.waitFor(() => expect(made.card.querySelector(".swap-title b")?.textContent).toBe("$2,500"));
+    made.open();
+    const amount = q<HTMLInputElement>(made.card, ".swap-amount");
+    amount.value = "5";
+    amount.dispatchEvent(new Event("input"));
+    await vi.waitFor(() => expect(q(made.card, ".review").textContent).toContain("Signed byYour Kall wallet · no pop-up Use MetaMask"));
+    q<HTMLButtonElement>(made.card, ".swap-submit").click();
+    await vi.waitFor(() => expect(made.card.textContent).toContain("Bought ETH with $5.00"));
+
+    const sent = worker.mock.calls.find(([m]) => m.type === "x-order")?.[0] as unknown as { order: Record<string, unknown>; caller: string };
+    expect(sent.order).toMatchObject({ asset: "ETH", side: "buy", qty: "5", orderType: "market", funderAddress: KALL });
+    expect(sent.caller).toBe("kol");
+    // No wallet prompt and no desk: the server signed.
+    expect(calls.map((c) => c.method)).not.toContain("eth_requestAccounts");
+    expect(open).not.toHaveBeenCalled();
+    const receiptText = q(made.card, ".receipt").textContent;
+    expect(receiptText).toContain("Signed byYour Kall wallet");
+    expect(receiptText).toContain("Signature0xefef…efef");
+    expect([...made.card.querySelectorAll<HTMLAnchorElement>(".receipt a")].map((a) => a.href)).toContain(`https://basescan.org/tx/0x${"cd".repeat(32)}`);
+
+    // Switching to MetaMask is one click, and stays picked.
+    q<HTMLButtonElement>(made.card, ".signer-switch").click();
+    await vi.waitFor(() => expect(worker).toHaveBeenCalledWith(expect.objectContaining({ type: "signer", signer: "metamask" })));
+  });
+
+  it("shows the server's reason when the Kall wallet can't place it", async () => {
+    stubWorker().mockImplementation(async (m: { type: string }): Promise<unknown> => {
+      if (m.type === "prices") return { prices: [{ asset: "ETH", price: "2500", source: "chainlink-base" }] };
+      if (m.type === "x-status") return { kall: { address: KALL, expires: Date.now() + 86_400_000 }, signer: "kall" };
+      if (m.type === "x-order") return { failed: "Trades from X are up to $25 each. Use Kall Markets for more." };
+      return null;
+    });
+    fakeWallet(null);
+    const { flashCard } = await import("./flash-card");
+    const made = flashCard({ post, asset: "ETH", answer: answer() });
+    document.body.append(made.card);
+    await vi.waitFor(() => expect(made.card.querySelector(".swap-title b")?.textContent).toBe("$2,500"));
+    made.open();
+    const amount = q<HTMLInputElement>(made.card, ".swap-amount");
+    amount.value = "50";
+    amount.dispatchEvent(new Event("input"));
+    q<HTMLButtonElement>(made.card, ".swap-submit").click();
+    await vi.waitFor(() => expect(made.card.textContent).toContain("Trades from X are up to $25 each."));
+    expect(made.card.querySelector(".sb")).toBeNull();
+  });
+});
+
 describe("plain swap by default", () => {
   it("starts with TP/SL off, so the order is a plain swap with the fewest steps", async () => {
     const open = vi.fn();
@@ -445,7 +515,7 @@ describe("plain swap by default", () => {
     amount.value = "1";
     amount.dispatchEvent(new Event("input"));
     expect(q(card, ".review").textContent).toContain("ExitsNone · plain swap");
-    expect(q(card, ".review").textContent).toContain("StepsApprove once (first time), sign once");
+    expect(q(card, ".review").textContent).toContain("Signed byYour Kall wallet, in Kall Markets");
     q<HTMLButtonElement>(card, ".swap-submit").click();
     await vi.waitFor(() => expect(open).toHaveBeenCalled());
     expect(new URL(open.mock.calls[0]?.[0] as string).searchParams.get("order")).toBe("copy $1 of ETH");

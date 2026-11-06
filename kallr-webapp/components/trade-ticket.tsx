@@ -4,7 +4,7 @@ import { type ExitPrices, type ParsedOrder, exitPrices, parseOrder } from "@kall
 import type { FlashOrderInput } from "@kallr/integrations/definitive";
 import type { ConnectedWallet } from "@privy-io/react-auth";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type OrderContext, type PlaceStep, placeFlashOrder } from "@/lib/flash-client";
+import { arkivRecord, fillTransaction, type OrderContext, type Placed, type PlaceStep, placeFlashOrder, signer } from "@/lib/flash-client";
 import { toDecimal, toFlashOrder } from "@/lib/flash-order";
 import { useUsdPrices } from "./order-desk";
 
@@ -38,12 +38,12 @@ const STEPS: Array<{ step: PlaceStep; label: string; optional?: boolean }> = [
 type Run =
   | { kind: "idle" }
   | { kind: "working"; step: PlaceStep; seen: PlaceStep[] }
-  | { kind: "done"; orderId: string; seen: PlaceStep[]; summary: string; exits: string | null }
+  | { kind: "done"; placed: Placed; seen: PlaceStep[]; summary: string }
   | { kind: "error"; message: string; seen: PlaceStep[]; at: PlaceStep | null };
 
 function friendlyError(err: unknown) {
   const msg = err instanceof Error ? err.message : String(err);
-  if (/rejected|denied|cancel/i.test(msg)) return "You cancelled in your wallet. Nothing was placed.";
+  if (/rejected|denied|cancel/i.test(msg)) return "The wallet didn't sign. Nothing was placed.";
   if (/insufficient|balance/i.test(msg)) return "Not enough USDC (or ETH for gas) in your wallet on Base.";
   if (/too small|fees would exceed/i.test(msg)) return "Too small for Flash: fees would eat the order. Try $0.50 or more.";
   return msg;
@@ -107,6 +107,16 @@ export function TradeTicket({
     const q = new URLSearchParams(window.location.search);
     const fromLink = q.get("order");
     if (fromLink) apply(fromLink.slice(0, 200));
+    const token = q.get("token");
+    if (token && /^0x[0-9a-fA-F]{40}$/.test(token)) {
+      fetch(`/api/tokens/search?q=${token}`)
+        .then((r) => r.json())
+        .then((res: { tokens?: TokenHit[] }) => {
+          const hit = res.tokens?.find((t) => t.address.toLowerCase() === token.toLowerCase());
+          if (hit) setCustom(hit);
+        })
+        .catch(() => {});
+    }
     const src = q.get("src");
     if (src === "keyboard" || src === "extension") setVia(src);
     const post = q.get("post");
@@ -191,7 +201,7 @@ export function TradeTicket({
         },
         { source: via, caller: source?.caller ?? null },
       );
-      setRun({ kind: "done", orderId: res.orderId, seen: [...seen], summary, exits: res.bracketStatus });
+      setRun({ kind: "done", placed: res, seen: [...seen], summary });
       onPlaced();
     } catch (err) {
       setRun({ kind: "error", message: friendlyError(err), seen: [...seen], at });
@@ -357,7 +367,7 @@ export function TradeTicket({
             {signIn ? (
               <div className="space-y-2 text-center">
                 {signIn}
-                <p className="text-xs text-slate">Sign in with X to get a wallet on Base, or connect MetaMask.</p>
+                <p className="text-xs text-slate">Sign in with X to get your Kall wallet on Base.</p>
               </div>
             ) : run.kind === "idle" || run.kind === "error" ? (
               <>
@@ -400,30 +410,10 @@ export function TradeTicket({
               </ol>
             )}
 
-            {run.kind !== "idle" && (
-              <p className="flex items-center justify-between gap-3 rounded-lg border border-rule px-3 py-2 text-xs" title="Definitive Flash routes this order across Base's venues">
-                <span className="text-slate">Best price</span>
-                <span className="font-semibold text-up">
-                  ✓ Definitive Flash · best route on Base
-                </span>
-              </p>
-            )}
+            {run.kind === "working" && <p className="text-xs font-semibold text-up">✓ Definitive Flash · best route on Base</p>}
 
             {run.kind === "done" && (
-              <div className="space-y-3 rounded-lg border border-up/40 bg-up/10 p-3">
-                <p className="font-semibold">{run.summary} ✓</p>
-                <p className="text-xs text-slate">
-                  {run.exits === "pending_activation" ? "Your TP/SL arm on the first fill. " : ""}Order {run.orderId.slice(0, 8)}… is with Definitive.
-                </p>
-                <div className="flex gap-2">
-                  <button type="button" onClick={onViewOrders} className="rounded-md bg-lime px-3 py-1.5 text-sm font-semibold text-on-lime">
-                    View in Orders
-                  </button>
-                  <button type="button" onClick={() => setRun({ kind: "idle" })} className="rounded-md border border-rule px-3 py-1.5 text-sm font-semibold hover:border-ink">
-                    New order
-                  </button>
-                </div>
-              </div>
+              <Receipt placed={run.placed} summary={run.summary} onViewOrders={onViewOrders} onNew={() => setRun({ kind: "idle" })} />
             )}
           </div>
         </div>
@@ -464,7 +454,102 @@ export function TradeTicket({
         )}
       </form>
 
-      <p className="px-1 text-xs leading-relaxed text-slate">You sign every step in your own wallet. Kall Markets never holds your keys or funds.</p>
+      <p className="px-1 text-xs leading-relaxed text-slate">
+        {wallet?.walletClientType === "metamask"
+          ? "MetaMask signs each order: confirm it there. Kall Markets never holds your keys."
+          : "Your Kall wallet signs each order, with no pop-ups. Kall Markets never holds its keys."}
+      </p>
+    </div>
+  );
+}
+
+const short = (s: string) => `${s.slice(0, 6)}…${s.slice(-4)}`;
+const link = "font-semibold text-ink underline decoration-rule underline-offset-4 hover:decoration-ink";
+
+/**
+ * What you can check after a trade: the order on Definitive, the wallet that signed it, the EIP-712
+ * signature (checked against that wallet here), the fill's transaction on Base and the Arkiv record.
+ */
+function Receipt({ placed, summary, onViewOrders, onNew }: { placed: Placed; summary: string; onViewOrders: () => void; onNew: () => void }) {
+  const [verified, setVerified] = useState<boolean | null>(null);
+  const [tx, setTx] = useState<string | null>(null);
+  const [record, setRecord] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  useEffect(() => {
+    let alive = true;
+    void signer(placed.typedData, placed.signature).then((who) => {
+      if (alive) setVerified(who !== null && who.toLowerCase() === placed.from.toLowerCase());
+    });
+    // The fill lands on Base within seconds; the Arkiv record a little after.
+    void (async () => {
+      let foundTx: string | null = null;
+      let foundRecord: string | null = null;
+      for (let i = 0; i < 30 && alive && !(foundTx && foundRecord); i++) {
+        if (!foundTx) foundTx = await fillTransaction(placed.orderId, placed.from);
+        if (!foundRecord) foundRecord = await arkivRecord(placed.orderId, placed.from);
+        if (!alive) return;
+        setTx(foundTx);
+        setRecord(foundRecord);
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [placed]);
+
+  const rows: Array<[string, React.ReactNode]> = [
+    ["Order", <span key="o" className="font-mono">{placed.orderId.slice(0, 8)}</span>],
+    ["Wallet", <a key="w" href={`https://basescan.org/address/${placed.from}`} target="_blank" rel="noreferrer" className={link}>{short(placed.from)} ↗</a>],
+    [
+      "Signature",
+      <span key="s">
+        <button
+          type="button"
+          title={`EIP-712 signature: ${placed.signature}. Click to copy.`}
+          onClick={() => void navigator.clipboard?.writeText(placed.signature).then(() => setCopied(true), () => {})}
+          className="font-mono hover:text-ink"
+        >
+          {copied ? "copied" : short(placed.signature)}
+        </button>
+        {verified === true && <span className="ml-2 text-up">signed by your wallet ✓</span>}
+        {verified === false && <span className="ml-2 text-down">doesn't match your wallet</span>}
+      </span>,
+    ],
+    ["Base tx", tx ? <a key="t" href={`https://basescan.org/tx/${tx}`} target="_blank" rel="noreferrer" className={link}>{short(tx)} ↗</a> : <span key="t" className="text-slate">filling…</span>],
+    ["Arkiv", record ? <a key="a" href={`https://rabdi.explorer.arkiv.network/entity/${record}`} target="_blank" rel="noreferrer" className={link}>recorded ↗</a> : <span key="a" className="text-slate">recording…</span>],
+  ];
+
+  return (
+    <div className="space-y-3 border-t border-rule pt-4" aria-live="polite">
+      <p className="flex items-center gap-2 font-semibold">
+        <span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-lime text-xs text-on-lime">✓</span>
+        {summary}
+      </p>
+      <dl className="space-y-1.5 text-xs">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-4">
+            <dt className="text-slate">{k}</dt>
+            <dd className="text-right tabular-nums">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {placed.bracketStatus === "pending_activation" && <p className="text-xs text-slate">Your take-profit and stop-loss arm on the first fill.</p>}
+      <div className="flex gap-2">
+        <button type="button" onClick={onViewOrders} className="rounded-md bg-lime px-3 py-1.5 text-sm font-semibold text-on-lime">
+          View in Orders
+        </button>
+        <button type="button" onClick={onNew} className="rounded-md px-3 py-1.5 text-sm font-semibold text-slate hover:text-ink">
+          New order
+        </button>
+      </div>
     </div>
   );
 }

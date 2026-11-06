@@ -18,7 +18,7 @@ const products = [
   {
     tag: "On X",
     name: "Kall Extension",
-    lines: ["Open any call on X: the caller's record is on their profile.", "Fake contract? A red Call check failed, and no trade.", "Buy from the post: Flash quote, sign in MetaMask, Basescan receipt."],
+    lines: ["Open any call on X: the caller's record is on their profile.", "Fake contract? A red Call check failed, and no trade.", "Buy from the post with your Kall wallet, and get a Basescan receipt."],
     cta: { label: "Load the extension", href: "https://github.com/harshalbhangale/ethglobal-mumbai#kall-extension" },
   },
   {
@@ -30,7 +30,7 @@ const products = [
   {
     tag: "On the web",
     name: "Kall Web App",
-    lines: ["The real posts from callers you follow, with their verdicts.", "Copy call fills the ticket. MetaMask or your Privy wallet.", "Orders, history and every proof on Arkiv."],
+    lines: ["The real posts from callers you follow, with their verdicts.", "Copy a call: the ticket fills in, and your Kall wallet signs it.", "Orders, history and every proof on Arkiv."],
     cta: { label: "Open the app", href: "/app" },
   },
 ];
@@ -187,7 +187,7 @@ export default function Landing() {
               <p className="max-w-md leading-relaxed text-slate">
                 Kall Markets is built entirely on <span className="text-ink">Definitive Flash</span>. Every buy, sell, limit and TWAP
                 order, from X, the keyboard or the web, is a Flash order on Base: quote, price impact and fee up front, signed by
-                your own wallet.
+                your Kall wallet.
               </p>
             </div>
             <ul className="mt-12 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-rule bg-rule sm:grid-cols-3">
