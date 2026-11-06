@@ -72,6 +72,8 @@ final class KeyboardModel: ObservableObject {
     @Published var hits: [Kallr.TokenHit]?
     @Published var searching = false
     @Published var pickerNote: String?
+    /** Something's copied (checked without reading it, so iOS shows no paste prompt). */
+    @Published var clipboardHasText = false
     private var searchTask: Task<Void, Never>?
     @Published var kind = Kind.market
     @Published var limitPct = -5.0
@@ -209,7 +211,7 @@ final class KeyboardModel: ObservableObject {
     func pasteAddress() {
         Haptics.modifier()
         guard fullAccess else { pickerNote = "Turn on Allow Full Access to paste."; return }
-        let text = UIPasteboard.general.string ?? ""
+        let text = Kallr.copiedText() ?? ""
         guard let r = text.range(of: "0x[0-9a-fA-F]{40}", options: .regularExpression) else {
             pickerNote = "No contract address in what you copied."
             return
@@ -441,7 +443,7 @@ final class KeyboardModel: ObservableObject {
             asset = t.token
             assetSymbol = t.symbol
             assetPrice = t.price
-            assetLogo = nil
+            assetLogo = t.logo.flatMap(URL.init(string:))
         } else if let symbol = (r.trade?.symbol ?? r.call?.asset)?.uppercased(), ["ETH", "WETH", "BTC", "CBBTC"].contains(symbol) {
             asset = symbol.hasSuffix("BTC") ? "BTC" : "ETH"
         }
@@ -880,6 +882,10 @@ private struct TradeTab: View {
                     Label(source.line, systemImage: "quote.bubble.fill")
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
                         .labelStyle(PostLabel())
+                } else if let copied = model.copied, copied.trade != nil, copied.warning == nil, let line = copied.headline(typed: nil) {
+                    Label(line, systemImage: "doc.on.clipboard.fill")
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
+                        .labelStyle(PostLabel())
                 }
                 status
                 Button { model.review() } label: {
@@ -1242,11 +1248,17 @@ private struct AdvancedPanel: View {
                 ForEach([5.0, 10, 20, 50], id: \.self) { p in
                     MiniChip(label: "+\(Kallr.fmt(p))%", on: model.exitsOn && model.tpPct == p) { model.exitsOn = true; model.tpPct = p }
                 }
+                if model.exitsOn, ![5.0, 10, 20, 50].contains(model.tpPct) {
+                    MiniChip(label: "+\(Kallr.fmt(model.tpPct))%", on: true) {}
+                }
             }
             if model.exitsOn {
                 row("STOP LOSS") {
                     ForEach([3.0, 5, 10, 20], id: \.self) { p in
                         MiniChip(label: "−\(Kallr.fmt(p))%", on: model.slPct == p, danger: true) { model.slPct = p }
+                    }
+                    if ![3.0, 5, 10, 20].contains(model.slPct) {
+                        MiniChip(label: "−\(Kallr.fmt(model.slPct))%", on: true, danger: true) {}
                     }
                 }
                 if let line = model.exitsPriceLine {

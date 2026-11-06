@@ -9,6 +9,8 @@ final class KeyboardViewController: UIInputViewController {
     private lazy var model = KeyboardModel(controller: self)
     private var lookupTask: Task<Void, Never>?
     private var lastTyped: String?
+    /** Text before the cursor at the last change, to spot a paste (a jump of a whole message). */
+    private var lastContextLength = 0
     private var height: NSLayoutConstraint?
     /** Typing is the iPhone keyboard's height plus the strip; the panel needs more room. */
     static let typingHeight: CGFloat = 260
@@ -73,6 +75,8 @@ final class KeyboardViewController: UIInputViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         Haptics.warmUp()
+        model.clipboardHasText = UIPasteboard.general.hasStrings
+        lastContextLength = (textDocumentProxy.documentContextBeforeInput ?? "").count
         model.autoShift()
         readTypedOrder()
     }
@@ -81,6 +85,45 @@ final class KeyboardViewController: UIInputViewController {
         super.textDidChange(textInput)
         model.autoShift()
         readTypedOrder()
+        readPastedCall()
+    }
+
+    /**
+     * A call pasted into the chat (iOS's own Paste): when the text jumps by a message's worth and names a
+     * coin, open Trade with it. Reads the text before the cursor; if that's cut short, what was copied.
+     */
+    private func readPastedCall() {
+        let context = textDocumentProxy.documentContextBeforeInput ?? ""
+        defer { lastContextLength = context.count }
+        guard context.count - lastContextLength >= 40 else { return }
+        var reference = Kallr.reference(fromCopied: context)
+        if reference == nil, hasFullAccess, UIPasteboard.general.hasStrings,
+           let copied = Kallr.copiedText(), context.hasSuffix(String(copied.suffix(20))) {
+            reference = Kallr.reference(fromCopied: copied)
+        }
+        guard let reference else { return }
+        check(text: reference, typed: nil, openTrade: true, openPanel: true)
+    }
+
+    /**
+     * The strip's Paste: puts what you copied into the chat, like iOS's Paste, and when it's a call,
+     * opens Trade with the coin, amount and exits it names.
+     */
+    func pasteAndTrade() {
+        guard hasFullAccess else {
+            model.note = "Turn on Allow Full Access for Kall Keyboard in Settings."
+            return
+        }
+        guard let copied = Kallr.copiedText() else {
+            model.note = "Nothing copied yet."
+            return
+        }
+        textDocumentProxy.insertText(copied)
+        lastContextLength = (textDocumentProxy.documentContextBeforeInput ?? "").count
+        afterTyping()
+        if let reference = Kallr.reference(fromCopied: copied) {
+            check(text: reference, typed: nil, openTrade: true, openPanel: true)
+        }
     }
 
     func nextKeyboard() { advanceToNextInputMode() }
@@ -101,14 +144,14 @@ final class KeyboardViewController: UIInputViewController {
             model.note = "Turn on Allow Full Access for Kall Keyboard in Settings."
             return
         }
-        guard let reference = Kallr.reference(fromCopied: UIPasteboard.general.string) else {
+        guard let reference = Kallr.reference(fromCopied: Kallr.copiedText()) else {
             model.note = "Copy an X post link, or a message with a $TICKER or a contract."
             return
         }
-        check(text: reference, typed: nil, openTrade: false)
+        check(text: reference, typed: nil, openTrade: false, openPanel: true)
     }
 
-    private func check(text: String?, typed: String?, openTrade: Bool) {
+    private func check(text: String?, typed: String?, openTrade: Bool, openPanel: Bool = false) {
         lookupTask?.cancel()
         lookupTask = Task { @MainActor in
             model.checking = true
@@ -119,6 +162,13 @@ final class KeyboardViewController: UIInputViewController {
             if let result {
                 model.applyCopied(result)
                 if openTrade || result.warning == nil && result.trade != nil { model.tab = .trade }
+                // A call with a tradable coin opens straight onto Trade, filled in.
+                if openPanel, result.warning == nil, result.trade != nil {
+                    model.placing = .idle
+                    model.tab = .trade
+                    model.closePicker()
+                    if model.mode != .panel { Haptics.trade(); model.mode = .panel }
+                }
             } else if text != nil {
                 model.note = hasFullAccess ? "Couldn't reach Kall Markets." : "Turn on Allow Full Access for Kall Keyboard in Settings."
             }

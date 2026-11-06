@@ -5,7 +5,10 @@ iPhone keyboard (letters, 123, #+=, shift and caps lock, space, return, auto-cap
 ". ", hold to delete), and where the emoji key would be there's the Kall key: our logo with TRADE under
 it. It opens the trading panel below; ABC goes back to typing. A strip above the letters shows the
 newest calls from callers you follow (tap one to trade it), an order you're typing, and the clipboard
-check. Each key has its own haptic (letters, space, delete, shift, caps lock, 123, the Kall key); iOS
+check. **Paste** puts what you copied into the chat; when it's a call (an X post, a `$TICKER`, a contract,
+or a Telegram-style `#SOLUSDT` post with 🎯 targets) Trade opens with the coin filled in, the first target
+above the price as the take-profit and the call's stop, or a tight −5%, as the stop-loss. A call pasted
+with iOS's own Paste opens Trade the same way. Each key has its own haptic (letters, space, delete, shift, caps lock, 123, the Kall key); iOS
 plays keyboard haptics only with Allow Full Access.
 
 - **Following:** calls from the callers you follow (kept on the phone), read from Arkiv by

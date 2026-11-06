@@ -1,7 +1,17 @@
 import type { ScoredCall } from "@kallr/integrations/after-market";
 import type { TokenCheck } from "@kallr/integrations/safety-checks";
 import { describe, expect, it, vi } from "vitest";
-import { type KeyboardDeps, keyboardLookup, typedOrder } from "./keyboard";
+import {
+  exitsFromLevels,
+  firstHashtagTicker,
+  type KeyboardDeps,
+  keyboardLookup,
+  looksCrypto,
+  normalizeTicker,
+  stopPrice,
+  targetPrices,
+  typedOrder,
+} from "./keyboard";
 
 const NOW = 1_800_000_000;
 const call = (over: Partial<ScoredCall> = {}): ScoredCall => ({
@@ -167,5 +177,51 @@ describe("AI layer and fake contracts", () => {
     const readCall = vi.fn(async () => read());
     await keyboardLookup({ text: "see you at dinner" }, deps({ readCall }));
     expect(readCall).not.toHaveBeenCalled();
+  });
+});
+
+describe("Telegram-style calls", () => {
+  const SOL = `#SOLUSDT 12H
+
+#SOL is moving inside a falling wedge pattern on the 12-hour timeframe. It has bounced off the wedge support line and is on the verge of breaking above the wedge resistance. In case of a confirmed breakout, the potential upside targets are:
+
+🎯 $99.52
+🎯 $104.19
+🎯 $107.96
+🎯 $111.73
+🎯 $117.10
+🎯 $123.94
+
+⚠️ Always remember to use a tight stop-loss and maintain proper risk management.`;
+
+  it("reads the coin from hashtags and pairs", () => {
+    expect(looksCrypto(SOL)).toBe(true);
+    expect(firstHashtagTicker(SOL)).toBe("SOL");
+    expect(firstHashtagTicker("#crypto #bitcoin breakout")).toBe("BTC");
+    expect(firstHashtagTicker("#trading is fun")).toBeNull();
+    expect(normalizeTicker("$ethusdt")).toBe("ETH");
+  });
+
+  it("reads targets and a stop price, not percents or TP numbers", () => {
+    expect(targetPrices(SOL)).toEqual([99.52, 104.19, 107.96, 111.73, 117.1, 123.94]);
+    expect(targetPrices("TP1: 2,450.5\nTP2 2600\ntp 10%")).toEqual([2450.5, 2600]);
+    expect(stopPrice(SOL)).toBeNull();
+    expect(stopPrice("Entry 90\nSL: $84.2")).toBe(84.2);
+  });
+
+  it("turns the first target above the price into the take-profit", () => {
+    expect(exitsFromLevels(SOL, 90.47, "up")).toEqual({ tpPct: 10, slPct: null });
+    expect(exitsFromLevels("🎯 99\nSL 86", 90, "up")).toEqual({ tpPct: 10, slPct: 4.4 });
+    expect(exitsFromLevels(SOL, 90.47, "down")).toBeNull();
+    expect(exitsFromLevels(SOL, 130, "up")).toBeNull();
+  });
+
+  it("opens the trade with the coin and exits, even with the AI off", async () => {
+    const sol = { token: "0x311935cd80b76769bf2ecc9d8ab7635b2139cf82", symbol: "SOL", price: 90.47, logo: null };
+    const findTradeToken = vi.fn(async () => sol);
+    const r = await keyboardLookup({ text: SOL }, deps({ findTradeToken }));
+    expect(findTradeToken).toHaveBeenCalledWith("SOL");
+    expect(r.trade).toEqual(sol);
+    expect(r.prefill).toMatchObject({ tpPct: 10, slPct: 5 });
   });
 });

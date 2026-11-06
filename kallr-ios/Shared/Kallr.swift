@@ -3,6 +3,7 @@
 
 import Foundation
 import SwiftUI
+import UIKit
 
 enum Kallr {
     static let origin: URL = {
@@ -27,6 +28,8 @@ enum Kallr {
     private static let postLink = try! NSRegularExpression(pattern: #"https://(?:www\.)?(?:x|twitter)\.com/[A-Za-z0-9_]{1,15}/status/[0-9]{1,20}"#)
     private static let evmAddress = try! NSRegularExpression(pattern: #"(?<![A-Za-z0-9])0x[0-9a-fA-F]{40}(?![A-Za-z0-9])"#)
     private static let cashtag = try! NSRegularExpression(pattern: #"(?<![A-Za-z0-9$])\$[A-Za-z][A-Za-z0-9]{1,9}\b"#)
+    /** A Telegram-style tag for a coin or pair: #SOL, #SOLUSDT, #Bitcoin. */
+    private static let hashtag = try! NSRegularExpression(pattern: #"(?<![A-Za-z0-9#&])#[A-Za-z][A-Za-z0-9]{1,14}\b"#)
     private static let orderStart = try! NSRegularExpression(pattern: #"\b(copy|buy|long|sell|short)\b"#, options: .caseInsensitive)
     private static let orderSize = try! NSRegularExpression(pattern: #"\$\s*\d|\bmy\s+\$?[a-z]|\d+\s*(?:bucks|usd|dollars?)\b"#, options: .caseInsensitive)
 
@@ -36,11 +39,31 @@ enum Kallr {
         return String(text[r])
     }
 
+    /**
+     * What's copied, as text, whatever form the copying app stored it in (UTF-8, plain text or older
+     * encodings), so a call copied anywhere reads the same.
+     */
+    static func copiedText() -> String? {
+        let pasteboard = UIPasteboard.general
+        if let s = pasteboard.string, !s.isEmpty { return s }
+        if let s = pasteboard.strings?.first(where: { !$0.isEmpty }) { return s }
+        for item in pasteboard.items {
+            for (type, value) in item {
+                if let s = value as? String, !s.isEmpty { return s }
+                if let d = value as? Data, type.contains("text"),
+                   let s = String(data: d, encoding: .utf8) ?? String(data: d, encoding: .macOSRoman), !s.isEmpty { return s }
+            }
+        }
+        return nil
+    }
+
     /** A copied post link, or a copied message that names a coin. Anything else stays on the phone. */
     static func reference(fromCopied text: String?) -> String? {
         guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         if let link = first(postLink, in: text) { return link }
-        if first(cashtag, in: text) != nil || first(evmAddress, in: text) != nil { return String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(600)) }
+        if first(cashtag, in: text) != nil || first(hashtag, in: text) != nil || first(evmAddress, in: text) != nil {
+            return String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1500))
+        }
         return nil
     }
 
@@ -60,7 +83,7 @@ enum Kallr {
     struct Call: Codable { let line: String; let asset: String; let direction: String }
     struct Record: Codable { let line: String }
     struct Token: Codable { let address: String; let symbol: String?; let warnings: [String]?; let line: String }
-    struct Trade: Codable { let token: String; let symbol: String; let price: Double }
+    struct Trade: Codable { let token: String; let symbol: String; let price: Double; let logo: String? }
     struct AI: Codable { let summary: String; let symbol: String?; let direction: String? }
     struct Fake: Codable { let claimed: String; let contract: String; let real: String }
     struct Prefill: Codable { let kind: String?; let usd: Double?; let tpPct: Double?; let slPct: Double? }
@@ -90,6 +113,7 @@ enum Kallr {
             if let post, let trade { return "Trade @\(post.handle)'s $\(trade.symbol) call" }
             if let post { return "@\(post.handle): not a call we can price" }
             if let typed { return "Trade it: \(typed)" }
+            if let trade { return "Trade $\(trade.symbol) from what you copied" }
             return nil
         }
     }

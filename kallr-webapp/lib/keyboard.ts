@@ -74,8 +74,73 @@ const CORE_ADDRESS: Record<string, string> = {
 
 /** Worth sending to the AI: a post we fetched, a $CASHTAG, a contract, or a trade instruction. */
 export function looksCrypto(text: string): boolean {
-  return /\$[A-Za-z][A-Za-z0-9]{1,9}\b|0x[0-9a-fA-F]{40}|\b(buy|sell|ape|long|short|bucks|usd|dollars?)\b/i.test(text);
+  return /\$[A-Za-z][A-Za-z0-9]{1,9}\b|#[A-Za-z][A-Za-z0-9]{1,14}\b|0x[0-9a-fA-F]{40}|🎯|\b(buy|sell|ape|long|short|bucks|usdt?|dollars?|targets?|tp\d?|sl|stop[- ]?loss|entry|breakout|bullish|bearish)\b/i.test(
+    text,
+  );
 }
+
+const QUOTE_SUFFIX = /(USDT|USDC|BUSD|USD|PERP)$/;
+const COIN_NAMES: Record<string, string> = { BITCOIN: "BTC", ETHEREUM: "ETH", SOLANA: "SOL" };
+
+/** A ticker as a chart or exchange writes it, as a coin: "SOLUSDT" → SOL, "$eth" → ETH, "Solana" → SOL. */
+export function normalizeTicker(raw: string): string {
+  const t = raw.replace(/^[$#]/, "").toUpperCase();
+  if (COIN_NAMES[t]) return COIN_NAMES[t];
+  const base = t.replace(QUOTE_SUFFIX, "");
+  return base.length >= 2 ? base : t;
+}
+
+/** The coin a Telegram-style call tags: "#SOLUSDT 12H" or "#SOL is moving…" → SOL. */
+export function firstHashtagTicker(text: string): string | null {
+  for (const m of text.matchAll(/(?:^|[^A-Za-z0-9#&])#([A-Za-z][A-Za-z0-9]{1,14})\b/g)) {
+    const tag = m[1]!.toUpperCase();
+    const coin = normalizeTicker(tag);
+    // A pair (#SOLUSDT), a coin name (#Solana) or a short ticker (#SOL); not #crypto-style topics.
+    if (coin !== tag || COIN_NAMES[tag] || tag.length <= 5) return coin;
+  }
+  return null;
+}
+
+/** Prices on a line, skipping percents, units ("12-hour", "4h") and the digit in "TP1": "🎯 $99.52" → 99.52. */
+function pricesOn(line: string): number[] {
+  const out: number[] = [];
+  for (const m of line.matchAll(/(?:^|[^A-Za-z0-9.,])\$?\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?!\s*%|[\d.,]|-?[A-Za-z])/g)) {
+    const n = Number(m[1]!.replace(/,/g, ""));
+    if (n > 0) out.push(n);
+  }
+  return out;
+}
+
+/** The price targets a call lists, in order: lines with 🎯, "target" or "TP". */
+export function targetPrices(text: string): number[] {
+  return text.split(/\n/).filter((l) => /🎯|\btargets?\b|\btp\d*\b/i.test(l)).flatMap(pricesOn);
+}
+
+/** The stop a call gives as a price ("SL $82", "stop loss: 81.5"), if any. */
+export function stopPrice(text: string): number | null {
+  const line = text.split(/\n/).find((l) => /\b(sl|stop[- ]?loss|stop|invalidation)\b/i.test(l) && pricesOn(l).length);
+  return line ? pricesOn(line)[0]! : null;
+}
+
+const pct1 = (n: number) => Math.round(n * 10) / 10;
+
+/**
+ * Exits for a long from the levels a call lists: the first target above the price becomes the
+ * take-profit, a stop price below it the stop-loss. Percents from `price`; null for a short or no target.
+ */
+export function exitsFromLevels(text: string, price: number, direction: "up" | "down" | null): { tpPct: number; slPct: number | null } | null {
+  if (!(price > 0) || direction === "down") return null;
+  const target = targetPrices(text).find((t) => t > price * 1.002);
+  if (!target) return null;
+  const stop = stopPrice(text);
+  return {
+    tpPct: Math.min(1000, Math.max(0.5, pct1((target / price - 1) * 100))),
+    slPct: stop && stop < price ? Math.min(95, Math.max(0.5, pct1((1 - stop / price) * 100))) : null,
+  };
+}
+
+/** The stop-loss when a call gives targets but no stop price ("use a tight stop-loss"). */
+export const DEFAULT_SL_PCT = 5;
 
 /** The first $CASHTAG in a post, for calls on coins we can't score (no price feed) but can still trade. */
 export function firstCashtag(text: string): string | null {
@@ -205,9 +270,26 @@ export async function keyboardLookup(req: KeyboardRequest, deps: KeyboardDeps): 
   }
 
   // 4. What the trade panel can buy. A shared contract only trades when it is the real token.
-  const symbol = out.call?.asset ?? read?.symbol ?? (source ? firstCashtag(source) : null);
+  const tagged = source ? (firstCashtag(source) ?? firstHashtagTicker(source)) : null;
+  const symbol = out.call?.asset ?? (read?.symbol ? normalizeTicker(read.symbol) : null) ?? tagged;
   if (symbol && !evm && deps.findTradeToken) {
     out.trade = await deps.findTradeToken(symbol).catch(() => null);
+  }
+
+  // A call that lists price targets (Telegram-style 🎯 lists): the first target above the price is the
+  // take-profit, and a stop price, if given, the stop-loss; otherwise a tight default stop.
+  if (out.trade && source) {
+    const exits = exitsFromLevels(source, out.trade.price, out.call?.direction ?? out.ai?.direction ?? null);
+    if (exits) {
+      out.prefill = {
+        kind: out.prefill?.kind ?? null,
+        usd: out.prefill?.usd ?? null,
+        limitPct: out.prefill?.limitPct ?? null,
+        twapMinutes: out.prefill?.twapMinutes ?? null,
+        tpPct: exits.tpPct,
+        slPct: exits.slPct ?? out.prefill?.slPct ?? DEFAULT_SL_PCT,
+      };
+    }
   }
 
   // 5. An order being typed: the AI reads plain words ("buy 20 bucks of degen if it dips 10%") into the panel.

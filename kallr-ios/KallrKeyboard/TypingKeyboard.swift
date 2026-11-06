@@ -32,6 +32,9 @@ private struct SuggestionStrip: View {
                 .padding(.leading, 6)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
+                    if model.clipboardHasText {
+                        StripChip(text: "📋 Paste", style: .lime) { model.controller?.pasteAndTrade() }
+                    }
                     if model.checking {
                         StripChip(text: "Checking…", style: .plain) {}
                     } else if let note = model.note {
