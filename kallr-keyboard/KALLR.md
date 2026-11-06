@@ -1,6 +1,6 @@
-# Kallr keyboard (built on FlorisBoard)
+# Kallr Markets keyboard (built on FlorisBoard)
 
-The Kallr Android keyboard is a fork of **[FlorisBoard](https://github.com/florisboard/florisboard)** v0.5.2,
+The Kallr Markets Android keyboard is a fork of **[FlorisBoard](https://github.com/florisboard/florisboard)** v0.5.2,
 an open-source Android keyboard by The FlorisBoard Contributors, licensed under the
 [Apache License 2.0](LICENSE). All typing, layouts, suggestions, emoji and the clipboard
 come from FlorisBoard. Thank you to the FlorisBoard team.
@@ -22,7 +22,7 @@ opens the panel with the order filled in. A shared contract gets a token check a
 
 **AI layer (server-side; the OpenAI and ElevenLabs keys never ship in the APK):**
 
-- **Check this call:** copy or share (Share → **Check with Kallr**) a post or a Telegram message. The
+- **Check this call:** copy or share (Share → **Check with Kallr Markets**) a post or a Telegram message. The
   AI reads the coin, contract, direction and timeframe, the server checks the caller's record and
   the token, and a contract that claims a ticker but isn't the main token with it on Base is shown
   as **fake** with the real address, and gets no Buy.
@@ -48,7 +48,7 @@ nothing in password fields or incognito mode.
 | `assets/ime/theme/org.florisboard.themes/` (`kallr_night.json`, `kallr_day.json`), `app/AppPrefs.kt` | Kallr Black (graphite keys on black, lime Enter and Caps Lock), the default in light and dark mode, and Kallr Paper (the same on off-white) |
 | `app/src/main/kotlin/dev/patrickgold/florisboard/ime/smartbar/Smartbar.kt` | Puts the Kallr suggestion above the Smartbar |
 | `ime/ImeUiMode.kt`, `ime/text/key/KeyCode.kt`, `ime/text/keyboard/TextKeyData.kt`, `ime/keyboard/KeyboardManager.kt`, `ime/keyboard/ComputingEvaluator.kt`, `ime/smartbar/quickaction/*`, `ime/popup/PopupUiController.kt`, `FlorisImeService.kt`, `res/values/strings.xml` | The Trade key (`IME_UI_MODE_KALLR`), its panel mode, lime chart icon and label, and Trade as the toolbar's sticky action |
-| `app/build.gradle.kts` | App ID `app.kallr.keyboard`, name "Kallr Keyboard", `-PkallrOrigin`, `-PprivyAppId`, `-PprivyClientId`, Privy Android SDK 0.18.0 |
+| `app/build.gradle.kts` | App ID `app.kallr.keyboard`, name "Kallr Markets", `-PkallrOrigin`, `-PprivyAppId`, `-PprivyClientId`, Privy Android SDK 0.18.0 |
 | `gradle.properties` | Android 9+ (API 28), which Privy's SDK needs |
 | `app/src/main/AndroidManifest.xml`, `res/xml/kallr_network_security.xml` | Internet permission; the confirm sheet, wallet screen and Privy's `kallr://` login redirect; plain HTTP only to the local dev server (debug builds: any host, for a laptop on the same Wi-Fi) |
 | `lib/native/build.gradle.kts` | Builds the native library for arm64 only |
@@ -98,6 +98,6 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb reverse tcp:3000 tcp:3000                 # phone's localhost:3000 → this Mac
 ```
 
-On the phone: open **Kallr Keyboard** → enable it as a keyboard → switch to it. Open **Kallr
+On the phone: open **Kallr Markets** → enable it as a keyboard → switch to it. Open **Kallr
 Wallet**, sign in with X and fund the address with a few USDC and about $1 of ETH on Base. In X,
 share a call → Copy link, tap the reply box, then **Trade**.

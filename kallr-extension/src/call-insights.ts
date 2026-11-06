@@ -6,7 +6,7 @@ import { recordPanel } from "./record-panel";
 import { formatPrice, type LivePrice } from "./ticker-price";
 
 /**
- * The Call check strip on a post card: a summary line with chips, opening to what
+ * The Call receipt strip on a post card: a summary line with chips, opening to what
  * the post says, how this call has moved, the creator's record and their recent calls. It renders
  * from data the card already has, so opening it makes no request.
  */
@@ -70,7 +70,7 @@ export function callInsights(input: { post: PostRef & { text: string }; answer: 
     el(
       "summary",
       {},
-      el("span", { class: "ci-title" }, "Call check"),
+      el("span", { class: "ci-title" }, "Call receipt"),
       call
         ? el(
             "span",
@@ -78,8 +78,8 @@ export function callInsights(input: { post: PostRef & { text: string }; answer: 
             `${call.direction === "up" ? "Bullish" : "Bearish"} ${call.asset}`,
           )
         : null,
-      el("span", { class: "ci-chip" }, "Creator record"),
-      el("span", { class: "ci-chip" }, "After market"),
+      el("span", { class: "ci-chip" }, "Caller record"),
+      el("span", { class: "ci-chip" }, "Since the call"),
     ),
     body,
   ) as HTMLDetailsElement;
@@ -99,7 +99,7 @@ export function callInsights(input: { post: PostRef & { text: string }; answer: 
       ),
       call ? thisCall(call, input.live) : null,
       section(
-        "Creator record",
+        "Caller record",
         recordPanel(calls),
         recentCalls(post.handle, calls),
         el("p", { class: "note" }, "Calls this browser has seen, priced at posting. Not wallet returns; deleted posts are missing."),

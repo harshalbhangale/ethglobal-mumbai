@@ -657,7 +657,7 @@ private fun PositionsTab(wallet: String?) {
 @Composable
 private fun WalletTab(wallet: String?) {
     val context = LocalContext.current
-    if (wallet == null) return SignInPrompt("Kallr trades from your Privy embedded wallet, the same one as the Kallr desk. Sign in with X once; the key stays with Privy.")
+    if (wallet == null) return SignInPrompt("Kallr Markets trades from your Privy embedded wallet, the same one as the Kallr desk. Sign in with X once; the key stays with Privy.")
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Card {
             Text("Embedded wallet on Base", color = Muted, fontSize = 11.sp)

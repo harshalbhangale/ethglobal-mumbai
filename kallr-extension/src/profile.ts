@@ -76,7 +76,7 @@ export async function scanProfile() {
       el(
         "div",
         { class: "title" },
-        el("span", { class: "title-id" }, wordmark(20), el("span", { class: "title-sub" }, `@${handle} on Kallr`)),
+        el("span", { class: "title-id" }, wordmark(20), el("span", { class: "title-sub" }, `@${handle} on Kallr Markets`)),
         follow,
       ),
       details,

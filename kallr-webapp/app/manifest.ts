@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/app",
-    name: "Kallr",
-    short_name: "Kallr",
+    name: "Kallr Markets",
+    short_name: "Kallr Markets",
     description: "Copy crypto calls from X with exits attached, and get a call back when they hit.",
     start_url: "/app",
     scope: "/",

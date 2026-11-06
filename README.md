@@ -1,10 +1,10 @@
-<p align="center"><img src="kallr-webapp/public/icons/icon-512.png" width="96" height="96" alt="Kallr logo" /></p>
+<p align="center"><img src="kallr-webapp/public/icons/icon-512.png" width="96" height="96" alt="Kallr Markets logo" /></p>
 
-# Kallr
+# Kallr Markets
 
 Every call on X has an after market.
 
-Crypto Twitter runs on calls, and nobody keeps score. Kallr prices every call at the minute it was posted, scores it when its timeframe ends, and lets you copy it with one tap: a real order on Base through Definitive Flash with take-profit and stop-loss attached. You sign in your own wallet; nothing trades without you.
+Crypto Twitter runs on calls, and nobody keeps score. Kallr Markets (Kallr for short) prices every call at the minute it was posted, scores it when its timeframe ends, and lets you copy it with one tap: a real order on Base through Definitive Flash with take-profit and stop-loss attached. You sign in your own wallet; nothing trades without you.
 
 Built at ETHGlobal Mumbai 2026.
 
@@ -69,7 +69,7 @@ FlorisBoard Contributors), which does all the typing. What we added:
   **Positions** (your Flash orders and balances) and **Wallet**.
 - **Your wallet:** the Privy embedded wallet you get on the desk (sign in with X). Buy opens a
   confirm sheet; "Confirm and sign" places a Flash order on Base. Keys stay with Privy.
-- **Check this call:** copy or **Share → Check with Kallr** a post or a Telegram message. The AI reads
+- **Check this call:** copy or **Share → Check with Kallr Markets** a post or a Telegram message. The AI reads
   coin, direction and timeframe; the caller's record and a token check come from our tools.
 - **Fake contracts:** a contract that claims `$PEPE` but isn't the main PEPE on Base is shown as fake
   with the real address, and gets no Buy.
@@ -233,7 +233,7 @@ Parked, not planned for the demo: live X bot, Telegram, agents/MCP, Postgres, Ch
 
 This repo was started at the event (first commit 5 Nov 2026). What we brought in:
 
-- **Chrome extension cards:** the post card, ticker Buy button, caller record, call check drawer, profile card and
+- **Chrome extension cards:** the post card, ticker Buy button, caller record, Call receipt drawer, profile card and
   follow chips were ported from **Xtrading**, our earlier X trading extension (on Monad, with Kuru and Perpl). At
   the event we moved them onto Base and Definitive Flash, added token safety checks, and wired them to this app.
 - **Landing background:** the particle knot behind the landing hero (`kallr-webapp/components/signal-field.tsx`) and

@@ -50,7 +50,7 @@ export default function Landing() {
               How it works
             </a>
             <Link href="/app" className="rounded-md bg-lime px-4 py-2.5 font-semibold text-on-lime transition-colors hover:bg-lime-strong">
-              Open Kallr <span aria-hidden="true">↗</span>
+              Open Kallr Markets <span aria-hidden="true">↗</span>
             </Link>
           </nav>
         </div>
@@ -61,7 +61,7 @@ export default function Landing() {
           <SignalField />
           <div className="relative z-10 mx-auto w-full max-w-[1280px] px-6 pt-28 pb-20 lg:px-[7%]">
             <p className="font-mono text-xs tracking-[0.08em] text-slate">
-              <span className="text-[15px] text-lime">KALLR</span> / CALLS FROM X. TRADES ON BASE.
+              <span className="text-[15px] text-lime">KALLR MARKETS</span> / CALLS FROM X. TRADES ON BASE.
               <span className="terminal-cursor" aria-hidden="true">
                 _
               </span>
@@ -109,7 +109,7 @@ export default function Landing() {
                 </a>
               </div>
               <p className="max-w-md leading-relaxed text-slate">
-                Kallr is built entirely on <span className="text-ink">Definitive Flash</span>. Every buy, sell, limit and
+                Kallr Markets is built entirely on <span className="text-ink">Definitive Flash</span>. Every buy, sell, limit and
                 TWAP order, from X or the keyboard, is a Flash order on Base: quote, price impact and fee up front, signed by
                 your own wallet.
               </p>

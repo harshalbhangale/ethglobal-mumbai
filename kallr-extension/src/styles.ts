@@ -56,7 +56,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .inline-buy { background: var(--foreground); color: var(--surface); }
 .inline-close { background: transparent; color: var(--foreground); }
 
-/* Call check strip */
+/* Call receipt strip */
 .call-insights { border-top: 1px solid var(--line); }
 .call-insights > summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; cursor: pointer;
   list-style: none; font-size: 13px; color: var(--muted); }

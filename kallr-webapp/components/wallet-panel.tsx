@@ -33,7 +33,7 @@ export function WalletPanel({ session }: { session: Session }) {
         <p className="mt-1 text-sm text-slate">
           {active?.embedded
             ? "The wallet Privy made for you when you signed in with X. Only you can sign from it."
-            : "Your own wallet. Kallr asks it to sign every order; funds never leave it until a trade fills."}{" "}
+            : "Your own wallet. Kallr Markets asks it to sign every order; funds never leave it until a trade fills."}{" "}
           Network: <span className="font-semibold text-ink">Base</span>.
         </p>
         <Balances address={session.address} />

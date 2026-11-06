@@ -75,7 +75,7 @@ export const STEP_LABEL: Record<Step, string> = {
 
 async function api<T>(type: "flash-quote" | "flash-order", payload: Record<string, unknown>): Promise<T> {
   const answer = await send<T & { failed?: string }>({ type, ...payload });
-  if (!answer) throw new Error("Couldn't reach Kallr. Check the app is running, then try again.");
+  if (!answer) throw new Error("Couldn't reach Kallr Markets. Check the app is running, then try again.");
   if (answer.failed) throw new Error(answer.failed);
   return answer;
 }

@@ -7,26 +7,26 @@ import { Providers } from "./providers";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 
 export const metadata: Metadata = {
-  title: "Kallr",
+  title: "Kallr Markets",
   description:
     "See how a crypto caller’s past calls played out, then copy the call on Base with exits attached: from X with the extension, or from any chat with the Kallr keyboard.",
-  applicationName: "Kallr",
+  applicationName: "Kallr Markets",
   // Absolute URLs for share cards. Set NEXT_PUBLIC_SITE_URL to the deployed origin.
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   openGraph: {
     type: "website",
-    siteName: "Kallr",
-    title: "Kallr: every call on X has an after market",
+    siteName: "Kallr Markets",
+    title: "Kallr Markets: every call on X has an after market",
     description: "Priced at posting. Copy it with take-profit and stop-loss on Base.",
-    images: [{ url: "/brand/og.png", width: 1200, height: 630, alt: "Kallr" }],
+    images: [{ url: "/brand/og.png", width: 1200, height: 630, alt: "Kallr Markets" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Kallr: every call on X has an after market",
+    title: "Kallr Markets: every call on X has an after market",
     description: "Priced at posting. Copy it with take-profit and stop-loss on Base.",
     images: ["/brand/og.png"],
   },
-  appleWebApp: { capable: true, title: "Kallr", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Kallr Markets", statusBarStyle: "default" },
   icons: {
     icon: [
       { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },

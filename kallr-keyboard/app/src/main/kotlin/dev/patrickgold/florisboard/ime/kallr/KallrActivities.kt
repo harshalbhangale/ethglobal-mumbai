@@ -206,7 +206,7 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
                     SheetState.SignIn -> {
                         Text("Sign in to trade", fontSize = 18.sp, fontWeight = FontWeight.Medium)
                         Text(
-                            "Kallr uses the same wallet as the Kallr desk. Sign in with X once; the key stays with Privy.",
+                            "Kallr Markets uses the same wallet as the Kallr desk. Sign in with X once; the key stays with Privy.",
                             modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -254,13 +254,13 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
                         Spacer(Modifier.height(12.dp))
                         Text("Order placed on Base", fontSize = 18.sp, fontWeight = FontWeight.Medium)
                         Text(
-                            "${s.title} · Flash order ${s.orderId.take(10)}… · it shows on your Kallr trades.",
+                            "${s.title} · Flash order ${s.orderId.take(10)}… · it shows on your Kallr Markets trades.",
                             modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedButton(onClick = {
-                                val share = "${s.title} via Kallr" + (order.caller?.let { ", copying @$it's call" } ?: "") + ". Flash on Base."
+                                val share = "${s.title} via Kallr Markets" + (order.caller?.let { ", copying @$it's call" } ?: "") + ". Flash on Base."
                                 val cm = context.getSystemService(ClipboardManager::class.java)
                                 cm?.setPrimaryClip(ClipData.newPlainText("Kallr", share))
                                 Toast.makeText(context, "Copied. Paste it in the chat.", Toast.LENGTH_SHORT).show()
@@ -419,12 +419,12 @@ private fun ShareSheet(text: String, onClose: () -> Unit) {
         Surface(Modifier.fillMaxWidth().clickable(enabled = false) {}, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), tonalElevation = 2.dp) {
             Column(Modifier.dotField().padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 20.dp).navigationBarsPadding()) {
                 SheetHandle()
-                Text("Kallr · check this call", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text("Kallr Markets · check this call", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 val r = result
                 when {
                     loading -> Progress("Reading it…")
-                    r == null -> Text("Couldn't check that. Is the Kallr server reachable?", color = MaterialTheme.colorScheme.error)
+                    r == null -> Text("Couldn't check that. Is the Kallr Markets server reachable?", color = MaterialTheme.colorScheme.error)
                     else -> {
                         r.fake?.let {
                             Text(
@@ -445,7 +445,7 @@ private fun ShareSheet(text: String, onClose: () -> Unit) {
                         if (trade == null) {
                             if (r.fake == null) {
                                 Text(
-                                    "Nothing Kallr can buy on Base for this.",
+                                    "Nothing Kallr Markets can buy on Base for this.",
                                     color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp),
                                 )
                             }
