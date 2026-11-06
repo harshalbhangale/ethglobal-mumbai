@@ -32,7 +32,7 @@ Rules that hold everywhere:
 ## Sponsors (max 3)
 
 1. **Definitive:** every trade is a Flash order on Base mainnet with an attached TP/SL bracket. The demo must show a real order.
-2. **Arkiv:** trades, calls and call results live on Arkiv (Rabdi testnet). Terminal rules go there next. See [arkiv/](../arkiv/schema.md).
+2. **Arkiv:** trades, calls and call results live on Arkiv (Rabdi testnet). Terminal rules go there next. See [arkiv/README.md](../arkiv/README.md).
 3. Third: undecided (ENS names on records, or none). Not built.
 
 ## The Terminal

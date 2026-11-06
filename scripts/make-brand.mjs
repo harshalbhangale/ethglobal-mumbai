@@ -114,7 +114,7 @@ const bg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" hei
   <text x="80" y="300" fill="#ffffff" font-family="${font}" font-size="76" font-weight="700" letter-spacing="-2.5">Every call on X</text>
   <text x="80" y="388" fill="#ffffff" font-family="${font}" font-size="76" font-weight="700" letter-spacing="-2.5">has an after market.</text>
   <text x="80" y="470" fill="#b8c2b7" font-family="${font}" font-size="28" letter-spacing="-0.2">Priced at posting. Copy it on Base with Definitive Flash.</text>
-  <text x="80" y="560" fill="#c6f25a" font-family="${font}" font-size="24" font-weight="600">kallr.vercel.app</text>
+  <text x="80" y="560" fill="#c6f25a" font-family="${font}" font-size="24" font-weight="600">kall-markets.vercel.app</text>
 </svg>`);
 const mark = await sharp(`${REPO}/kallr-webapp/public/brand/mark.png`).resize(360, 360).png().toBuffer();
 const markSmall = await sharp(`${REPO}/kallr-webapp/public/brand/mark.png`).resize(48, 48).png().toBuffer();
