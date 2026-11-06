@@ -4,11 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { FollowButton } from "@/components/follow-button";
 import { KolAvatar } from "@/components/kol-avatar";
 import { TweetEmbed } from "@/components/tweet-embed";
-import { type CallItem, callerStats, copyCall, type ResultItem, type TrackedCaller, useFollows, useKallrData } from "@/lib/feed";
+import { type CallItem, callerStats, copyCall, type ResultItem, useFollows, useKallrData } from "@/lib/feed";
 
 /**
  * The middle of the screen: real posts from callers, each with Kallr's verdict from Arkiv underneath.
- * Following shows the callers you follow; Explore shows every caller Kallr tracks, with Follow buttons.
+ * All shows every caller Kallr tracks; Following narrows it to the callers you follow (picked in the sidebar).
  * Picking a caller narrows the feed to them with their record on top. Copy call fills the trade ticket.
  */
 
@@ -80,34 +80,39 @@ export function CallsBoard({
       {caller ? (
         <CallerHeader handle={caller} data={data} follows={follows} onBack={() => setCaller(null)} />
       ) : (
-        <div className="mb-4 flex gap-6 border-b border-rule" role="tablist" aria-label="Feed">
-          {(["following", "explore"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              role="tab"
-              aria-selected={scope === s}
-              onClick={() => setScope(s)}
-              className={`-mb-px border-b-2 pb-3 text-[15px] font-semibold capitalize ${scope === s ? "border-lime text-ink" : "border-transparent text-slate hover:text-ink"}`}
-            >
-              {s}
-            </button>
-          ))}
+        <div className="mb-1 flex items-end justify-between gap-3">
+          <div>
+            <h1 className="font-display text-2xl font-semibold">Feed</h1>
+            <p className="text-sm text-slate">Calls from X, checked against Chainlink prices and kept on Arkiv.</p>
+          </div>
+          <div role="group" aria-label="Whose calls" className="inline-flex shrink-0 rounded-md border border-rule p-0.5 text-sm">
+            {(["explore", "following"] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={scope === s}
+                onClick={() => setScope(s)}
+                className={`rounded px-3 py-1 font-semibold ${scope === s ? "bg-ink text-paper" : "text-slate hover:text-ink"}`}
+              >
+                {s === "explore" ? "All" : "Following"}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      {!caller && scope === "explore" && <ExploreStrip tracked={data.tracked} data={data} follows={follows} onOpen={setCaller} />}
-
-      <div className="mb-3 flex gap-1">
+      <div className="sticky top-0 z-10 -mx-1 mb-4 flex gap-5 border-b border-rule bg-paper/95 px-1 pt-3 backdrop-blur" role="tablist" aria-label="Calls">
         {(["active", "settled", "favorites"] as const).map((f) => (
           <button
             key={f}
             type="button"
-            aria-pressed={filter === f}
+            role="tab"
+            aria-selected={filter === f}
             onClick={() => setFilter(f)}
-            className={`rounded-md px-3 py-1.5 text-sm font-semibold capitalize ${filter === f ? "bg-ink text-paper" : "text-slate hover:text-ink"}`}
+            className={`-mb-px border-b-2 pb-2.5 text-sm font-semibold ${filter === f ? "border-lime text-ink" : "border-transparent text-slate hover:text-ink"}`}
           >
-            {f === "favorites" ? "★ Favorites" : f} <span className="tabular-nums opacity-70">{count(f)}</span>
+            {f === "active" ? "Live" : f === "settled" ? "Settled" : "Saved"}
+            <span className="ml-1.5 rounded bg-card px-1.5 py-0.5 text-xs tabular-nums text-slate">{count(f)}</span>
           </button>
         ))}
       </div>
@@ -139,18 +144,18 @@ function Empty({ scope, filter, onExplore }: { scope: Scope | "caller"; filter: 
   return (
     <div className="rounded-lg border border-dashed border-rule px-6 py-14 text-center">
       <p className="font-semibold">
-        {filter === "favorites" ? "No favorites yet" : scope === "following" ? "Nothing from the callers you follow yet" : "No calls here yet"}
+        {filter === "favorites" ? "Nothing saved yet" : scope === "following" ? "Nothing from the callers you follow yet" : "No calls here yet"}
       </p>
       <p className="mx-auto mt-2 max-w-sm text-sm text-slate">
         {filter === "favorites"
-          ? "Star a post to keep it here."
+          ? "Star a call to keep it here."
           : scope === "following"
-            ? "Follow callers from Explore and their calls land here."
+            ? "Follow callers from the list on the left and their calls land here."
             : "New calls arrive as Kall Markets reads callers' posts on X."}
       </p>
       {scope === "following" && filter !== "favorites" && (
         <button type="button" onClick={onExplore} className="mt-4 rounded-md bg-lime px-4 py-2 text-sm font-semibold text-on-lime hover:bg-lime-strong">
-          Explore callers
+          Show all calls
         </button>
       )}
     </div>
@@ -245,36 +250,6 @@ function CallerHeader({ handle, data, follows, onBack }: { handle: string; data:
         <Stat label="Settled" value={String(s.settled)} />
         <Stat label="Open" value={String(s.open)} />
       </div>
-    </div>
-  );
-}
-
-function ExploreStrip({ tracked, data, follows, onOpen }: { tracked: TrackedCaller[]; data: ReturnType<typeof useKallrData>; follows: ReturnType<typeof useFollows>; onOpen: (h: string) => void }) {
-  if (!tracked.length) return null;
-  return (
-    <div className="-mx-1 mb-4 flex gap-3 overflow-x-auto px-1 pb-1">
-      {tracked.map((t) => {
-        const s = callerStats(
-          data.results.filter((r) => r.caller === t.handle),
-          data.calls.filter((c) => c.caller === t.handle),
-        );
-        return (
-          <div key={t.handle} className="w-44 shrink-0 rounded-lg border border-rule bg-card p-3">
-            <button type="button" onClick={() => onOpen(t.handle)} className="flex w-full items-center gap-2 text-left">
-              <KolAvatar handle={t.handle} size={32} />
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold">@{t.handle}</span>
-                <span className="block text-xs text-slate tabular-nums">
-                  {s.hitRate === null ? "No record yet" : `${Math.round(s.hitRate * 100)}% hit · ${s.settled}`}
-                </span>
-              </span>
-            </button>
-            <div className="mt-2">
-              <FollowButton handle={t.handle} follows={follows} small />
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }

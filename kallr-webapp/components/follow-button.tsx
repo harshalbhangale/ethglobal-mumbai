@@ -2,8 +2,23 @@
 
 import type { useFollows } from "@/lib/feed";
 
-export function FollowButton({ handle, follows, small }: { handle: string; follows: ReturnType<typeof useFollows>; small?: boolean }) {
+export function FollowButton({ handle, follows, small, icon }: { handle: string; follows: ReturnType<typeof useFollows>; small?: boolean; icon?: boolean }) {
   const on = follows.handles.has(handle.toLowerCase());
+  if (icon)
+    return (
+      <button
+        type="button"
+        onClick={() => follows.toggle(handle)}
+        aria-pressed={on}
+        aria-label={on ? `Unfollow @${handle}` : `Follow @${handle}`}
+        title={on ? "Unfollow" : "Follow"}
+        className={`grid size-7 shrink-0 place-items-center rounded-md border text-sm font-bold transition-colors ${
+          on ? "border-lime/40 bg-lime/10 text-lime hover:border-down/40 hover:bg-transparent hover:text-down" : "border-rule text-slate hover:border-lime hover:text-lime"
+        }`}
+      >
+        {on ? "✓" : "+"}
+      </button>
+    );
   return (
     <button
       type="button"

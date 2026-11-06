@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { FollowButton } from "@/components/follow-button";
+import { shortAddress } from "@/lib/chain";
 import { OPEN_STATUSES } from "@kallr/integrations/definitive";
 import { useWallets } from "@privy-io/react-auth";
 import { Logo, LogoMark } from "@/components/logo";
@@ -96,7 +98,7 @@ function Terminal({ session }: { session: Session }) {
   const follows = useFollows();
   const openCount = flashOrders.orders?.filter((o) => OPEN_STATUSES.includes(o.status)).length ?? 0;
 
-  const [scope, setScope] = useState<Scope>("following");
+  const [scope, setScope] = useState<Scope>("explore");
   const [caller, setCallerState] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<TicketPrefill | null>(null);
 
@@ -105,9 +107,6 @@ function Terminal({ session }: { session: Session }) {
     const c = new URLSearchParams(window.location.search).get("caller");
     if (c && /^[A-Za-z0-9_]{1,15}$/.test(c) && !new URLSearchParams(window.location.search).has("order")) setCallerState(c.toLowerCase());
   }, []);
-  useEffect(() => {
-    if (follows.entries.length === 0) setScope("explore");
-  }, [follows.entries.length]);
 
   const setCaller = (h: string | null) => {
     setCallerState(h);
@@ -123,17 +122,24 @@ function Terminal({ session }: { session: Session }) {
     if (window.matchMedia("(max-width: 1279px)").matches) setView("trade");
   };
 
-  const followed = follows.entries.map((e) => e.handle);
-  const ticket = signedIn ? (
-    <TradeTicket wallet={wallet} onPlaced={flashOrders.refresh} onViewOrders={() => setView("orders")} prefill={prefill} />
-  ) : (
-    <SignInCard what="trade" />
+  // Followed callers first, then everyone else Kallr tracks or has calls from.
+  const callerHandles = [
+    ...new Set([...follows.entries.map((e) => e.handle), ...data.tracked.map((t) => t.handle), ...data.calls.map((c) => c.caller), ...data.results.map((r) => r.caller)]),
+  ];
+  const ticket = (
+    <TradeTicket
+      wallet={wallet}
+      onPlaced={flashOrders.refresh}
+      onViewOrders={() => setView("orders")}
+      prefill={prefill}
+      signIn={signedIn ? undefined : <SignInButton label="Sign in to trade" />}
+    />
   );
 
   return (
-    <div className="min-h-dvh xl:grid xl:grid-cols-[240px_minmax(0,1fr)_400px]">
+    <div className="min-h-dvh xl:grid xl:grid-cols-[264px_minmax(0,1fr)_380px]">
       {/* Left: navigation and your callers. */}
-      <aside className="sticky top-0 hidden h-dvh flex-col overflow-y-auto border-r border-rule bg-card px-4 py-6 xl:flex">
+      <aside className="sticky top-0 hidden h-dvh flex-col overflow-hidden border-r border-rule bg-card px-3 py-5 xl:flex">
         <Logo href="/app" />
         <nav className="mt-8 flex flex-col gap-1" aria-label="App">
           {views.map((v) => (
@@ -153,49 +159,18 @@ function Terminal({ session }: { session: Session }) {
           ))}
         </nav>
 
-        <p className="mt-8 px-3 text-xs font-semibold uppercase tracking-wider text-slate">Following</p>
-        <ul className="mt-2 space-y-0.5">
-          {followed.map((h) => {
-            const s = callerStats(
-              data.results.filter((r) => r.caller === h),
-              data.calls.filter((c) => c.caller === h),
-            );
-            return (
-              <li key={h}>
-                <button
-                  type="button"
-                  onClick={() => setCaller(h)}
-                  className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left ${caller === h ? "bg-paper" : "hover:bg-paper/60"}`}
-                >
-                  <KolAvatar handle={h} size={26} />
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">@{h}</span>
-                  <span className="text-xs text-slate tabular-nums">{s.hitRate === null ? (s.open ? `${s.open} open` : "") : `${Math.round(s.hitRate * 100)}%`}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-        <button
-          type="button"
-          onClick={() => {
-            setCaller(null);
-            setScope("explore");
-          }}
-          className="mt-1 rounded-md px-3 py-1.5 text-left text-sm font-semibold text-slate hover:text-ink"
-        >
-          + Explore callers
-        </button>
+        <CallerList
+          handles={callerHandles}
+          follows={follows}
+          data={data}
+          active={caller}
+          onOpen={setCaller}
+        />
 
-        <div className="mt-auto space-y-3 pt-6">
+        <div className="shrink-0 space-y-3 border-t border-rule pt-4">
           <InstallButton />
           {signedIn ? (
-            <div className="rounded-md bg-paper p-3 text-sm">
-              <div className="font-semibold">{session.handle ? `@${session.handle}` : "Signed in"}</div>
-              <div className="text-xs text-slate">{session.walletName}</div>
-              <button type="button" onClick={() => session.logout()} className="mt-1 text-slate hover:text-ink">
-                Sign out
-              </button>
-            </div>
+            <AccountCard session={session} onWallet={() => setView("wallet")} />
           ) : (
             <SignInButton />
           )}
@@ -219,7 +194,8 @@ function Terminal({ session }: { session: Session }) {
             <CallsBoard data={data} follows={follows} scope={scope} setScope={setScope} caller={caller} setCaller={setCaller} onCopy={onCopy} />
           </div>
           <div hidden={view !== "orders"}>
-            <h1 className="font-display mb-4 text-2xl font-semibold">Orders</h1>
+            <h1 className="font-display text-2xl font-semibold">Orders</h1>
+            <p className="mb-4 text-sm text-slate">Every order is a Definitive Flash order on Base; every trade is recorded on Arkiv.</p>
             {signedIn ? (
               <OpenOrders orders={flashOrders.orders} error={flashOrders.error} history={{ trades: data.trades, explorer: data.explorer, loading: data.loading }} />
             ) : (
@@ -238,7 +214,7 @@ function Terminal({ session }: { session: Session }) {
       </div>
 
       {/* Right: the trade ticket, always on screen. */}
-      <aside className="sticky top-0 hidden h-dvh overflow-y-auto border-l border-rule bg-card p-5 xl:block">{ticket}</aside>
+      <aside className="sticky top-0 hidden h-dvh overflow-y-auto border-l border-rule bg-paper p-4 xl:block">{ticket}</aside>
 
       {/* Phone: views at the bottom, within thumb reach. */}
       <nav aria-label="App" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-rule bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur xl:hidden">
@@ -258,6 +234,85 @@ function Terminal({ session }: { session: Session }) {
           </button>
         ))}
       </nav>
+    </div>
+  );
+}
+
+/** Every caller in one list: the ones you follow first, each with its hit rate and a follow toggle. */
+function CallerList({
+  handles,
+  follows,
+  data,
+  active,
+  onOpen,
+}: {
+  handles: string[];
+  follows: ReturnType<typeof useFollows>;
+  data: ReturnType<typeof useKallrData>;
+  active: string | null;
+  onOpen: (h: string) => void;
+}) {
+  const followed = handles.filter((h) => follows.handles.has(h));
+  const others = handles.filter((h) => !follows.handles.has(h));
+  const row = (h: string) => {
+    const s = callerStats(
+      data.results.filter((r) => r.caller === h),
+      data.calls.filter((c) => c.caller === h),
+    );
+    return (
+      <li key={h} className={`group flex items-center gap-2 rounded-md px-2 py-1.5 ${active === h ? "bg-paper" : "hover:bg-paper/60"}`}>
+        <button type="button" onClick={() => onOpen(h)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+          <KolAvatar handle={h} size={28} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold">@{h}</span>
+            <span className="block text-xs text-slate tabular-nums">
+              {s.hitRate === null ? (s.open ? `${s.open} live` : "No record yet") : `${Math.round(s.hitRate * 100)}% hit · ${s.settled}`}
+            </span>
+          </span>
+        </button>
+        <FollowButton handle={h} follows={follows} icon />
+      </li>
+    );
+  };
+  return (
+    <div className="-mx-1 mt-6 mb-4 min-h-0 flex-1 overflow-y-auto px-1">
+      {followed.length > 0 && (
+        <>
+          <p className="px-2 text-xs font-semibold uppercase tracking-wider text-slate">Following · {followed.length}</p>
+          <ul className="mt-1.5 space-y-0.5">{followed.map(row)}</ul>
+        </>
+      )}
+      {others.length > 0 && (
+        <>
+          <p className={`${followed.length ? "mt-5" : ""} px-2 text-xs font-semibold uppercase tracking-wider text-slate`}>{followed.length ? "More callers" : "Callers"}</p>
+          <ul className="mt-1.5 space-y-0.5">{others.map(row)}</ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Who is signed in, which wallet trades, and sign out. */
+function AccountCard({ session, onWallet }: { session: Session; onWallet: () => void }) {
+  return (
+    <div className="rounded-lg border border-rule bg-paper p-3">
+      <div className="flex items-center gap-2.5">
+        <KolAvatar handle={session.handle ?? "you"} size={36} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{session.handle ? `@${session.handle}` : "Signed in"}</p>
+          <button type="button" onClick={onWallet} className="block truncate text-xs text-slate hover:text-ink">
+            {session.address ? shortAddress(session.address) : session.walletName} · Base
+          </button>
+        </div>
+      </div>
+      <div className="mt-3 flex gap-2 text-xs">
+        <button type="button" onClick={onWallet} className="flex-1 rounded-md border border-rule py-1.5 font-semibold hover:border-lime hover:text-lime">
+          Wallet
+        </button>
+        <button type="button" onClick={() => session.logout()} className="flex-1 rounded-md border border-rule py-1.5 font-semibold text-slate hover:text-ink">
+          Sign out
+        </button>
+      </div>
     </div>
   );
 }

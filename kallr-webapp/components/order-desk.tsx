@@ -258,9 +258,24 @@ function describeFlashOrder(o: FlashOrder) {
   return o.side === "buy" ? `${kind} buy: $${o.qty} of ${symbol}` : `${kind} sell: ${o.qty} ${symbol}`;
 }
 
+const num = (v: string | null | undefined) => (v === null || v === undefined || v === "" ? null : Number(v));
+type Filled = { targetAmount?: string | null; contraAmount?: string | null; averagePrice?: string | null; averageNotionalPrice?: string | null };
+const filledOf = (o: FlashOrder): Filled | null => (o.filled && typeof o.filled === "object" ? (o.filled as Filled) : null);
+const when = (iso: string | null | undefined) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+};
+const typeOf = (o: FlashOrder) => (o.orderType === "bracket" ? "TP/SL" : o.orderType === "limit" ? "Limit" : o.orderType === "twap" ? "TWAP" : "Market");
+const statusTone = (s: string) =>
+  s === "ORDER_STATUS_FILLED" ? "text-up" : s === "ORDER_STATUS_REJECTED" || s === "ORDER_STATUS_CANCELLED" ? "text-down" : OPEN_STATUSES.includes(s) ? "text-lime" : "text-slate";
+
+type OrdersTab = "open" | "history" | "trades";
+
 /**
- * Orders in three parts: open on Definitive Flash right now, closed (filled, cancelled or expired),
- * and the trade history Kallr recorded on Arkiv for this wallet, each with its proof.
+ * Orders like an exchange: tabs for Open orders, Order history (filled, cancelled, expired on
+ * Definitive Flash) and Trade history (every trade Kall Markets recorded on Arkiv). Each row opens to
+ * show its details and proofs.
  */
 export function OpenOrders({
   orders,
@@ -273,102 +288,208 @@ export function OpenOrders({
 }) {
   const open = orders?.filter((o) => OPEN_STATUSES.includes(o.status) || o.attachedBracket?.status === "active") ?? [];
   const closed = orders?.filter((o) => !open.includes(o)) ?? [];
+  const [tab, setTab] = useState<OrdersTab>("open");
+  const tabs: Array<{ id: OrdersTab; label: string; count: number | null }> = [
+    { id: "open", label: "Open orders", count: orders ? open.length : null },
+    { id: "history", label: "Order history", count: orders ? closed.length : null },
+    ...(history ? [{ id: "trades" as const, label: "Trade history", count: history.loading ? null : history.trades.length }] : []),
+  ];
+  const filled = orders?.filter((o) => o.status === "ORDER_STATUS_FILLED") ?? [];
+  const volume = filled.reduce((sum, o) => sum + (num(filledOf(o)?.contraAmount) ?? (o.side === "buy" ? Number(o.qty) || 0 : 0)), 0);
 
   return (
     <div id="orders" className="space-y-4">
-      <section aria-labelledby="open-heading" className="rounded-lg border border-rule bg-card p-6">
-        <div className="flex items-baseline justify-between">
-          <h2 id="open-heading" className="font-display text-lg font-semibold">
-            Open orders
-          </h2>
-          {open.length > 0 && <span className="text-sm text-slate">{open.length} open</span>}
+      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-rule bg-rule">
+        <Tile label="Open now" value={orders ? String(open.length) : "…"} />
+        <Tile label="Filled on Flash" value={orders ? String(filled.length) : "…"} />
+        <Tile label="Volume" value={orders ? usd(volume) : "…"} />
+      </div>
+
+      <section className="overflow-hidden rounded-lg border border-rule bg-card">
+        <div role="tablist" aria-label="Orders" className="flex gap-1 overflow-x-auto border-b border-rule px-2">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={`-mb-px shrink-0 border-b-2 px-3 py-3 text-sm font-semibold ${tab === t.id ? "border-lime text-ink" : "border-transparent text-slate hover:text-ink"}`}
+            >
+              {t.label}
+              {t.count !== null && <span className="ml-1.5 rounded bg-paper px-1.5 py-0.5 text-xs tabular-nums text-slate">{t.count}</span>}
+            </button>
+          ))}
         </div>
-        {error && <p className="mt-4 text-sm text-down">{error}</p>}
-        {orders === null && !error && <p className="mt-6 text-sm text-slate">Loading orders from Definitive…</p>}
-        {orders !== null && open.length === 0 && (
-          <p className="mt-4 text-sm text-slate">Nothing open. Limit orders and armed take-profit / stop-loss exits wait here until they fill.</p>
-        )}
-        {open.length > 0 && <OrderList orders={open} />}
-      </section>
 
-      <section aria-labelledby="closed-heading" className="rounded-lg border border-rule bg-card p-6">
-        <h2 id="closed-heading" className="font-display text-lg font-semibold">
-          Closed orders
-        </h2>
-        {orders !== null && closed.length === 0 ? (
-          <p className="mt-4 text-sm text-slate">Filled, cancelled and expired orders show up here.</p>
-        ) : (
-          <OrderList orders={closed} />
-        )}
-      </section>
+        {error && tab !== "trades" && <p className="px-4 py-3 text-sm text-down">{error}</p>}
 
-      {history && (
-        <section aria-labelledby="history-heading" className="rounded-lg border border-rule bg-card p-6">
-          <h2 id="history-heading" className="font-display text-lg font-semibold">
-            Trade history
-          </h2>
-          <p className="mt-1 text-sm text-slate">Every trade placed from this wallet through Kall Markets, recorded on Arkiv.</p>
-          {history.loading ? (
-            <p className="mt-4 text-sm text-slate">Reading Arkiv…</p>
-          ) : history.trades.length === 0 ? (
-            <p className="mt-4 text-sm text-slate">No trades yet from this wallet.</p>
+        {tab !== "trades" &&
+          (orders === null && !error ? (
+            <Placeholder text="Loading orders from Definitive Flash…" />
+          ) : (tab === "open" ? open : closed).length === 0 ? (
+            <Placeholder text={tab === "open" ? "Nothing open. Limit orders and armed take-profit / stop-loss exits wait here until they fill." : "Filled, cancelled and expired orders show up here."} />
           ) : (
-            <ul className="mt-2 divide-y divide-rule">
-              {history.trades.map((t) => (
-                <li key={t.id} className="flex items-start justify-between gap-4 py-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold">
-                      {t.side === "buy" ? `Bought $${t.qty} of ${t.asset}` : `Sold ${t.qty} ${t.asset}`}
-                      {t.caller && <span className="font-normal text-slate"> · copying @{t.caller}</span>}
-                    </p>
-                    <p className="mt-1 text-sm text-slate">
-                      {new Date(t.placedAt * 1000).toLocaleString()} · via {t.source}
-                      {t.takeProfit !== null && <span className="text-up"> · TP {usd(t.takeProfit)}</span>}
-                      {t.stopLoss !== null && <span className="text-down"> · SL {usd(t.stopLoss)}</span>}
-                    </p>
-                  </div>
-                  <a
-                    href={`${history.explorer}/entity/${t.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="shrink-0 rounded-md border border-rule px-3 py-1 text-sm text-slate hover:border-rule-strong hover:text-ink"
-                  >
-                    Proof on Arkiv ↗
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
+            <OrderTable orders={tab === "open" ? open : closed} />
+          ))}
+
+        {tab === "trades" &&
+          history &&
+          (history.loading ? (
+            <Placeholder text="Reading Arkiv…" />
+          ) : history.trades.length === 0 ? (
+            <Placeholder text="No trades from this wallet yet. Each trade you place is recorded on Arkiv and shows here." />
+          ) : (
+            <TradeTable trades={history.trades} explorer={history.explorer} />
+          ))}
+      </section>
     </div>
   );
 }
 
-function OrderList({ orders }: { orders: FlashOrder[] }) {
+function Tile({ label, value }: { label: string; value: string }) {
   return (
-    <ul className="mt-2 divide-y divide-rule">
-      {orders.map((o) => {
-        const tp = o.attachedBracket?.takeProfit?.notionalPrice;
-        const sl = o.attachedBracket?.stopLoss?.notionalPrice;
-        return (
-          <li key={o.orderId} className="flex items-start justify-between gap-4 py-3">
-            <div className="min-w-0">
-              <p className="font-semibold">{describeFlashOrder(o)}</p>
-              <p className="mt-1 text-sm text-slate tabular-nums">
-                {o.limitCrossPrice && <>Limit {usd(Number(o.limitCrossPrice))} · </>}
-                {tp && <span className="text-up">TP {usd(Number(tp))}</span>}
-                {tp && sl && " · "}
-                {sl && <span className="text-down">SL {usd(Number(sl))}</span>}
-                {o.attachedBracket && <> · {bracketText[o.attachedBracket.status] ?? o.attachedBracket.status}</>}
-              </p>
-            </div>
-            <span className="shrink-0 rounded-full border border-rule px-3 py-1 text-sm text-slate">
-              {statusText[o.status] ?? o.status}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="bg-card px-4 py-3">
+      <p className="text-xs text-slate">{label}</p>
+      <p className="font-display mt-0.5 text-xl font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function Placeholder({ text }: { text: string }) {
+  return <p className="px-4 py-12 text-center text-sm text-slate">{text}</p>;
+}
+
+const HEAD = "grid grid-cols-[1.1fr_0.8fr_0.7fr_1fr_0.9fr_20px] items-center gap-3";
+
+function OrderTable({ orders }: { orders: FlashOrder[] }) {
+  return (
+    <div>
+      <div className={`${HEAD} border-b border-rule px-4 py-2 text-xs text-slate`}>
+        <span>Pair</span>
+        <span>Type</span>
+        <span>Side</span>
+        <span className="text-right">Amount</span>
+        <span className="text-right">Status</span>
+        <span />
+      </div>
+      <ul className="divide-y divide-rule">
+        {orders.map((o) => (
+          <OrderRow key={o.orderId} o={o} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function OrderRow({ o }: { o: FlashOrder }) {
+  const [open, setOpen] = useState(false);
+  const symbol = symbolOf(o.targetAsset);
+  const f = filledOf(o);
+  const tp = num(o.attachedBracket?.takeProfit?.notionalPrice);
+  const sl = num(o.attachedBracket?.stopLoss?.notionalPrice);
+  const avg = num(f?.averageNotionalPrice ?? f?.averagePrice);
+  const amount = o.side === "buy" && o.orderType !== "bracket" ? usd(Number(o.qty)) : `${Number(o.qty).toLocaleString("en-US", { maximumSignificantDigits: 6 })} ${symbol}`;
+  return (
+    <li>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={`${HEAD} w-full px-4 py-3 text-left text-sm hover:bg-paper/60`}>
+        <span className="min-w-0">
+          <span className="block font-semibold">{symbol}/USDC</span>
+          <span className="block text-xs text-slate">{when(o.placedAt)}</span>
+        </span>
+        <span>{typeOf(o)}</span>
+        <span className={`font-semibold ${o.side === "buy" ? "text-up" : "text-down"}`}>{o.side === "buy" ? "Buy" : "Sell"}</span>
+        <span className="text-right font-semibold tabular-nums">{amount}</span>
+        <span className={`text-right text-xs font-semibold ${statusTone(o.status)}`}>{statusText[o.status] ?? o.status}</span>
+        <span aria-hidden="true" className={`text-slate transition-transform ${open ? "rotate-180" : ""}`}>
+          ▾
+        </span>
+      </button>
+      {open && (
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 bg-paper/50 px-4 py-3 text-sm sm:grid-cols-3">
+          <Detail k="Order ID" v={`${o.orderId.slice(0, 10)}…`} />
+          <Detail k="Avg fill price" v={avg ? usd(avg) : "—"} />
+          <Detail k="Received" v={f?.targetAmount ? `${Number(f.targetAmount).toLocaleString("en-US", { maximumSignificantDigits: 6 })} ${symbol}` : "—"} />
+          {o.limitCrossPrice && <Detail k="Limit price" v={usd(Number(o.limitCrossPrice))} />}
+          {tp !== null && <Detail k="Take-profit" v={usd(tp)} tone="text-up" />}
+          {sl !== null && <Detail k="Stop-loss" v={usd(sl)} tone="text-down" />}
+          {o.attachedBracket && <Detail k="Exits" v={bracketText[o.attachedBracket.status] ?? o.attachedBracket.status} />}
+          {o.closeReason && <Detail k="Closed because" v={o.closeReason.replace(/_/g, " ").toLowerCase()} />}
+          <Detail k="Route" v="Definitive Flash · Base" />
+        </dl>
+      )}
+    </li>
+  );
+}
+
+function Detail({ k, v, tone }: { k: string; v: string; tone?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-slate">{k}</dt>
+      <dd className={`truncate font-semibold tabular-nums ${tone ?? ""}`}>{v}</dd>
+    </div>
+  );
+}
+
+function TradeTable({ trades, explorer }: { trades: TradeItem[]; explorer: string }) {
+  return (
+    <div>
+      <div className={`${HEAD} border-b border-rule px-4 py-2 text-xs text-slate`}>
+        <span>Pair</span>
+        <span>Via</span>
+        <span>Side</span>
+        <span className="text-right">Amount</span>
+        <span className="text-right">Proof</span>
+        <span />
+      </div>
+      <ul className="divide-y divide-rule">
+        {trades.map((t) => (
+          <TradeRow key={t.id} t={t} explorer={explorer} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const VIA: Record<string, string> = { desk: "Web", extension: "X", keyboard: "Keyboard" };
+
+function TradeRow({ t, explorer }: { t: TradeItem; explorer: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={`${HEAD} w-full px-4 py-3 text-left text-sm hover:bg-paper/60`}>
+        <span className="min-w-0">
+          <span className="block font-semibold">{t.asset}/USDC</span>
+          <span className="block text-xs text-slate">{new Date(t.placedAt * 1000).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+        </span>
+        <span>{VIA[t.source] ?? t.source}</span>
+        <span className={`font-semibold ${t.side === "buy" ? "text-up" : "text-down"}`}>{t.side === "buy" ? "Buy" : "Sell"}</span>
+        <span className="text-right font-semibold tabular-nums">{t.side === "buy" ? `$${t.qty}` : `${t.qty} ${t.asset}`}</span>
+        <span className="text-right text-xs font-semibold text-lime">Arkiv ✓</span>
+        <span aria-hidden="true" className={`text-slate transition-transform ${open ? "rotate-180" : ""}`}>
+          ▾
+        </span>
+      </button>
+      {open && (
+        <div className="space-y-3 bg-paper/50 px-4 py-3 text-sm">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
+            <Detail k="Copying" v={t.caller ? `@${t.caller}` : "—"} />
+            <Detail k="Take-profit" v={t.takeProfit !== null ? usd(t.takeProfit) : "—"} tone="text-up" />
+            <Detail k="Stop-loss" v={t.stopLoss !== null ? usd(t.stopLoss) : "—"} tone="text-down" />
+            <Detail k="Flash order" v={`${t.flashOrderId.slice(0, 10)}…`} />
+          </dl>
+          <div className="flex flex-wrap gap-2">
+            <a href={`${explorer}/entity/${t.id}`} target="_blank" rel="noreferrer" className="rounded-md border border-rule px-3 py-1.5 text-xs font-semibold hover:border-lime hover:text-lime">
+              Proof on Arkiv ↗
+            </a>
+            {t.caller && t.postId && (
+              <a href={`https://x.com/${t.caller}/status/${t.postId}`} target="_blank" rel="noreferrer" className="rounded-md border border-rule px-3 py-1.5 text-xs font-semibold hover:border-ink">
+                The call on X ↗
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+    </li>
   );
 }
