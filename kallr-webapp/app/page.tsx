@@ -30,6 +30,12 @@ const surfaces = [
   },
 ];
 
+const sponsors = [
+  { name: "Arkiv", logo: "/sponsors/arkiv.png", href: "https://arkiv.network", role: "Every call, result and trade is written to Arkiv." },
+  { name: "Swarm", logo: "/sponsors/swarm.svg", href: "https://www.ethswarm.org", role: "Each call’s post is snapshotted to Swarm." },
+  { name: "Chainlink", logo: "/sponsors/chainlink.svg", href: "https://chain.link", role: "Calls are priced and settled on Chainlink feeds." },
+];
+
 export default function Landing() {
   return (
     <div className="min-h-dvh">
@@ -37,7 +43,7 @@ export default function Landing() {
         <div className="mx-auto flex max-w-[1280px] items-center justify-between px-6 py-6 lg:px-[7%]">
           <Logo />
           <nav className="flex items-center gap-6 text-sm">
-            <Link href="/kol" className="hidden text-slate hover:text-ink sm:inline">
+            <Link href="/app#feed" className="hidden text-slate hover:text-ink sm:inline">
               Callers
             </Link>
             <a href="#how" className="hidden text-slate hover:text-ink sm:inline">
@@ -83,7 +89,7 @@ export default function Landing() {
               <a href="#how" className="border-b border-rule-strong py-2 font-medium hover:border-ink">
                 How it works <span aria-hidden="true">↓</span>
               </a>
-              <Link href="/trades" className="border-b border-rule-strong py-2 font-medium hover:border-ink">
+              <Link href="/app#orders" className="border-b border-rule-strong py-2 font-medium hover:border-ink">
                 Every trade, on Arkiv <span aria-hidden="true">↗</span>
               </Link>
             </div>
@@ -91,6 +97,34 @@ export default function Landing() {
           <span className="absolute bottom-6 left-6 z-10 hidden font-mono text-[11px] tracking-[0.08em] text-slate sm:block lg:left-[7%]">
             FROM POST TO POSITION <span aria-hidden="true">↓</span>
           </span>
+        </section>
+
+        <section aria-label="Built with" className="border-b border-rule">
+          <div className="mx-auto max-w-[1280px] px-6 py-16 lg:px-[7%]">
+            <div className="grid items-center gap-8 md:grid-cols-[1.1fr_1fr]">
+              <div>
+                <p className="font-mono text-xs tracking-[0.08em] text-slate">EVERY ORDER RUNS ON</p>
+                <a href="https://www.definitive.fi" target="_blank" rel="noreferrer" className="mt-5 block w-fit opacity-95 transition-opacity hover:opacity-100">
+                  <img src="/sponsors/definitive.svg" alt="Definitive" className="h-9 w-auto sm:h-11" />
+                </a>
+              </div>
+              <p className="max-w-md leading-relaxed text-slate">
+                Kallr is built entirely on <span className="text-ink">Definitive Flash</span>. Every buy, sell, limit and
+                TWAP order, from X or the keyboard, is a Flash order on Base: quote, price impact and fee up front, signed by
+                your own wallet.
+              </p>
+            </div>
+            <ul className="mt-12 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-rule bg-rule sm:grid-cols-3">
+              {sponsors.map((s) => (
+                <li key={s.name} className="bg-paper">
+                  <a href={s.href} target="_blank" rel="noreferrer" className="group flex h-full flex-col gap-4 p-6">
+                    <img src={s.logo} alt={s.name} className="h-6 w-auto self-start opacity-70 transition-opacity group-hover:opacity-100" />
+                    <span className="text-sm text-slate">{s.role}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
         </section>
 
         <section id="how" className="border-b border-rule">
