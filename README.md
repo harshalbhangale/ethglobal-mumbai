@@ -11,7 +11,7 @@
 <p align="center">
   <img src="docs/screenshots/submission/1-keyboard-swap.webp" width="24%" alt="Kall Keyboard: swap on Definitive Flash, right in the chat" />
   <img src="docs/screenshots/submission/2-keyboard-app-history.webp" width="24%" alt="Kall app: every trade from the keyboard, X and the web" />
-  <img src="docs/screenshots/submission/8-keyboard-hold-to-buy.webp" width="24%" alt="Kall Keyboard: press and hold to buy, so no trade goes out by accident" />
+  <img src="docs/screenshots/submission/8-keyboard-hold-to-buy.webp" width="24%" alt="Kall Keyboard in a Telegram signal group: hold to buy the call on Definitive Flash" />
 </p>
 <p align="center">
   <img src="docs/screenshots/submission/3-extension-trade-on-x.webp" width="48%" alt="Kall Extension on X: the caller's record and a Flash trade under the post" />
