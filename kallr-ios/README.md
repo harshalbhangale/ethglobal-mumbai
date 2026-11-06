@@ -15,7 +15,9 @@ plays keyboard haptics only with Allow Full Access.
 
 - **Following:** calls from the callers you follow (kept on the phone), read from Arkiv by
   `/api/keyboard/feed`: the post's text from its Swarm snapshot, the move since the post, time left, and
-  **Trade**. Caller chips with hit rates narrow the list; Active, Settled and starred Favorites filter it.
+  **Trade**. Each call shows the hash of its Arkiv record; open the call and tap the record to see it on
+  Arkiv's explorer. Chips for the callers you follow, with their hit rates, narrow the list; Active,
+  Settled and starred Favorites filter it.
   **Explore** lists every caller Kall Markets tracks or has priced, with their record and Follow. The
   clipboard button checks a post or $TICKER message you copied.
 - **Trade:** laid out like a swap. **You pay** is dollars of USDC (tap to type, with $1, $5, $10, $25 and
@@ -28,7 +30,9 @@ plays keyboard haptics only with Allow Full Access.
   Definitive Flash quote (you pay, you get, price impact and fee, exits, approval) without sending
   anything; **press and hold** the lime button to send it (letting go early cancels).
 - **Orders:** the Kall wallet's Flash orders with live status (re-read every 5 seconds while one is
-  working), which call each one copied, and **Cancel** for working limit and TWAP orders. Cancelling is
+  working), which call each one copied, its Arkiv trade record (a seal in the list; the hash and a link
+  in the order), and **Cancel** for working limit and TWAP orders. After a trade, the done screen shows
+  the Arkiv record once the server writes it. Cancelling is
   Flash's gasless signed message and is final.
 - **Wallet:** the Kall wallet's address and balances.
 

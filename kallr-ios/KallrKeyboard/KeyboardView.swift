@@ -20,6 +20,8 @@ final class KeyboardModel: ObservableObject {
         let status: String?; let returnBps: Int?
         /** Kall's own demo call (ETH → USDC), pinned on top so the swap can be tried from a post. */
         var demo = false
+        /** The call's (or its result's) Arkiv entity, for the explorer link. */
+        var arkivKey: String? = nil
         var id: String { postId }
     }
     /** Idle → quoting → review (a fresh quote, nothing sent) → placing → done or failed. */
@@ -176,12 +178,28 @@ final class KeyboardModel: ObservableObject {
         }
     }
 
+    /** Set when a link couldn't open and was copied instead. */
+    @Published var linkNote: String?
+
     /** Opens a link in Safari; if iOS won't, copies it instead and says so. */
     func openLink(_ url: URL) {
         tap()
-        if controller?.openURL(url) != true {
+        linkNote = nil
+        let copy = { [weak self] in
             UIPasteboard.general.string = url.absoluteString
-            ordersNote = "Link copied. Paste it in Safari."
+            self?.linkNote = "Link copied. Paste it in Safari."
+        }
+        guard let controller else { copy(); return }
+        controller.openURL(url) { opened in if !opened { Task { @MainActor in copy() } } }
+    }
+
+    /** The callers you follow, each with their settled record. */
+    struct Followed: Identifiable { let handle: String; let record: String?; var id: String { handle } }
+    var followed: [Followed] {
+        let rows = feed?.callers ?? []
+        return follows.sorted().map { h in
+            let c = rows.first { $0.handle.lowercased() == h }
+            return Followed(handle: h, record: c.flatMap { $0.settled > 0 ? "\($0.hits)/\($0.settled)" : nil })
         }
     }
 
@@ -282,17 +300,34 @@ final class KeyboardModel: ObservableObject {
         guard let tx = fillTx, let placed = lastPlaced else { return }
         tap(.medium)
         let got = placed.preview.get.replacingOccurrences(of: "about ", with: "")
-        controller?.textDocumentProxy.insertText("\(placed.preview.title), got \(got) on Definitive Flash: https://basescan.org/tx/\(tx)")
+        var text = "\(placed.preview.title), got \(got) on Definitive Flash: https://basescan.org/tx/\(tx)"
+        if let key = doneArkivKey, let url = Kallr.arkivURL(key) { text += " · Recorded on Arkiv: \(url.absoluteString)" }
+        controller?.textDocumentProxy.insertText(text)
         placing = .idle
         mode = .typing
     }
 
     /** The swap's transaction once Flash fills it, for the done card's BaseScan link. */
     @Published var fillTx: String?
+    /** The trade's Arkiv record, which the server writes a few seconds after the order. */
+    @Published var doneArkivKey: String?
+    @Published var doneArkivGaveUp = false
 
     private func findFill(orderId: String?) {
         fillTx = nil
+        doneArkivKey = nil
+        doneArkivGaveUp = false
         guard let orderId, let owner = wallet?.address else { return }
+        Task {
+            for _ in 0..<12 {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if let key = await Kallr.history(wallets: [owner])?.first(where: { $0.orderId == orderId })?.arkivKey {
+                    if lastPlaced?.orderId == orderId { doneArkivKey = key }
+                    return
+                }
+            }
+            if lastPlaced?.orderId == orderId { doneArkivGaveUp = true }
+        }
         Task {
             for _ in 0..<10 {
                 if let tx = await Kallr.fills(orderId: orderId, funder: owner)?.transaction {
@@ -577,10 +612,10 @@ final class KeyboardModel: ObservableObject {
     }
 
     private var openItems: [Item] {
-        (feed?.calls ?? []).map { Item(postId: $0.postId, caller: $0.caller, asset: $0.asset, short: $0.direction == "down", postedAt: $0.postedAt, deadline: $0.deadline, entry: $0.entry, text: $0.text, status: nil, returnBps: nil) }
+        (feed?.calls ?? []).map { Item(postId: $0.postId, caller: $0.caller, asset: $0.asset, short: $0.direction == "down", postedAt: $0.postedAt, deadline: $0.deadline, entry: $0.entry, text: $0.text, status: nil, returnBps: nil, arkivKey: $0.key) }
     }
     private var settledItems: [Item] {
-        (feed?.results ?? []).map { Item(postId: $0.postId, caller: $0.caller, asset: $0.asset, short: $0.direction == "down", postedAt: $0.postedAt, deadline: nil, entry: nil, text: $0.text, status: $0.status, returnBps: $0.returnBps) }
+        (feed?.results ?? []).map { Item(postId: $0.postId, caller: $0.caller, asset: $0.asset, short: $0.direction == "down", postedAt: $0.postedAt, deadline: nil, entry: nil, text: $0.text, status: $0.status, returnBps: $0.returnBps, arkivKey: $0.key) }
     }
     private func mine(_ items: [Item]) -> [Item] {
         items.filter { follows.contains($0.caller.lowercased()) && (selectedCaller == nil || $0.caller.lowercased() == selectedCaller) }
@@ -649,7 +684,10 @@ final class KeyboardModel: ObservableObject {
     func loadOrders() async {
         if wallet?.address == nil { await load() }
         guard let address = wallet?.address else { ordersFailed = orders == nil; return }
-        if let fresh = await Kallr.orders(funder: address) {
+        // History is Flash's orders joined with their Arkiv trade records (the record's key, the call).
+        var fresh = await Kallr.history(wallets: [address])
+        if fresh == nil { fresh = await Kallr.orders(funder: address) }
+        if let fresh {
             orders = fresh
             ordersFailed = false
         } else if orders == nil {
@@ -959,6 +997,11 @@ private struct PostView: View {
                     .font(.system(size: 14, weight: .semibold)).foregroundStyle(move >= 0 ? Kallr.up : Kallr.danger)
                     .padding(.horizontal, 14).padding(.bottom, 6)
             }
+            if let key = item.arkivKey, let url = Kallr.arkivURL(key) {
+                ArkivLink(key: key, label: item.status == nil ? "Call recorded on Arkiv" : "Result recorded on Arkiv") { model.openLink(url) }
+                    .padding(.horizontal, 14).padding(.bottom, 8)
+            }
+            if let note = model.linkNote { Text(note).font(.system(size: 12)).foregroundStyle(Kallr.muted).padding(.horizontal, 14).padding(.bottom, 6) }
             Button { if tradable { model.trade(item) } } label: {
                 Text(buttonTitle).font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(tradable ? Kallr.black : Kallr.muted)
@@ -1040,6 +1083,7 @@ private struct FollowingList: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 14)
+                FollowedChips(model: model)
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         let items = model.visibleItems
@@ -1166,6 +1210,7 @@ private struct CallCard: View {
                     Text(item.demo ? "Tap to read, then swap" : Kallr.left(item.deadline)).foregroundStyle(Kallr.muted)
                 }
                 Spacer(minLength: 0)
+                if let key = item.arkivKey { ArkivTag(key: key) }
                 Text("Read ›").foregroundStyle(Kallr.muted)
             }
             .font(.system(size: 14, weight: .semibold))
@@ -1174,6 +1219,67 @@ private struct CallCard: View {
         .contentShape(Rectangle())
         .onTapGesture { model.tap(); model.opened = item }
         .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline.opacity(0.6)).frame(height: 1) }
+    }
+}
+
+/** A call's Arkiv record in a list: a seal and the short hash. */
+private struct ArkivTag: View {
+    let key: String
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "checkmark.seal.fill").font(.system(size: 11))
+            Text(Kallr.shortHash(key)).font(.system(size: 12, weight: .semibold).monospaced())
+        }
+        .foregroundStyle(Kallr.muted)
+        .accessibilityLabel("Recorded on Arkiv")
+    }
+}
+
+/** A record on Arkiv, tappable: what it is, its short hash, and an arrow out to the explorer. */
+private struct ArkivLink: View {
+    let key: String
+    let label: String
+    let open: () -> Void
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.seal.fill").foregroundStyle(Kallr.lime)
+                Text(label).foregroundStyle(Kallr.bone).lineLimit(1)
+                Spacer(minLength: 4)
+                Text(Kallr.shortHash(key)).font(.system(size: 13, weight: .semibold).monospaced()).foregroundStyle(Kallr.muted)
+                Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .bold)).foregroundStyle(Kallr.muted)
+            }
+            .font(.system(size: 13, weight: .semibold))
+            .padding(.horizontal, 12).frame(minHeight: 40)
+            .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(Press())
+    }
+}
+
+/** Who you follow, each with their record. Tap one to see only their calls; tap again for everyone. */
+private struct FollowedChips: View {
+    @ObservedObject var model: KeyboardModel
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(model.followed) { c in
+                    let on = model.selectedCaller == c.handle
+                    Button { model.tap(); model.selectedCaller = on ? nil : c.handle } label: {
+                        HStack(spacing: 4) {
+                            Text("@\(c.handle)").font(.system(size: 12, weight: .bold))
+                            if let r = c.record { Text(r).font(.system(size: 11, weight: .semibold).monospacedDigit()).opacity(0.65) }
+                        }
+                        .foregroundStyle(on ? Kallr.black : Kallr.bone)
+                        .padding(.horizontal, 10).frame(height: 28)
+                        .background(on ? Kallr.lime : Kallr.keyDark, in: Capsule())
+                    }
+                    .buttonStyle(Press())
+                }
+            }
+            .padding(.horizontal, 14)
+        }
+        .padding(.bottom, 2)
     }
 }
 
@@ -1737,6 +1843,13 @@ private struct DoneCard: View {
             Text(model.fillTx.map { "Filled on Base · \($0.prefix(6))…\($0.suffix(4))" } ?? "\(placed.preview.title) · Definitive Flash")
                 .font(TradeFont.body).foregroundStyle(Kallr.muted).lineLimit(1).minimumScaleFactor(0.8)
                 .padding(.top, 4)
+            if let key = model.doneArkivKey, let url = Kallr.arkivURL(key) {
+                ArkivLink(key: key, label: "Trade recorded on Arkiv") { model.openLink(url) }
+                    .padding(.horizontal, 24).padding(.top, 10)
+            } else if !model.doneArkivGaveUp, placed.orderId != nil {
+                Text("Recording the trade on Arkiv…").font(.system(size: 13, weight: .semibold)).foregroundStyle(Kallr.muted).padding(.top, 10)
+            }
+            if let note = model.linkNote { Text(note).font(.system(size: 12)).foregroundStyle(Kallr.muted).padding(.top, 4) }
             Spacer(minLength: 0)
             HStack(spacing: 8) {
                 Button { model.shareReceipt() } label: {
@@ -2124,6 +2237,10 @@ private struct OrderRow: View {
                 }
                 .buttonStyle(Press())
             }
+            if order.arkivKey != nil {
+                Image(systemName: "checkmark.seal.fill").font(.system(size: 14)).foregroundStyle(Kallr.lime)
+                    .accessibilityLabel("Recorded on Arkiv")
+            }
             Text(order.statusLabel).font(.system(size: 10, weight: .heavy))
                 .foregroundStyle(order.open ? Kallr.black : order.statusLabel == "FILLED" ? Kallr.lime : Kallr.muted)
                 .padding(.horizontal, 8).frame(height: 22)
@@ -2145,7 +2262,7 @@ private struct OrderDetail: View {
     private var fills: Kallr.Fills? { model.fills[order.orderId] }
     private var tx: String? { fills?.transaction }
     private var txURL: URL? { tx.flatMap { URL(string: "https://basescan.org/tx/\($0)") } }
-    private var arkivURL: URL? { order.arkivKey.flatMap { URL(string: "https://rabdi.explorer.arkiv.network/entity/\($0)") } }
+    private var arkivURL: URL? { order.arkivKey.flatMap(Kallr.arkivURL) }
 
     private func num(_ s: String?) -> Double? { s.flatMap(Double.init) }
     private func amount(_ v: Double) -> String { v.formatted(.number.precision(.significantDigits(1...6))) }
@@ -2207,6 +2324,7 @@ private struct OrderDetail: View {
                         if let caller = order.caller ?? model.caller(of: order.orderId) { row("Copied", "@\(caller)'s call") }
                         if let exits = order.exits { row("Exits", exits) }
                         row("Transaction", tx.map { "\($0.prefix(10))…\($0.suffix(6))" } ?? (order.open ? "When it fills" : "Reading…"))
+                        row("Arkiv record", order.arkivKey.map(Kallr.shortHash) ?? "Not recorded")
                     }
                     .padding(.horizontal, 10)
                     .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 12))
@@ -2228,7 +2346,7 @@ private struct OrderDetail: View {
                         }
                         .buttonStyle(Press())
                     }
-                    if let note = model.ordersNote { Text(note).font(.system(size: 11)).foregroundStyle(Kallr.muted) }
+                    if let note = model.linkNote ?? model.ordersNote { Text(note).font(.system(size: 11)).foregroundStyle(Kallr.muted) }
                     PoweredByDefinitive(height: 8, suffix: "Flash on Base").padding(.vertical, 4)
                 }
                 .padding(.horizontal, 10)

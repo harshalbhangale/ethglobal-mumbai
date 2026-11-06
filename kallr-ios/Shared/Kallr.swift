@@ -220,11 +220,11 @@ enum Kallr {
 
     // MARK: Calls feed (Arkiv, read by the server)
 
-    struct FeedCall: Codable { let postId: String; let caller: String; let asset: String; let direction: String; let postedAt: Double?; let deadline: Double?; let entry: Double?; let text: String? }
-    struct FeedResult: Codable { let postId: String; let caller: String; let asset: String; let direction: String?; let status: String; let returnBps: Int?; let postedAt: Double?; let text: String? }
+    struct FeedCall: Codable { let postId: String; let caller: String; let asset: String; let direction: String; let postedAt: Double?; let deadline: Double?; let entry: Double?; let text: String?; let key: String? }
+    struct FeedResult: Codable { let postId: String; let caller: String; let asset: String; let direction: String?; let status: String; let returnBps: Int?; let postedAt: Double?; let text: String?; let key: String? }
     /** A caller Kall Markets tracks or has priced, with their record. */
     struct FeedCaller: Codable { let handle: String; let focus: String?; let tracked: Bool; let open: Int; let settled: Int; let hits: Int; let hitRate: Double? }
-    struct FeedTrade: Codable { let flashOrderId: String; let caller: String? }
+    struct FeedTrade: Codable { let flashOrderId: String; let caller: String?; let key: String? }
     struct Feed: Codable {
         let following: [String]
         let prices: [String: Double?]
@@ -235,6 +235,11 @@ enum Kallr {
     }
 
     static func feed() async -> Feed? { await get("api/keyboard/feed") }
+
+    /** A record's page on Arkiv's Rabdi explorer: a call, its result or a trade. */
+    static func arkivURL(_ key: String) -> URL? { URL(string: "https://rabdi.explorer.arkiv.network/entity/\(key)") }
+    /** 0x4b9d…0ed1: a hash short enough for one line. */
+    static func shortHash(_ h: String) -> String { h.count > 14 ? "\(h.prefix(6))…\(h.suffix(4))" : h }
 
     // MARK: The Kall keyboard wallet
 
