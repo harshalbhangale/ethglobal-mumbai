@@ -35,7 +35,8 @@ Code: [`kall-cre/check-coin/main.ts`](../kall-cre/check-coin/main.ts), the decis
   nodes take the median (`consensusMedianAggregation`).
 - Hit, miss or flat, with the return in basis points, goes to the same contract.
 
-Anyone can read the score at `/api/cre/call/<postId>` or straight from the contract.
+Status: built and runnable in the simulator, but it hasn't written a score on chain yet (the contract has 0
+`CallScored` events). Once it runs, the score is readable at `/api/cre/call/<postId>` or from the contract.
 
 Code: [`kall-cre/score-calls/main.ts`](../kall-cre/score-calls/main.ts).
 
@@ -66,9 +67,9 @@ signs through the forwarder and writes to Base Sepolia for real. So:
 - The verdicts on chain are real and signed, but they were produced on our machine, not by a DON.
 - The live site can only read verdicts. A coin nobody has checked shows as "not checked yet". A fresh check needs
   `CRE_LOCAL=1` and the `cre` CLI on the server, which is how we run the demo locally.
-- Scoring runs only while someone runs the `score-calls` simulator. Nothing scores calls by itself in production yet.
-- The hit or miss you see in the apps is Kall's own scoring on Arkiv (Chainlink feed prices, daily cron). The CRE
-  score is a second, signed answer you can read from the API or the contract; no screen shows it yet.
+- `score-calls` has never written a score on chain. The hit or miss you see in the apps is Kall's own scoring on
+  Arkiv, priced by the Chainlink feeds on Base (daily cron). Don't say any call was "scored by Chainlink CRE".
+- So far the contract holds 4 coin checks (two $TOSHI, two $DEGEN) and no call scores.
 
 If you write about it: "computed by a CRE workflow and signed on Base Sepolia", not "running on Chainlink's network".
 
