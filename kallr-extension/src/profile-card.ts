@@ -7,7 +7,8 @@ import { tokenIcon } from "./logos";
 export const PROFILE_CARD_CSS = `
 :host { all: initial; }
 .pc { --fg: #0f1419; --mute: #536471; --line: #e6e9ec; --up: #00a86b; --down: #e5484d; --lime: #c6f25a;
-  margin: 10px 0 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; color: var(--fg);
+  /* 16px in from the column, like X's own profile text, so its edges line up with the bio. */
+  margin: 4px 16px 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; color: var(--fg);
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 :host([data-theme="dark"]) .pc { --fg: #e7e9ea; --mute: #8b98a5; --line: #2f3336; }
 .pc-head { display: flex; align-items: center; gap: 8px; }
