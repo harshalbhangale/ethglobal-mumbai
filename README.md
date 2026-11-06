@@ -37,6 +37,18 @@ Built at ETHGlobal Mumbai 2026. Not financial advice.
 
 ## How it works
 
+### Start to finish
+
+<p align="center"><img src="docs/flow.svg" alt="One call and one trade, start to finish: the caller posts, Kall reads and checks it, prices it with Chainlink and writes it to Arkiv; you trade through Definitive Flash, sign in your wallet, it fills on Base and the trade goes to Arkiv; when the call's time ends it is scored and the result goes to Arkiv." /></p>
+
+**A · The call is posted.** The extension sees it on X (or you copy it into the keyboard). The server's AI decides it's a real call and which way, checks the coin isn't a fake contract, reads the Chainlink price for the entry, and writes the call to Arkiv. You see the caller's record before you trade.
+
+**B · You trade it.** Kall asks Definitive Flash for a quote, you see what you get, the impact and the fee, then approve and sign in your own wallet. Flash routes the order across Base's venues and fills it; Kall writes the trade to Arkiv and shows you the Basescan receipt, read privately over Nym through Anon-RPC.
+
+**C · The call is scored.** When the call's time is up, the server reads the price again, marks it a hit or a miss with its real return, and writes the result to Arkiv. The caller's record updates for everyone.
+
+### The pieces
+
 <p align="center"><img src="docs/architecture.svg" alt="Kall Markets architecture: the extension, keyboard and web app talk to one server, which trades through Definitive Flash, keeps receipts on Arkiv and reads Base privately through Anon-RPC." /></p>
 
 Three apps, one server, three rails:
