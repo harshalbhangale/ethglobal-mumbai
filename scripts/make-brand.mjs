@@ -69,6 +69,36 @@ const ext = `${REPO}/kallr-extension/public`;
 for (const s of [16, 32, 48, 128]) await out(`${ext}/icons/icon-${s}.png`, await tile(s, { frac: s <= 16 ? 0.84 : s <= 32 ? 0.78 : 0.7, radius: 0.22 }));
 await out(`${ext}/brand/mark.png`, await markAt(128));
 
+// Android keyboard: legacy and round launcher icons, plus an adaptive-icon foreground (108dp canvas,
+// mark inside the 66dp safe zone) on a black background, for every build variant.
+const res = `${REPO}/kallr-keyboard/app/src/main/res`;
+const dens = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
+const fgAt = async (px) => {
+  const m = Math.round(px * 0.5);
+  const o = Math.round((px - m) / 2);
+  const clear = { create: { width: px, height: px, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } };
+  return sharp(clear).composite([{ input: await markAt(m), left: o, top: o }]).png({ compressionLevel: 9 }).toBuffer();
+};
+for (const v of ["stable", "beta", "debug"]) {
+  for (const [d, k] of Object.entries(dens)) {
+    await out(`${res}/mipmap-${d}/ic_app_icon_${v}.png`, await tile(48 * k, { frac: 0.62, radius: 0.18 }));
+    await out(`${res}/mipmap-${d}/ic_app_icon_${v}_round.png`, await tile(48 * k, { frac: 0.58, radius: 0.5 }));
+    await out(`${res}/mipmap-${d}/ic_app_icon_${v}_fg.png`, await fgAt(108 * k));
+  }
+  for (const round of ["", "_round"]) {
+    await writeFile(
+      `${res}/mipmap-anydpi-v26/ic_app_icon_${v}${round}.xml`,
+      `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_app_icon_background"/>
+    <foreground android:drawable="@mipmap/ic_app_icon_${v}_fg"/>
+    <monochrome android:drawable="@mipmap/ic_app_icon_${v}_fg"/>
+</adaptive-icon>
+`,
+    );
+  }
+}
+
 // Share card (Open Graph / X), 1200×630.
 {
 const W = 1200, H = 630;

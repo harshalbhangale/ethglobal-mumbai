@@ -1,3 +1,5 @@
+<img src="Kallr/Assets.xcassets/AppIcon.appiconset/icon-1024.png" width="72" height="72" alt="Kall Keyboard icon" />
+
 # Kall Keyboard for iPhone
 
 A small app plus the Kall Keyboard extension, in Kall Markets black and lime. The keyboard types like the

@@ -1,8 +1,10 @@
-<p align="center"><img src="kallr-webapp/public/icons/icon-512.png" width="96" height="96" alt="Kall Markets logo" /></p>
+<p align="center"><img src="docs/brand/cover/kall-markets-cover.png" alt="Kall Markets: Don't trust. Check the caller. Trade it. Powered by Definitive." /></p>
 
-# Kall Markets
+# <img src="kallr-webapp/public/icons/icon-512.png" width="36" height="36" align="top" alt="" /> Kall Markets
 
-**Check the receipts. Trade where the conversation happens.**
+**Don't trust. Check the caller. Trade it.**
+
+[Web app](https://kallr.vercel.app) · Kall Extension (Chrome, on X) · Kall Keyboard (Android and iOS) · Trades by [Definitive Flash](https://definitive.fi) on Base
 
 ## The problem
 
