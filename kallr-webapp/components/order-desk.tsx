@@ -8,9 +8,11 @@ import {
 import type { ConnectedWallet } from "@privy-io/react-auth";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getUsdPrice, hasUsdFeed, type PricedAsset } from "@/lib/chain";
-import { listFlashOrders, type OrderContext, type PlaceStep, placeFlashOrder, stepLabel } from "@/lib/flash-client";
+import { shortOrderId } from "@kallr/domain/flash-receipt";
+import { fillTransaction, listFlashOrders, type OrderContext, placeFlashOrder, receiptEvents } from "@/lib/flash-client";
 import { toFlashOrder } from "@/lib/flash-order";
 import type { TradeItem } from "@/lib/feed";
+import { FlashReceiptView, useFillWatch, useFlashReceipt } from "./flash-receipt";
 import { describeOrder, type ExitPrices, exitPrices, type ParsedOrder, parseOrder } from "@kallr/domain/order";
 
 const usd = (n: number) =>
@@ -60,7 +62,7 @@ export function useFlashOrders(funder: string | null) {
 
 const examples = ["copy $2 of ETH, TP 10%, SL 5%", "buy $5 of BTC at 75,000 tp 8% sl 4%", "sell $3 of ETH"];
 
-type Status = { kind: "idle" } | { kind: "working"; step: PlaceStep } | { kind: "done"; orderId: string } | { kind: "error"; message: string };
+type Status = { kind: "idle" } | { kind: "working" } | { kind: "done"; orderId: string } | { kind: "error"; message: string };
 
 export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | null; onPlaced: () => void }) {
   const [text, setText] = useState("");
@@ -68,6 +70,9 @@ export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | 
   const [via, setVia] = useState<OrderContext["source"]>("desk");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const prices = useUsdPrices();
+  const flashReceipt = useFlashReceipt(wallet && wallet.walletClientType !== "privy" ? "your wallet" : "your Kall wallet");
+  const [watched, setWatched] = useState<{ funder: string; side: "buy" | "sell"; symbol: string } | null>(null);
+  useFillWatch(flashReceipt.receipt, flashReceipt.emit, watched);
 
   // Links from the @Kallr bot open the desk with the copied order filled in:
   // /app?order=copy+$2+of+BTC+tp+10%+sl+5%&post=123&caller=kol
@@ -121,16 +126,24 @@ export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | 
         onSubmit={async (e) => {
           e.preventDefault();
           if (!flash?.ok || !wallet || busy) return;
+          const input = flash.input;
+          const side = order?.side ?? "buy";
+          flashReceipt.begin();
+          setWatched({ funder: wallet.address, side, symbol: side === "buy" ? (order?.asset === "BTC" ? "cbBTC" : "WETH") : "USDC" });
+          setStatus({ kind: "working" });
           try {
-            const res = await placeFlashOrder(flash.input, wallet, (step) => setStatus({ kind: "working", step }), {
+            const res = await placeFlashOrder(input, wallet, (step, info) => flashReceipt.emit(...receiptEvents(step, info, side)), {
               source: via,
               caller: source?.caller ?? null,
             });
+            flashReceipt.emit({ type: "sent", orderId: res.orderId, resting: input.orderType !== "market" });
             setStatus({ kind: "done", orderId: res.orderId });
             setText("");
             onPlaced();
           } catch (err) {
-            setStatus({ kind: "error", message: friendlyError(err) });
+            const message = friendlyError(err);
+            flashReceipt.emit({ type: "failed", message });
+            setStatus({ kind: "error", message });
           }
         }}
       >
@@ -180,13 +193,8 @@ export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | 
       {flash && !flash.ok && <p className="mt-3 text-sm text-down">{flash.error}</p>}
       {!wallet && order && <p className="mt-3 text-sm text-slate">Your wallet is still loading.</p>}
 
-      <div aria-live="polite" className="mt-3 text-sm">
-        {status.kind === "working" && <p className="text-ink">{stepLabel[status.step]}</p>}
-        {status.kind === "done" && (
-          <p className="text-up">Order placed on Base. It shows under Open orders with its exits.</p>
-        )}
-        {status.kind === "error" && <p className="text-down">{status.message}</p>}
-      </div>
+      {/* The receipt replaces the one-line status: it stays after the trade with each Flash step. */}
+      {flashReceipt.receipt && <FlashReceiptView receipt={flashReceipt.receipt} className="mt-4" />}
     </section>
   );
 }
@@ -281,10 +289,13 @@ export function OpenOrders({
   orders,
   error,
   history,
+  funder,
 }: {
   orders: FlashOrder[] | null;
   error: string | null;
   history?: { trades: TradeItem[]; explorer: string; loading: boolean };
+  /** The wallet that placed these orders: Flash needs it to look up a fill's transaction. */
+  funder?: string | null;
 }) {
   const open = orders?.filter((o) => OPEN_STATUSES.includes(o.status) || o.attachedBracket?.status === "active") ?? [];
   const closed = orders?.filter((o) => !open.includes(o)) ?? [];
@@ -330,7 +341,7 @@ export function OpenOrders({
           ) : (tab === "open" ? open : closed).length === 0 ? (
             <Placeholder text={tab === "open" ? "Nothing open. Limit orders and armed take-profit / stop-loss exits wait here until they fill." : "Filled, cancelled and expired orders show up here."} />
           ) : (
-            <OrderTable orders={tab === "open" ? open : closed} />
+            <OrderTable orders={tab === "open" ? open : closed} funder={funder ?? null} />
           ))}
 
         {tab === "trades" &&
@@ -362,7 +373,7 @@ function Placeholder({ text }: { text: string }) {
 
 const HEAD = "grid grid-cols-[1.1fr_0.8fr_0.7fr_1fr_0.9fr_20px] items-center gap-3";
 
-function OrderTable({ orders }: { orders: FlashOrder[] }) {
+function OrderTable({ orders, funder }: { orders: FlashOrder[]; funder: string | null }) {
   return (
     <div>
       <div className={`${HEAD} border-b border-rule px-4 py-2 text-xs text-slate`}>
@@ -375,15 +386,32 @@ function OrderTable({ orders }: { orders: FlashOrder[] }) {
       </div>
       <ul className="divide-y divide-rule">
         {orders.map((o) => (
-          <OrderRow key={o.orderId} o={o} />
+          <OrderRow key={o.orderId} o={o} funder={funder} />
         ))}
       </ul>
     </div>
   );
 }
 
-function OrderRow({ o }: { o: FlashOrder }) {
+function OrderRow({ o, funder }: { o: FlashOrder; funder: string | null }) {
   const [open, setOpen] = useState(false);
+  const isFilled = o.status === "ORDER_STATUS_FILLED" || o.status === "ORDER_STATUS_PARTIALLY_FILLED";
+  /** The fill's swap on Base: looked up when a filled row is opened. Undefined until asked. */
+  const [tx, setTx] = useState<string | null | undefined>(undefined);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!open || !isFilled || !funder || tx !== undefined) return;
+    let alive = true;
+    void fillTransaction(o.orderId, funder).then((hash) => alive && setTx(hash));
+    return () => {
+      alive = false;
+    };
+  }, [open, isFilled, funder, o.orderId, tx]);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(t);
+  }, [copied]);
   const symbol = symbolOf(o.targetAsset);
   const f = filledOf(o);
   const tp = num(o.attachedBracket?.takeProfit?.notionalPrice);
@@ -406,8 +434,21 @@ function OrderRow({ o }: { o: FlashOrder }) {
         </span>
       </button>
       {open && (
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 bg-paper/50 px-4 py-3 text-sm sm:grid-cols-3">
-          <Detail k="Order ID" v={`${o.orderId.slice(0, 10)}…`} />
+        <div className="space-y-3 bg-paper/50 px-4 py-3 text-sm">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
+          <div className="min-w-0">
+            <dt className="text-xs text-slate">Flash order ID</dt>
+            <dd className="flex items-center gap-2 font-mono font-semibold">
+              <span className="truncate" title={o.orderId}>{shortOrderId(o.orderId)}</span>
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText(o.orderId).then(() => setCopied(true), () => {})}
+                className="shrink-0 rounded border border-rule px-1.5 font-sans text-[11px] font-semibold text-slate hover:border-lime hover:text-lime"
+              >
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </dd>
+          </div>
           <Detail k="Avg fill price" v={avg ? usd(avg) : "—"} />
           <Detail k="Received" v={f?.targetAmount ? `${Number(f.targetAmount).toLocaleString("en-US", { maximumSignificantDigits: 6 })} ${symbol}` : "—"} />
           {o.limitCrossPrice && <Detail k="Limit price" v={usd(Number(o.limitCrossPrice))} />}
@@ -417,6 +458,18 @@ function OrderRow({ o }: { o: FlashOrder }) {
           {o.closeReason && <Detail k="Closed because" v={o.closeReason.replace(/_/g, " ").toLowerCase()} />}
           <Detail k="Route" v="Definitive Flash · Base" />
         </dl>
+        {isFilled && funder && (
+          <p className="text-xs">
+            {tx ? (
+              <a href={`https://basescan.org/tx/${tx}`} target="_blank" rel="noreferrer" className="inline-block rounded-md border border-rule px-3 py-1.5 font-semibold hover:border-lime hover:text-lime">
+                View swap on Basescan ↗
+              </a>
+            ) : (
+              <span className="text-slate">{tx === null ? "No swap transaction reported by Flash yet." : "Finding the swap on Base…"}</span>
+            )}
+          </p>
+        )}
+        </div>
       )}
     </li>
   );

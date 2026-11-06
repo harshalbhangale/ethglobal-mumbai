@@ -3,6 +3,7 @@
 import type { FlashOrder, FlashOrderInput, FlashQuote, FlashSignatures } from "@kallr/integrations/definitive";
 import type { ConnectedWallet } from "@privy-io/react-auth";
 import type { Hex } from "viem";
+import { closedWithoutFill, fillFrom, type ReceiptEvent, receiptQuote } from "@kallr/domain/flash-receipt";
 import { publicClient } from "./chain";
 import { parseTypedData } from "./typed-data";
 
@@ -42,6 +43,20 @@ export async function quoteFlashOrder(order: FlashOrderInput) {
 /** Which surface sent the user to the desk, and whose call they copied. Recorded on Arkiv. */
 export type OrderContext = { source: "desk" | "extension" | "keyboard"; caller?: string | null };
 
+/** What each step after the quote knows: Flash's quote and the wallet signing it. */
+export type StepInfo = { quote: FlashQuote; from: string };
+
+/**
+ * A placement step as Flash receipt events: the quote row completes on the first step after it,
+ * the signing row shows what is being signed, and submitting means the signature is done.
+ */
+export function receiptEvents(step: PlaceStep, info: StepInfo | undefined, side: "buy" | "sell"): ReceiptEvent[] {
+  if (step === "quoting") return [{ type: "quoting" }];
+  const quoted: ReceiptEvent[] = info ? [{ type: "quoted", quote: receiptQuote(info.quote, side) }] : [];
+  if (step === "submitting") return [...quoted, ...(info ? [{ type: "signed", wallet: info.from } as const] : []), { type: "sending" }];
+  return [...quoted, { type: "signing", wallet: info?.from ?? null, note: stepLabel[step] }];
+}
+
 /** What a placed order leaves to verify: the order, the wallet and the EIP-712 signature over what it signed. */
 export type Placed = {
   orderId: string;
@@ -59,15 +74,17 @@ export type Placed = {
 export async function placeFlashOrder(
   order: FlashOrderInput,
   wallet: ConnectedWallet,
-  onStep: (step: PlaceStep) => void,
+  report: (step: PlaceStep, info?: StepInfo) => void,
   context: OrderContext = { source: "desk" },
 ): Promise<Placed> {
-  onStep("quoting");
+  report("quoting");
   const { quote } = await quoteFlashOrder(order);
+  const from = wallet.address;
+  // Every later step carries the quote and the signing wallet, for the Flash receipt.
+  const onStep = (step: PlaceStep) => report(step, { quote, from });
 
   await wallet.switchChain(8453);
   const provider = (await wallet.getEthereumProvider()) as Eip1193;
-  const from = wallet.address;
 
   if (quote.evm.approveTx) {
     onStep("approving");
@@ -123,6 +140,36 @@ export async function fillTransaction(orderId: string, funder: string): Promise<
   if (!res?.ok) return null;
   const body = (await res.json().catch(() => null)) as { fills?: Array<{ transactionId: string | null }> } | null;
   return body?.fills?.find((f) => f.transactionId && /^0x[0-9a-fA-F]{64}$/.test(f.transactionId))?.transactionId ?? null;
+}
+
+/** One poll of an order: its fill (swap hash and amount received), or that it closed without one. */
+export async function orderFill(orderId: string, funder: string, side: "buy" | "sell") {
+  const res = await fetch(`/api/flash/orders/${orderId}?funder=${funder}`).catch(() => null);
+  if (!res?.ok) return { fill: null, closed: false };
+  const body = (await res.json().catch(() => null)) as Parameters<typeof fillFrom>[0];
+  return { fill: fillFrom(body, side), closed: closedWithoutFill(body?.status) };
+}
+
+/**
+ * Polls Flash until the order fills, feeding the receipt: "slow" after ~45s, "failed" if Flash closes
+ * it unfilled. A resting order (limit, TWAP) is polled more slowly for up to ~10 minutes.
+ */
+export async function watchFill(
+  o: { orderId: string; funder: string; side: "buy" | "sell"; symbol: string; resting: boolean },
+  emit: (e: ReceiptEvent) => void,
+  alive: () => boolean,
+) {
+  const every = o.resting ? 10_000 : 3_000;
+  const tries = o.resting ? 60 : 40;
+  for (let i = 0; i < tries && alive(); i++) {
+    const { fill, closed } = await orderFill(o.orderId, o.funder, o.side);
+    if (!alive()) return;
+    if (fill) return emit({ type: "filled", tx: fill.tx, received: fill.received, symbol: o.symbol });
+    if (closed) return emit({ type: "failed", message: "Definitive closed the order without filling it." });
+    if (i === 15 && !o.resting) emit({ type: "slow" });
+    await new Promise((r) => setTimeout(r, every));
+  }
+  if (alive() && !o.resting) emit({ type: "slow" });
 }
 
 /** The order's Arkiv trade record, once the server has written it. */

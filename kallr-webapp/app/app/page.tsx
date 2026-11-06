@@ -197,7 +197,7 @@ function Terminal({ session }: { session: Session }) {
             <h1 className="font-display text-2xl font-semibold">Orders</h1>
             <p className="mb-4 text-sm text-slate">Every order is a Definitive Flash order on Base; every trade is recorded on Arkiv.</p>
             {signedIn ? (
-              <OpenOrders orders={flashOrders.orders} error={flashOrders.error} history={{ trades: data.trades, explorer: data.explorer, loading: data.loading }} />
+              <OpenOrders orders={flashOrders.orders} error={flashOrders.error} funder={signedIn ? session.address : null} history={{ trades: data.trades, explorer: data.explorer, loading: data.loading }} />
             ) : (
               <SignInCard what="see your orders" />
             )}

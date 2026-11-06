@@ -275,6 +275,8 @@ export const flashOrderDetailSchema = z
   .passthrough()
   .transform((d) => ({
     status: d.order?.status ?? d.status ?? null,
+    /** Amounts filled so far (target = the token, contra = USDC), when Flash reports them. */
+    filled: d.order?.filled && typeof d.order.filled === "object" ? { targetAmount: d.order.filled.targetAmount ?? null, contraAmount: d.order.filled.contraAmount ?? null } : null,
     fills: (d.fills ?? []).map((f) => ({
       transactionId: f.transactionId ?? null,
       venues: f.venues ?? [],

@@ -4,14 +4,15 @@ import { type ExitPrices, type ParsedOrder, exitPrices, parseOrder } from "@kall
 import type { FlashOrderInput } from "@kallr/integrations/definitive";
 import type { ConnectedWallet } from "@privy-io/react-auth";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { arkivRecord, fillTransaction, type OrderContext, type Placed, type PlaceStep, placeFlashOrder, signer } from "@/lib/flash-client";
+import { arkivRecord, type OrderContext, type Placed, type PlaceStep, placeFlashOrder, receiptEvents, signer } from "@/lib/flash-client";
 import { toDecimal, toFlashOrder } from "@/lib/flash-order";
+import { FlashReceiptView, useFillWatch, useFlashReceipt } from "./flash-receipt";
 import { useUsdPrices } from "./order-desk";
 
 /**
  * The desk's trade ticket: pick everything with buttons (asset, side, amount, market or limit,
- * take-profit / stop-loss), with a sticky order summary holding the button, a step tracker and the
- * result, so nothing happens off screen. Links from the extension, keyboard and @Kallr bot
+ * take-profit / stop-loss), with a sticky order summary holding the button, the Definitive Flash
+ * receipt (quote, signature, order ID, fill) and the result, so nothing happens off screen. Links from the extension, keyboard and @Kallr bot
  * (/app?order=…) and copied calls open it prefilled.
  */
 
@@ -25,15 +26,6 @@ export const SLS = [3, 5, 10, 20];
 const MIN_USD = 0.5;
 
 const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: n < 10 ? 4 : 2 })}`;
-
-const STEPS: Array<{ step: PlaceStep; label: string; optional?: boolean }> = [
-  { step: "quoting", label: "Get a Flash quote" },
-  { step: "approving", label: "Approve USDC (sized to this order)", optional: true },
-  { step: "approving-exits", label: "Approve the TP/SL exit", optional: true },
-  { step: "signing", label: "Sign the order" },
-  { step: "signing-exits", label: "Sign the TP/SL", optional: true },
-  { step: "submitting", label: "Place on Base" },
-];
 
 type Run =
   | { kind: "idle" }
@@ -83,6 +75,11 @@ export function TradeTicket({
   const [source, setSource] = useState<{ postId: string; caller: string | null } | null>(null);
   const [via, setVia] = useState<OrderContext["source"]>("desk");
   const [run, setRun] = useState<Run>({ kind: "idle" });
+  // The Kall wallet is Privy's embedded wallet; anything else is a wallet the user connected.
+  const flashReceipt = useFlashReceipt(wallet && wallet.walletClientType !== "privy" ? "your wallet" : "your Kall wallet");
+  /** The placed order the receipt watches for a fill: set when it's sent. */
+  const [watched, setWatched] = useState<{ funder: string; side: "buy" | "sell"; symbol: string } | null>(null);
+  useFillWatch(flashReceipt.receipt, flashReceipt.emit, watched);
   const summaryRef = useRef<HTMLDivElement>(null);
 
   /** Fill the form from a copied call or a link. Returns an error, or null when applied. */
@@ -134,6 +131,7 @@ export function TradeTicket({
     setLinkError(apply(prefill.order));
     setSource({ postId: prefill.postId, caller: prefill.caller });
     setRun({ kind: "idle" });
+    flashReceipt.reset();
     // apply only sets form state; nonce re-runs it for the same call.
   }, [prefill?.nonce]);
 
@@ -190,26 +188,30 @@ export function TradeTicket({
       kind === "limit" && limitPrice
         ? `Limit ${side} placed: ${usd(amountUsd)} of ${symbol} at ${usd(limitPrice)}`
         : `${side === "buy" ? "Bought" : "Sold"} ${usd(amountUsd)} of ${symbol}`;
+    const input = flash.input;
+    flashReceipt.begin();
+    setWatched({ funder: wallet.address, side, symbol: side === "buy" ? (custom ? custom.symbol : asset === "ETH" ? "WETH" : "cbBTC") : "USDC" });
     try {
       const res = await placeFlashOrder(
-        flash.input,
+        input,
         wallet,
-        (step) => {
+        (step, info) => {
           at = step;
           if (!seen.includes(step)) seen.push(step);
           setRun({ kind: "working", step, seen: [...seen] });
+          flashReceipt.emit(...receiptEvents(step, info, side));
         },
         { source: via, caller: source?.caller ?? null },
       );
+      flashReceipt.emit({ type: "sent", orderId: res.orderId, resting: input.orderType !== "market" });
       setRun({ kind: "done", placed: res, seen: [...seen], summary });
       onPlaced();
     } catch (err) {
-      setRun({ kind: "error", message: friendlyError(err), seen: [...seen], at });
+      const message = friendlyError(err);
+      flashReceipt.emit({ type: "failed", message });
+      setRun({ kind: "error", message, seen: [...seen], at });
     }
   }
-
-  const seen = run.kind === "idle" ? [] : run.seen;
-  const visibleSteps = STEPS.filter((s) => !s.optional || seen.includes(s.step));
 
   return (
     <div className="space-y-4">
@@ -386,34 +388,20 @@ export function TradeTicket({
               </>
             ) : null}
 
-            {run.kind !== "idle" && (
-              <ol className="space-y-2 rounded-lg bg-paper p-3 text-sm" aria-live="polite">
-                {visibleSteps.map((s) => {
-                  const idx = visibleSteps.findIndex((v) => v.step === s.step);
-                  const currentStep = run.kind === "working" ? run.step : run.kind === "error" ? run.at : null;
-                  const currentIdx = currentStep ? visibleSteps.findIndex((v) => v.step === currentStep) : visibleSteps.length;
-                  const state = run.kind === "done" || idx < currentIdx ? "done" : idx === currentIdx ? (run.kind === "error" ? "failed" : "active") : "todo";
-                  return (
-                    <li key={s.step} className={`flex items-center gap-3 ${state === "todo" ? "text-slate" : state === "failed" ? "font-semibold text-down" : state === "active" ? "font-semibold" : ""}`}>
-                      <span
-                        aria-hidden="true"
-                        className={`grid size-5 shrink-0 place-items-center rounded-full border-2 text-[11px] font-bold ${
-                          state === "done" ? "border-up bg-up text-on-lime" : state === "failed" ? "border-down bg-down text-paper" : state === "active" ? "animate-spin border-lime border-t-transparent" : "border-rule"
-                        }`}
-                      >
-                        {state === "done" ? "✓" : state === "failed" ? "!" : ""}
-                      </span>
-                      {s.label}
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
+            {run.kind !== "idle" && flashReceipt.receipt && <FlashReceiptView receipt={flashReceipt.receipt} />}
 
             {run.kind === "working" && <p className="text-xs font-semibold text-up">✓ Definitive Flash · best route on Base</p>}
 
             {run.kind === "done" && (
-              <Receipt placed={run.placed} summary={run.summary} onViewOrders={onViewOrders} onNew={() => setRun({ kind: "idle" })} />
+              <Receipt
+                placed={run.placed}
+                summary={run.summary}
+                onViewOrders={onViewOrders}
+                onNew={() => {
+                  setRun({ kind: "idle" });
+                  flashReceipt.reset();
+                }}
+              />
             )}
           </div>
         </div>
@@ -432,12 +420,12 @@ const short = (s: string) => `${s.slice(0, 6)}…${s.slice(-4)}`;
 const link = "font-semibold text-ink underline decoration-rule underline-offset-4 hover:decoration-ink";
 
 /**
- * What you can check after a trade: the order on Definitive, the wallet that signed it, the EIP-712
- * signature (checked against that wallet here), the fill's transaction on Base and the Arkiv record.
+ * What else you can check after a trade, under the Flash receipt (which has the order, the wallet,
+ * the fill and its transaction): the EIP-712 signature, checked against that wallet here, and the
+ * Arkiv record.
  */
 function Receipt({ placed, summary, onViewOrders, onNew }: { placed: Placed; summary: string; onViewOrders: () => void; onNew: () => void }) {
   const [verified, setVerified] = useState<boolean | null>(null);
-  const [tx, setTx] = useState<string | null>(null);
   const [record, setRecord] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -452,16 +440,12 @@ function Receipt({ placed, summary, onViewOrders, onNew }: { placed: Placed; sum
     void signer(placed.typedData, placed.signature).then((who) => {
       if (alive) setVerified(who !== null && who.toLowerCase() === placed.from.toLowerCase());
     });
-    // The fill lands on Base within seconds; the Arkiv record a little after.
+    // The server writes the Arkiv record just after the order lands.
     void (async () => {
-      let foundTx: string | null = null;
-      let foundRecord: string | null = null;
-      for (let i = 0; i < 30 && alive && !(foundTx && foundRecord); i++) {
-        if (!foundTx) foundTx = await fillTransaction(placed.orderId, placed.from);
-        if (!foundRecord) foundRecord = await arkivRecord(placed.orderId, placed.from);
+      for (let i = 0; i < 30 && alive; i++) {
+        const found = await arkivRecord(placed.orderId, placed.from);
         if (!alive) return;
-        setTx(foundTx);
-        setRecord(foundRecord);
+        if (found) return setRecord(found);
         await new Promise((r) => setTimeout(r, 3000));
       }
     })();
@@ -471,8 +455,6 @@ function Receipt({ placed, summary, onViewOrders, onNew }: { placed: Placed; sum
   }, [placed]);
 
   const rows: Array<[string, React.ReactNode]> = [
-    ["Order", <span key="o" className="font-mono">{placed.orderId.slice(0, 8)}</span>],
-    ["Wallet", <a key="w" href={`https://basescan.org/address/${placed.from}`} target="_blank" rel="noreferrer" className={link}>{short(placed.from)} ↗</a>],
     [
       "Signature",
       <span key="s">
@@ -488,7 +470,6 @@ function Receipt({ placed, summary, onViewOrders, onNew }: { placed: Placed; sum
         {verified === false && <span className="ml-2 text-down">doesn't match your wallet</span>}
       </span>,
     ],
-    ["Base tx", tx ? <a key="t" href={`https://basescan.org/tx/${tx}`} target="_blank" rel="noreferrer" className={link}>{short(tx)} ↗</a> : <span key="t" className="text-slate">filling…</span>],
     ["Arkiv", record ? <a key="a" href={`https://rabdi.explorer.arkiv.network/entity/${record}`} target="_blank" rel="noreferrer" className={link}>recorded ↗</a> : <span key="a" className="text-slate">recording…</span>],
   ];
 
