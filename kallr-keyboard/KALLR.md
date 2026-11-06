@@ -10,7 +10,7 @@ button to FlorisBoard's toolbar (blue, at the right end, where the mic was). Lik
 it swaps the keys for the Kall Markets trading panel; **ABC** goes back to typing. The panel has three tabs:
 
 - **Swap:** the call you copied and the caller's record, then token (the call's coin, ETH or BTC),
-  **Swap / Limit (−3/−5/−10%) / TWAP (10 min, 1 h, 4 h)**, amount ($1/$5/$20/$50) and exits
+  **Swap / Limit (−3/−5/−10%) / TWAP (10 min, 1 h, 4 h)**, amount ($1/$5/$20/$50, or **Custom** on an in-panel number pad) and exits
   (TP/SL), and Buy. "Powered by Flash · Definitive · on Base".
 - **Positions:** your Flash orders with status and TP/SL, and your USDC and ETH on Base.
 - **Wallet:** your Privy embedded wallet (the same as the Kall Markets desk), copy the address to fund it
@@ -48,7 +48,7 @@ nothing in password fields or incognito mode.
 | `assets/ime/theme/org.florisboard.themes/` (`kallr_night.json`, `kallr_day.json`), `app/AppPrefs.kt` | Kall Markets Black (graphite keys on black, lime Enter and Caps Lock), the default in light and dark mode, and Kall Markets Paper (the same on off-white) |
 | `app/src/main/kotlin/dev/patrickgold/florisboard/ime/smartbar/Smartbar.kt` | Puts the Kall Markets suggestion above the Smartbar |
 | `ime/ImeUiMode.kt`, `ime/text/key/KeyCode.kt`, `ime/text/keyboard/TextKeyData.kt`, `ime/keyboard/KeyboardManager.kt`, `ime/keyboard/ComputingEvaluator.kt`, `ime/smartbar/quickaction/*`, `ime/popup/PopupUiController.kt`, `FlorisImeService.kt`, `res/values/strings.xml` | The Trade key (`IME_UI_MODE_KALLR`), its panel mode, lime chart icon and label, and Trade as the toolbar's sticky action |
-| `app/build.gradle.kts` | App ID `app.kallr.keyboard`, name "Kall Markets", `-PkallrOrigin`, `-PprivyAppId`, `-PprivyClientId`, Privy Android SDK 0.18.0 |
+| `app/build.gradle.kts` | App ID `app.kallr.keyboard`, name "Kall Keyboard" (the wallet screen's launcher icon is "Kall Markets"), `-PkallrOrigin`, `-PprivyAppId`, `-PprivyClientId`, Privy Android SDK 0.18.0 |
 | `gradle.properties` | Android 9+ (API 28), which Privy's SDK needs |
 | `app/src/main/AndroidManifest.xml`, `res/xml/kallr_network_security.xml` | Internet permission; the confirm sheet, wallet screen and Privy's `kallr://` login redirect; plain HTTP only to the local dev server (debug builds: any host, for a laptop on the same Wi-Fi) |
 | `lib/native/build.gradle.kts` | Builds the native library for arm64 only |

@@ -405,21 +405,24 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
             key = "input_feedback__haptic_enabled",
             default = true,
         )
+        // Kallr: crisp key taps by default, like the phone's own keyboard, even when the system's
+        // "keyboard vibration" switch is off (Kall Keyboard has its own switch in Settings → Input feedback).
         val hapticActivationMode = enum(
             key = "input_feedback__haptic_activation_mode",
-            default = InputFeedbackActivationMode.RESPECT_SYSTEM_SETTINGS,
+            default = InputFeedbackActivationMode.IGNORE_SYSTEM_SETTINGS,
         )
         val hapticVibrationMode = enum(
             key = "input_feedback__haptic_vibration_mode",
             default = HapticVibrationMode.USE_VIBRATOR_DIRECTLY,
         )
+        // Short and firm reads as a click; the old 50 ms at half strength read as a buzz.
         val hapticVibrationDuration = int(
             key = "input_feedback__haptic_vibration_duration",
-            default = 50,
+            default = 14,
         )
         val hapticVibrationStrength = int(
             key = "input_feedback__haptic_vibration_strength",
-            default = 50,
+            default = 75,
         )
         val hapticFeatKeyPress = boolean(
             key = "input_feedback__haptic_feat_key_press",
@@ -487,7 +490,8 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         )
         val hintedSymbolsEnabled = boolean(
             key = "keyboard__hinted_symbols_enabled",
-            default = true,
+            // Kallr: clean letter keys like the phone's own keyboard; symbols stay on long-press.
+            default = false,
         )
         val hintedSymbolsMode = enum(
             key = "keyboard__hinted_symbols_mode",
@@ -503,7 +507,8 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         )
         val spaceBarMode = enum(
             key = "keyboard__space_bar_display_mode",
-            default = SpaceBarMode.CURRENT_LANGUAGE,
+            // Kallr: a plain space bar instead of "English (United States)".
+            default = SpaceBarMode.NOTHING,
         )
         val capitalizationBehavior = enum(
             key = "keyboard__capitalization_behavior",
