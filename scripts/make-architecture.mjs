@@ -41,7 +41,7 @@ ${t(W - 60, 76, "Don’t trust. Check the caller. Trade it.", 18, LIME, 600, "en
 const surf = [
   ["Kall Extension", "Chrome, on X", ["Card under every call", "Caller record + trade in place"]],
   ["Kall Keyboard", "Android · iOS", ["Copy a call in any chat", "Trade without leaving it"]],
-  ["Kall Web App", "kallr.vercel.app", ["Callers, real posts, verdicts", "Orders, wallet, every proof"]],
+  ["Kall Web App", "kall-markets.vercel.app", ["Callers, real posts, verdicts", "Orders, wallet, every proof"]],
 ];
 t; s += t(60, 150, "1 · WHERE CALLS SHOW UP", 13, MUTE, 600);
 surf.forEach(([n, sub, l], i) => {
@@ -58,7 +58,7 @@ let cx = 92;
   s += chip(cx, 480, c, i === 2); cx += c.length * 8.2 + 44;
 });
 s += lines(92, 552, ["Reads a post → real call? long or short? → checks the coin → prices it → quotes it → relays your signed order → writes the receipt."], 15, 26, TEXT);
-s += t(92, 584, "Clients only sign. The server holds the Definitive, Arkiv and Ankr keys.", 14, MUTE);
+s += t(92, 584, "Clients only sign. The server holds the Definitive and Arkiv keys; your reads go private.", 14, MUTE);
 for (let i = 0; i < 3; i++) s += arrow(300 + i * 500, 318, 300 + i * 500, 414);
 
 // 3. Three sponsors
@@ -72,7 +72,7 @@ const [d, a, k] = cols;
 for (const c of cols) s += box(c.x, 708, c.w, 360, { stroke: c.hot ? LIME : RULE, sw: c.hot ? 2.5 : 1.5 });
 s += arrow(500, 610, d.x + 300, 708, "quote · order");
 s += arrow(1000, 610, a.x + 210, 708, "calls · results · trades");
-s += arrow(1400, 610, k.x + 210, 708, "chain reads");
+s += arrow(1400, 610, k.x + 210, 708, "private reads");
 
 // Definitive
 s += `<image href="${DEF}" x="${d.x + 28}" y="734" width="230" height="26"/>`;
@@ -96,13 +96,13 @@ s += t(a.x + 28, 800, "Read-only records", 22, TEXT, 700);
 ["kallr.calls", "kallr.call-results", "kallr.trades", "kallr.tracked-callers"].forEach((c, i) => { s += chip(a.x + 28 + (i % 2) * 168, 822 + Math.floor(i / 2) * 42, c); });
 s += lines(a.x + 28, 940, ["A miss can’t be edited or deleted", "Every caller’s record is public", "Arkiv Rabdi testnet · chain 7794095"], 15, 30, TEXT);
 
-// Ankr
-s += `<g transform="translate(${k.x + 28} 730)"><rect width="34" height="34" rx="8" fill="#356df3"/>${t(17, 24, "A", 20, "#fff", 800, "middle")}</g>`;
-s += t(k.x + 74, 755, "Ankr", 24, TEXT, 700);
-s += t(k.x + k.w - 28, 754, "BASE RPC", 13, LIME, 700, "end");
-s += t(k.x + 28, 800, "Fast reads on Base", 22, TEXT, 700);
-["Chainlink price", "Balances", "Token decimals", "Fill receipts"].forEach((c, i) => { s += chip(k.x + 28 + (i % 2) * 180, 822 + Math.floor(i / 2) * 42, c); });
-s += lines(k.x + 28, 940, ["Entry price at the minute of the post", "Server-side only, key never shipped", "Public Base RPC as instant fallback"], 15, 30, TEXT);
+// Anon-RPC
+s += `<g transform="translate(${k.x + 28} 730)"><rect width="34" height="34" rx="17" fill="none" stroke="${LIME}" stroke-width="2"/><circle cx="17" cy="17" r="6" fill="${LIME}"/></g>`;
+s += t(k.x + 74, 755, "Anon-RPC", 24, TEXT, 700);
+s += t(k.x + k.w - 28, 754, "PRIVATE READS", 13, LIME, 700, "end");
+s += t(k.x + 28, 800, "Reads over the Nym mixnet", 22, TEXT, 700);
+["Balances", "Chainlink price", "Receipts", "Arkiv feed"].forEach((c, i) => { s += chip(k.x + 28 + (i % 2) * 150, 822 + Math.floor(i / 2) * 42, c); });
+s += lines(k.x + 28, 940, ["The RPC can’t tie your reads to your IP", "Hash-pinned worker in your browser", "Badge shows if a read ever went direct"], 15, 30, TEXT);
 
 // Base strip
 s += box(60, 1092, 1480, 56, { r: 28, fill: "#111511" });

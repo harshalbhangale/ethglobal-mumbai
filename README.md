@@ -37,13 +37,13 @@ Built at ETHGlobal Mumbai 2026. Not financial advice.
 
 ## How it works
 
-<p align="center"><img src="docs/architecture.svg" alt="Kall Markets architecture: the extension, keyboard and web app talk to one server, which trades through Definitive Flash, keeps receipts on Arkiv and reads Base through Ankr." /></p>
+<p align="center"><img src="docs/architecture.svg" alt="Kall Markets architecture: the extension, keyboard and web app talk to one server, which trades through Definitive Flash, keeps receipts on Arkiv and reads Base privately through Anon-RPC." /></p>
 
 Three apps, one server, three rails:
 
 - **Definitive Flash: every trade.** Quote, approve, sign (EIP-712), order, fill. Flash finds the best route across Base's venues, shows impact, slippage and fee before you sign, and returns the Basescan transaction and venues after the fill.
 - **Arkiv: the receipts.** Calls, results, trades and the tracked-callers roster are read-only entities, so a miss can't be edited away.
-- **Ankr: Base RPC.** The server reads Chainlink prices, balances, token decimals and fill receipts through Ankr, with the public Base RPC as a fallback.
+- **Anon-RPC: private reads.** In the browser, balances, Chainlink prices, receipts and the Arkiv feed are read through a hash-pinned Anon-RPC worker over the Nym mixnet, so the RPC provider can't link them to your IP. If a read ever has to go direct, a badge says so.
 
 1. **Read.** A call is captured from X (extension) or a copied message (keyboard). The AI reader decides if it's a real call and its direction.
 2. **Check.** A coin named next to a contract that isn't that coin gets "Call check failed" and no trade.
@@ -70,7 +70,7 @@ flowchart LR
   end
 
   subgraph Proof["Receipts"]
-    CL["Ankr RPC → Chainlink on Base<br/>price at post time"]
+    CL["Chainlink on Base<br/>price at post time"]
     ARK["Arkiv<br/>calls · results · trades"]
     SW["Swarm<br/>post snapshot"]
   end
@@ -130,8 +130,7 @@ Environment (`kallr-webapp/.env.local`):
 | `NEXT_PUBLIC_PRIVY_APP_ID` | Sign-in and wallet on `/app` | `/app` shows a setup notice |
 | `DEFINITIVE_API_KEY` | Flash quotes and orders | Falls back to Definitive's public dev key |
 | `ETHERSCAN_API_KEY` | Caller wallet check | Wallet check reports unavailable; token checks still work |
-| `ANKR_API_KEY` | Server-side Base RPC through Ankr (Chainlink prices, balances, token reads, keyboard fills) | Falls back to the public Base RPC |
-| `NEXT_PUBLIC_BASE_RPC_URL` | Browser-side balances | Public Base RPC |
+| `NEXT_PUBLIC_BASE_RPC_URL` | Balances and Chainlink prices | Public Base RPC |
 | `ARKIV_PRIVATE_KEY`, `ARKIV_ACCESS_KEY` | Writing trades and calls to Arkiv (writer needs tGLM) | Nothing written to Arkiv |
 | `OPENAI_API_KEY` | Keyboard AI: reading calls and plain-word orders | Keyboard falls back to links and cashtags only |
 | `ELEVENLABS_API_KEY` | Keyboard voice orders (Scribe) | OpenAI transcription, if set |

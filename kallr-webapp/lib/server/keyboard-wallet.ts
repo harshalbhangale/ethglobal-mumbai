@@ -11,7 +11,6 @@ import {
 import { createPublicClient, createWalletClient, erc20Abi, type Hex, http, isHex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
-import { baseTransport } from "@/lib/chain";
 import { parseTypedData } from "@/lib/typed-data";
 import { flash } from "./flash";
 
@@ -30,7 +29,7 @@ export const MAX_ORDER_USD = Number(process.env.KALL_EXEC_MAX_USD ?? "25");
 const account = key && isHex(key) ? privateKeyToAccount(key) : null;
 export const keyboardWalletAddress: Hex | null = account?.address ?? null;
 
-const transport = process.env.BASE_RPC_URL ? http(process.env.BASE_RPC_URL) : baseTransport();
+const transport = http(process.env.BASE_RPC_URL ?? process.env.NEXT_PUBLIC_BASE_RPC_URL);
 const publicClient = createPublicClient({ chain: base, transport });
 const walletClient = account ? createWalletClient({ chain: base, transport, account }) : null;
 
