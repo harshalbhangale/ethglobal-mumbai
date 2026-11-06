@@ -9,6 +9,10 @@
 
 package dev.patrickgold.florisboard.ime.kallr
 
+import android.view.HapticFeedbackConstants
+import android.view.View
+import dev.patrickgold.florisboard.FlorisImeService
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -186,9 +190,16 @@ internal fun Modifier.dotField(dots: Color = KallrBone, accent: Color = KallrLim
     }
 }
 
-/** Clickable that shrinks a little under the finger, with no ripple. */
+/** One short, crisp tick, the same feel (and the same Input feedback settings) as a key press. */
+internal fun View.kallTick() {
+    FlorisImeService.inputFeedbackController()?.keyPress()
+        ?: performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
+}
+
+/** Clickable that shrinks a little under the finger, with no ripple, and ticks like a key. */
 @Composable
 internal fun Modifier.pressable(enabled: Boolean = true, onClick: () -> Unit): Modifier {
+    val view = LocalView.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -197,7 +208,10 @@ internal fun Modifier.pressable(enabled: Boolean = true, onClick: () -> Unit): M
         label = "kallr-press",
     )
     return graphicsLayer { scaleX = scale; scaleY = scale }
-        .clickable(interactionSource = source, indication = null, enabled = enabled, onClick = onClick)
+        .clickable(interactionSource = source, indication = null, enabled = enabled) {
+            view.kallTick()
+            onClick()
+        }
 }
 
 /** The main action everywhere: lime with a sliding glint, black uppercase label and an arrow. */

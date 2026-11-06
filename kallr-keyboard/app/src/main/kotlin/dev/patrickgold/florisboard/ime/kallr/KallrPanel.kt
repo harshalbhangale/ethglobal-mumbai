@@ -71,8 +71,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.patrickgold.florisboard.ime.ImeUiMode
@@ -336,11 +338,19 @@ private fun SwapTab(wallet: String?) {
     val s = KallrPanelState
     val r = s.result
     val trade = r?.trade
+    var typing by remember { mutableStateOf(false) }
+    var voice by remember { mutableStateOf<String?>(null) }
+    if (typing) {
+        AmountPad(start = s.usd, onDone = { v -> v?.let { s.usd = it }; typing = false })
+        return
+    }
     // Everything above the button scrolls; the button stays in reach on every phone size.
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
-            // The call you copied, or how to bring one in.
-            Card {
+            // The call you copied (or how to bring one in), with the mic beside it.
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
+            Card(Modifier.weight(1f)) {
+                voice?.let { Text(it, color = themeText(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 r?.fake?.let { f ->
                     Text(
                         "Fake \$${f.claimed} contract, not the real one (real: ${short(f.real)}). No buy for it.",
@@ -363,14 +373,15 @@ private fun SwapTab(wallet: String?) {
                         Text(r.token.line, color = themeText(), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         r.token.warnings.firstOrNull()?.let { Text("$it. No buy for it.", color = Danger, fontSize = 12.sp, maxLines = 2) }
                     }
-                    r?.ai != null || s.aiNote != null -> {}
+                    r?.ai != null || s.aiNote != null || voice != null -> {}
                     else -> Text(
-                        "Copy an X link or a \$TICKER message, or hold the mic.",
+                        "Copy an X link or \$TICKER, or hold the mic",
                         color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            MicButton()
+            MicButton(onStatus = { voice = it })
+            }
             ChipRow {
                 trade?.takeIf { it.token != "ETH" && it.token != "BTC" }?.let { t -> Chip("$${t.symbol}", s.token == t.token) { s.token = t.token } }
                 s.extraTrade?.takeIf { it.token != "ETH" && it.token != "BTC" && it.token != trade?.token }?.let { t ->
@@ -383,19 +394,20 @@ private fun SwapTab(wallet: String?) {
             }
             ChipRow {
                 AMOUNTS.forEach { a -> Chip("$$a", s.usd == a) { s.usd = a } }
-                if (s.usd !in AMOUNTS) Chip("$${s.usd}", true) {}
-                when (s.kind) {
-                    Kind.Limit -> {
-                        Spacer(Modifier.width(8.dp))
-                        LIMITS.forEach { p -> Chip("${p.fmt()}%", s.limitPct == p) { s.limitPct = p } }
-                    }
-                    Kind.Twap -> {
-                        Spacer(Modifier.width(8.dp))
-                        TWAPS.forEach { (m, label) -> Chip(label, s.twapMinutes == m) { s.twapMinutes = m } }
-                        if (TWAPS.none { it.first == s.twapMinutes }) Chip(twapLabel(s.twapMinutes), true) {}
-                    }
-                    Kind.Swap -> {}
+                // Any amount: a number pad opens in the panel (an IME can't type into its own fields).
+                Chip(if (s.usd in AMOUNTS) "Custom ✎" else "$${s.usd} ✎", s.usd !in AMOUNTS) { typing = true }
+            }
+            when (s.kind) {
+                Kind.Limit -> ChipRow {
+                    Text("Limit at", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
+                    LIMITS.forEach { p -> Chip("${p.fmt()}%", s.limitPct == p) { s.limitPct = p } }
                 }
+                Kind.Twap -> ChipRow {
+                    Text("Over", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
+                    TWAPS.forEach { (m, label) -> Chip(label, s.twapMinutes == m) { s.twapMinutes = m } }
+                    if (TWAPS.none { it.first == s.twapMinutes }) Chip(twapLabel(s.twapMinutes), true) {}
+                }
+                Kind.Swap -> {}
             }
             ChipRow {
                 EXITS.forEach { e -> Chip(e.label, s.exits.label == e.label) { s.exits = e } }
@@ -438,65 +450,151 @@ private fun SwapTab(wallet: String?) {
     }
 }
 
-/** Hold to speak an order ("buy twenty dollars of degen, take profit ten percent"); let go to send. */
+/**
+ * Hold to speak an order ("buy twenty dollars of degen, take profit ten percent"); let go to send.
+ * A round lime button beside the call card; what it's doing shows in the card via [onStatus].
+ */
 @Composable
-private fun MicButton() {
+private fun MicButton(onStatus: (String?) -> Unit) {
     val context = LocalContext.current
+    val view = LocalView.current
     val scope = rememberCoroutineScope()
-    var status by remember { mutableStateOf("Hold to say an order") }
     var listening by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(14.dp)
-    Row(
+    Box(
         Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .then(if (listening) Modifier.flowBackground(shape, durationMs = 1800) else Modifier.background(themeText().copy(alpha = 0.05f), shape))
+            .size(44.dp)
+            .then(if (listening) Modifier.flowBackground(CircleShape, durationMs = 1800) else Modifier.flowBackground(CircleShape))
             .pointerInput(Unit) {
                 detectTapGestures(onPress = {
+                    view.kallTick()
                     if (!KallrVoice.start(context)) {
-                        status = "Allow the microphone, then hold again"
+                        onStatus("Allow the microphone, then hold again")
                         return@detectTapGestures
                     }
                     listening = true
-                    status = "Listening… let go to send"
+                    onStatus("Listening… let go to send")
                     tryAwaitRelease()
                     listening = false
+                    view.kallTick()
                     val audio = KallrVoice.stop()
                     if (audio == null) {
-                        status = "Too short. Hold and speak."
+                        onStatus("Too short. Hold the mic and speak.")
                         return@detectTapGestures
                     }
-                    status = "Thinking…"
+                    onStatus("Thinking…")
                     scope.launch {
                         Kallr.voice(audio).fold(
                             onSuccess = { v ->
                                 KallrPanelState.apply(v.prefill, v.trade)
                                 KallrPanelState.aiNote = "You said: \"${v.transcript}\""
-                                status = "Hold to say another"
+                                onStatus(null)
                             },
-                            onFailure = { status = it.message ?: "Voice failed" },
+                            onFailure = { onStatus(it.message ?: "Voice failed") },
                         )
                     }
                 })
-            }
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            },
+        contentAlignment = Alignment.Center,
     ) {
+        if (listening) ListeningBars(KallrBlack) else Icon(Icons.Default.Mic, contentDescription = "Hold to say an order", tint = KallrBlack, modifier = Modifier.size(22.dp))
+    }
+}
+
+/** Largest single order the pad accepts; Flash and the wallet decide the rest. */
+private const val MAX_USD = 10_000.0
+
+/** Applies one pad key to the typed amount: digits, one dot, two decimals, backspace. */
+internal fun padInput(current: String, key: String): String {
+    if (key == "⌫") return current.dropLast(1)
+    if (key == "00") return padInput(padInput(current, "0"), "0")
+    if (key == ".") return when {
+        "." in current -> current
+        current.isEmpty() -> "0."
+        else -> "$current."
+    }
+    val next = if (current == "0") key else current + key
+    val decimals = next.substringAfter('.', "")
+    if ("." in next && decimals.length > 2) return current
+    if (next.substringBefore('.').length > 5) return current
+    return next
+}
+
+/** The typed amount as the order's USD string, or null when it isn't a usable amount. */
+internal fun padAmount(text: String): String? {
+    val v = text.toDoubleOrNull() ?: return null
+    if (v <= 0.0 || v > MAX_USD) return null
+    return text.trimEnd('.').let { if ("." in it) it.trimEnd('0').trimEnd('.') else it }
+}
+
+/** A number pad inside the panel, for any amount; Done sets it, ✕ leaves it unchanged. */
+@Composable
+private fun AmountPad(start: String, onDone: (String?) -> Unit) {
+    var text by remember { mutableStateOf(if (start in AMOUNTS) "" else start) }
+    val amount = padAmount(text)
+    val key = @Composable { k: String, modifier: Modifier ->
         Box(
-            Modifier.size(28.dp).then(if (listening) Modifier.background(KallrBlack.copy(alpha = 0.12f), CircleShape) else Modifier.flowBackground(CircleShape)),
+            modifier
+                .clip(RoundedCornerShape(10.dp))
+                .background(themeText().copy(alpha = 0.08f))
+                .pressable { text = padInput(text, k) },
             contentAlignment = Alignment.Center,
-        ) {
-            if (listening) ListeningBars(KallrBlack) else Icon(Icons.Default.Mic, contentDescription = "Speak an order", tint = KallrBlack, modifier = Modifier.size(17.dp))
+        ) { Text(k, color = themeText(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold) }
+    }
+    Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, bottom = 8.dp)) {
+        // One line: the amount, what it means, and ✕ to leave it unchanged.
+        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "$" + text.ifEmpty { "0" },
+                color = if (text.isEmpty()) Muted else themeText(),
+                fontSize = 26.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                when {
+                    text.isEmpty() -> "Any amount, in USDC"
+                    amount == null && (text.toDoubleOrNull() ?: 0.0) > MAX_USD -> "Up to $${MAX_USD.toInt()} per order"
+                    amount == null -> "Enter more than $0"
+                    (text.toDoubleOrNull() ?: 0.0) < 0.5 -> "Under $0.50, fees eat most of it"
+                    else -> "USDC on Base"
+                },
+                color = Muted,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "✕",
+                color = themeText(),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clip(CircleShape).pressable { onDone(null) }.padding(horizontal = 12.dp, vertical = 4.dp),
+            )
         }
-        Spacer(Modifier.width(10.dp))
-        Text(
-            status,
-            color = if (listening) KallrBlack else themeText(),
-            fontSize = 13.sp,
-            fontWeight = if (listening) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        // A phone-style pad: three columns of digits, then delete and Done down the right.
+        Row(Modifier.weight(1f).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val rows = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf(".", "0", "00"))
+            Column(Modifier.weight(3f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                rows.forEach { row ->
+                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { k -> key(k, Modifier.weight(1f).fillMaxHeight()) }
+                    }
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                key("⌫", Modifier.weight(1f).fillMaxWidth())
+                FlowButton(
+                    "Done",
+                    modifier = Modifier.weight(3f),
+                    enabled = amount != null,
+                    height = Dp.Unspecified,
+                    arrow = false,
+                    disabledText = themeText().copy(alpha = 0.6f),
+                ) { onDone(amount) }
+            }
+        }
     }
 }
 
