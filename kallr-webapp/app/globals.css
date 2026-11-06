@@ -251,48 +251,6 @@
   .reveal { animation: none; }
 }
 
-/* ---------- Landing: hero story ---------- */
-@keyframes hs-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-@keyframes hs-up { from { opacity: 0; transform: translateY(40px) scale(0.97); } to { opacity: 1; transform: none; } }
-@keyframes hs-slide { from { opacity: 0; transform: translateX(-16px); max-height: 0; } to { opacity: 1; transform: none; max-height: 24px; } }
-@keyframes hs-scene { from { opacity: 0; filter: blur(8px); } to { opacity: 1; filter: none; } }
-.hs-scene { animation: hs-scene 600ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-.hs-in { opacity: 0; animation: hs-in 650ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) forwards; }
-.hs-up { opacity: 0; animation: hs-up 800ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) forwards; }
-.hs-slide { opacity: 0; overflow: hidden; animation: hs-slide 600ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) forwards; }
-
-/* Follow → Following. */
-@keyframes hs-follow { 0%, 99% { background: #eff3f4; color: #0f1419; } 100% { background: transparent; color: #e7e9ea; box-shadow: inset 0 0 0 1px #536471; } }
-.hs-follow { background: #eff3f4; color: #0f1419; animation: hs-follow 1ms linear var(--d, 0ms) forwards; }
-.hs-follow::after { content: "Follow"; }
-@keyframes hs-follow-text { to { content: "Following"; } }
-.hs-follow::after { animation: hs-follow-text 1ms linear var(--d, 0ms) forwards; }
-
-/* A button being tapped: a press, then a lime ring. */
-@keyframes hs-press { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(198, 242, 90, 0.7); } 30% { transform: scale(0.95); } 60% { transform: scale(1.02); } 100% { transform: scale(1); box-shadow: 0 0 0 14px rgba(198, 242, 90, 0); } }
-.hs-press { animation: hs-press 700ms ease-out var(--d, 0ms) both; }
-
-/* A number that lands. */
-@keyframes hs-tick { 0% { opacity: 0; transform: translateY(8px); } 60% { opacity: 1; transform: translateY(-2px); } 100% { opacity: 1; transform: none; } }
-.hs-tick { opacity: 0; animation: hs-tick 600ms ease-out var(--d, 0ms) forwards; }
-
-/* The confirmation pops. */
-@keyframes hs-pop { 0% { opacity: 0; transform: scale(0.6); } 70% { opacity: 1; transform: scale(1.08); } 100% { opacity: 1; transform: scale(1); } }
-.hs-pop { opacity: 0; animation: hs-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) var(--d, 0ms) forwards; }
-
-/* The keyboard slides up from the bottom of the phone. */
-@keyframes hs-kb { from { transform: translateY(100%); } to { transform: none; } }
-.hs-kb { transform: translateY(100%); animation: hs-kb 700ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) forwards; }
-
-/* The tab's progress bar. */
-@keyframes hs-progress { from { width: 0; } to { width: 100%; } }
-.hs-progress { animation: hs-progress var(--ms, 5600ms) linear forwards; }
-
-@media (prefers-reduced-motion: reduce) {
-  .hs-scene, .hs-in, .hs-up, .hs-slide, .hs-tick, .hs-pop, .hs-kb, .hs-press { animation: none; opacity: 1; transform: none; max-height: none; }
-  .hs-follow::after { content: "Following"; animation: none; }
-}
-
 /* X's embedded post: clip its iframe to our rounded corners (no white edges) and keep it dark. */
 .tweet-embed .twitter-tweet,
 .tweet-embed .twitter-tweet-rendered {

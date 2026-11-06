@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { DownloadApp } from "@/components/download-app";
 import { LogoMark } from "@/components/logo";
-import { HeroStory } from "@/components/hero-story";
 import { SignalField } from "@/components/signal-field";
 
 /** Real calls Kall Markets priced and wrote to Arkiv, for the ticker under the hero. */
@@ -143,20 +142,6 @@ export default function Landing() {
                 </span>
               ))}
             </div>
-          </div>
-        </section>
-
-        {/* The flow, played one step at a time. */}
-        <section id="how" className="border-b border-rule">
-          <div className="mx-auto grid max-w-[1360px] items-center gap-12 px-6 py-24 lg:grid-cols-[0.8fr_1.2fr] lg:px-10">
-            <div className="reveal">
-              <p className="font-mono text-xs tracking-[0.16em] text-lime">HOW IT WORKS</p>
-              <h2 className="font-display mt-4 text-[clamp(34px,4.4vw,58px)] leading-[1.0] font-bold tracking-[-0.035em]">
-                From a post to a position.
-              </h2>
-              <p className="mt-5 max-w-md leading-relaxed text-slate">Spot the call on X, follow the caller, trade it from any chat.</p>
-            </div>
-            <HeroStory />
           </div>
         </section>
 
