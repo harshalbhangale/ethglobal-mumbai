@@ -236,6 +236,34 @@ enum Kallr {
 
     static func feed() async -> Feed? { await get("api/keyboard/feed") }
 
+    /** One caller's record from Arkiv (/api/callers/<handle>): every call, open and settled, newest first. */
+    struct CallerRecord: Codable {
+        struct Call: Codable, Identifiable {
+            let key: String?
+            let postId: String
+            let asset: String
+            let direction: String
+            let status: String
+            let returnBps: Int?
+            let postedAt: Double?
+            let expiresAt: Double?
+            /** The post is no longer public on X. */
+            var gone: Bool? = nil
+            var id: String { postId }
+            var open: Bool { status == "open" }
+            var short: Bool { direction == "down" }
+        }
+        let calls: [Call]
+        /** How many of the checked posts are gone from X, and how many X answered for. */
+        let deleted: Int?
+        let deletedChecked: Int?
+    }
+
+    static func callerRecord(_ handle: String) async -> CallerRecord? { await get("api/callers/\(handle.lowercased())") }
+
+    /** The call's post on X. */
+    static func postURL(handle: String, postId: String) -> URL? { URL(string: "https://x.com/\(handle)/status/\(postId)") }
+
     /** A record's page on Arkiv's Rabdi explorer: a call, its result or a trade. */
     static func arkivURL(_ key: String) -> URL? { URL(string: "https://rabdi.explorer.arkiv.network/entity/\(key)") }
     /** 0x4b9d…0ed1: a hash short enough for one line. */
@@ -362,6 +390,28 @@ enum Kallr {
      */
     static func swap(usd: String, dryRun: Bool = false) async -> Swift.Result<Placed, Failure> {
         await place("api/keyboard/swap", SwapBody(usd: usd, dryRun: dryRun))
+    }
+
+    /** A withdrawal from the Kall wallet: what goes where, and its transaction once sent. */
+    struct Withdrawal: Codable { let asset: String; let amount: String; let to: String; let usd: Double?; let tx: String? }
+    private struct WithdrawBody: Codable { let asset: String; let amount: String; let to: String; let dryRun: Bool }
+
+    /** Send ETH or USDC from the Kall wallet to the user's own address on Base. With dryRun it only checks. */
+    static func withdraw(asset: String, amount: String, to: String, dryRun: Bool) async -> Swift.Result<Withdrawal, Failure> {
+        var request = URLRequest(url: origin.appendingPathComponent("api/keyboard/withdraw"), timeoutInterval: 60)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.setValue("Bearer \(Secrets.execToken)", forHTTPHeaderField: "authorization")
+        request.httpBody = try? JSONEncoder().encode(WithdrawBody(asset: asset, amount: amount, to: to, dryRun: dryRun))
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if (200..<300).contains(status), let w = try? JSONDecoder().decode(Withdrawal.self, from: data) { return .success(w) }
+            let message = (try? JSONDecoder().decode([String: String].self, from: data))?["error"] ?? "The withdrawal didn't go through (\(status))."
+            return .failure(Failure(message: message))
+        } catch {
+            return .failure(Failure(message: "Couldn't reach Kall Markets."))
+        }
     }
 
     private static func place<Body: Encodable>(_ path: String, _ body: Body) async -> Swift.Result<Placed, Failure> {

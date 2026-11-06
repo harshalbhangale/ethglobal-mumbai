@@ -210,6 +210,17 @@ final class KeyboardModel: ObservableObject {
 
     /** Explore: the caller whose calls are open. */
     @Published var exploreCaller: String?
+    /** Each caller's full record from Arkiv, read when their page opens. */
+    @Published var callerRecords: [String: Kallr.CallerRecord] = [:]
+    func loadCaller(_ handle: String) async {
+        if let r = await Kallr.callerRecord(handle) { callerRecords[handle.lowercased()] = r }
+    }
+    /** A call from a caller's record as a feed item, so it opens like any other post. */
+    func item(for c: Kallr.CallerRecord.Call, handle: String) -> Item {
+        if let known = (openItems + settledItems).first(where: { $0.postId == c.postId }) { return known }
+        return Item(postId: c.postId, caller: handle, asset: c.asset, short: c.short, postedAt: c.postedAt, deadline: c.expiresAt,
+                    entry: nil, text: nil, status: c.open ? nil : c.status, returnBps: c.returnBps, arkivKey: c.key)
+    }
     /** Every call Kall Markets has from this caller, newest first: open ones and settled ones. */
     func calls(of handle: String) -> [Item] {
         (openItems + settledItems)
@@ -300,16 +311,10 @@ final class KeyboardModel: ObservableObject {
 
     // MARK: The fill on Base
 
-    /** Drops the trade and its BaseScan link into the chat you're typing in. */
-    func shareReceipt() {
-        guard let tx = fillTx, let placed = lastPlaced else { return }
-        tap(.medium)
-        let got = placed.preview.get.replacingOccurrences(of: "about ", with: "")
-        var text = "\(placed.preview.title), got \(got) on Definitive Flash: https://basescan.org/tx/\(tx)"
-        if let key = doneArkivKey, let url = Kallr.arkivURL(key) { text += " · Recorded on Arkiv: \(url.absoluteString)" }
-        controller?.textDocumentProxy.insertText(text)
-        placing = .idle
-        mode = .typing
+    /** Opens the fill's transaction on Basescan in Safari. */
+    func openFill() {
+        guard let tx = fillTx, let url = URL(string: "https://basescan.org/tx/\(tx)") else { return }
+        openLink(url)
     }
 
     /** The swap's transaction once Flash fills it, for the done card's BaseScan link. */
@@ -957,7 +962,7 @@ private struct FollowingTab: View {
             VStack(spacing: 4) {
                 HStack(spacing: 16) {
                     ForEach(KeyboardModel.Scope.allCases, id: \.self) { sc in
-                        Button { model.tap(); model.scope = sc } label: {
+                        Button { model.tap(); model.scope = sc; model.selectedCaller = nil; model.exploreCaller = nil } label: {
                             Text(sc == .following ? "Following \(model.follows.count)" : "Explore")
                                 .font(.system(size: 14, weight: .heavy))
                                 .foregroundStyle(model.scope == sc ? Kallr.bone : Kallr.muted)
@@ -975,6 +980,8 @@ private struct FollowingTab: View {
 
                 if model.scope == .explore {
                     if let handle = model.exploreCaller { CallerCalls(handle: handle, model: model) } else { ExploreList(model: model) }
+                } else if let handle = model.selectedCaller {
+                    CallerCalls(handle: handle, model: model)
                 } else { FollowingList(model: model) }
             }
         }
@@ -1187,40 +1194,127 @@ private struct ExploreList: View {
 private struct CallerCalls: View {
     let handle: String
     @ObservedObject var model: KeyboardModel
+    @State private var showClosed = false
 
     private var caller: Kallr.FeedCaller? { model.feed?.callers?.first { $0.handle.lowercased() == handle.lowercased() } }
+    private var record: Kallr.CallerRecord? { model.callerRecords[handle.lowercased()] }
+    /** The full record once read; until then, what the feed already has. */
+    private var calls: [Kallr.CallerRecord.Call] {
+        if let record { return record.calls }
+        return model.calls(of: handle).map {
+            Kallr.CallerRecord.Call(key: $0.arkivKey, postId: $0.postId, asset: $0.asset, direction: $0.short ? "down" : "up",
+                                    status: $0.status ?? "open", returnBps: $0.returnBps, postedAt: $0.postedAt, expiresAt: $0.deadline)
+        }
+    }
+    private var summary: String {
+        let closed = calls.filter { !$0.open }
+        let hits = closed.filter { $0.status == "hit" }.count
+        var parts = [closed.isEmpty ? "No closed calls" : "\(hits) of \(closed.count) right"]
+        if let r = record, let d = r.deleted, d > 0 { parts.append("\(d) deleted on X") }
+        return parts.joined(separator: " · ")
+    }
 
     var body: some View {
+        let open = calls.filter(\.open)
+        let closed = calls.filter { !$0.open }
         VStack(spacing: 2) {
             HStack(spacing: 10) {
-                Button { model.tap(); model.exploreCaller = nil } label: {
+                Button { model.tap(); model.exploreCaller = nil; model.selectedCaller = nil } label: {
                     Image(systemName: "chevron.left").font(.system(size: 14, weight: .bold)).foregroundStyle(Kallr.bone)
                         .frame(width: 34, height: 34).background(Kallr.keyDark, in: Circle())
                 }
                 .buttonStyle(Press())
-                .accessibilityLabel("Back to Explore")
+                .accessibilityLabel("Back")
                 VStack(alignment: .leading, spacing: 1) {
                     Text("@\(handle)").font(.system(size: 14, weight: .heavy)).foregroundStyle(Kallr.bone)
-                    if let c = caller {
-                        Text([c.settled > 0 ? "\(c.hits) of \(c.settled) right" : "No settled calls yet", c.open > 0 ? "\(c.open) open" : nil, c.focus].compactMap { $0 }.joined(separator: " · "))
-                            .font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(1)
-                    }
+                    Text(summary).font(.system(size: 12)).foregroundStyle(Kallr.muted).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                let on = model.follows.contains(handle)
-                SmallButton(label: on ? "FOLLOWING" : "FOLLOW") { model.toggleFollow(handle) }
+                let on = model.follows.contains(handle.lowercased())
+                SmallButton(label: on ? "FOLLOWING" : "FOLLOW") { model.toggleFollow(handle.lowercased()) }
             }
             .padding(.horizontal, 14)
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    let items = model.calls(of: handle)
-                    if items.isEmpty { Empty(text: "No calls from @\(handle) on Arkiv yet.") }
-                    ForEach(items) { item in CallCard(item: item, model: model) }
+                    if calls.isEmpty { Empty(text: record == nil ? "Reading Arkiv…" : "No calls from @\(handle) yet.") }
+                    if !open.isEmpty {
+                        Text("OPEN · \(open.count)").font(.system(size: 10, weight: .heavy)).foregroundStyle(Kallr.lime)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
+                        ForEach(open) { c in CallRow(call: c, handle: handle, model: model) }
+                    }
+                    if !closed.isEmpty {
+                        Button { model.tap(); withAnimation(.easeOut(duration: 0.2)) { showClosed.toggle() } } label: {
+                            HStack {
+                                Text("Closed calls · \(closed.count)").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.bone)
+                                Spacer(minLength: 0)
+                                Image(systemName: showClosed ? "chevron.up" : "chevron.down").font(.system(size: 12, weight: .bold)).foregroundStyle(Kallr.muted)
+                            }
+                            .frame(minHeight: 40)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(Press())
+                        if showClosed { ForEach(closed) { c in CallRow(call: c, handle: handle, model: model) } }
+                    }
                 }
                 .padding(.horizontal, 14)
             }
-            .refreshable { await model.refresh() }
+            .refreshable { await model.loadCaller(handle) }
         }
+        .task(id: handle) { await model.loadCaller(handle) }
+    }
+}
+
+/** One call in fixed columns: the call | its result | Arkiv ↗ | X ↗. Tap the call to read the post. */
+private struct CallRow: View {
+    let call: Kallr.CallerRecord.Call
+    let handle: String
+    @ObservedObject var model: KeyboardModel
+
+    private var result: (String, String, Color) {
+        if call.open {
+            let item = model.item(for: call, handle: handle)
+            if let m = model.move(item) { return (String(format: "%+.2f%%", m), Kallr.left(call.expiresAt), m >= 0 ? Kallr.up : Kallr.danger) }
+            return ("Open", Kallr.left(call.expiresAt), Kallr.lime)
+        }
+        let r = call.returnBps.map { String(format: "%+.2f%%", Double($0) / 100) } ?? ""
+        return (call.status.capitalized, r, call.status == "hit" ? Kallr.up : call.status == "miss" ? Kallr.danger : Kallr.muted)
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("\(call.short ? "SHORT" : "LONG") $\(call.asset)").font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(call.short ? Kallr.danger : Kallr.lime).lineLimit(1)
+                Text(Kallr.ago(call.postedAt)).font(.system(size: 11)).foregroundStyle(Kallr.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { model.tap(); model.opened = model.item(for: call, handle: handle) }
+            let r = result
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(r.0).font(.system(size: 13, weight: .semibold).monospacedDigit()).foregroundStyle(r.2)
+                Text(r.1).font(.system(size: 11).monospacedDigit()).foregroundStyle(Kallr.muted)
+            }
+            .frame(width: 78, alignment: .trailing)
+            linkCell("Arkiv ↗", width: 58, url: call.key.flatMap(Kallr.arkivURL))
+            if call.gone == true {
+                Text("Deleted").font(.system(size: 11, weight: .semibold)).foregroundStyle(Kallr.danger.opacity(0.8)).frame(width: 52, alignment: .trailing)
+            } else {
+                linkCell("X ↗", width: 52, url: Kallr.postURL(handle: handle, postId: call.postId))
+            }
+        }
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline.opacity(0.6)).frame(height: 1) }
+    }
+
+    private func linkCell(_ label: String, width: CGFloat, url: URL?) -> some View {
+        Button { if let url { model.openLink(url) } } label: {
+            Text(label).font(.system(size: 12, weight: .bold)).foregroundStyle(url == nil ? Kallr.muted.opacity(0.4) : Kallr.bone)
+                .frame(width: width, height: 30, alignment: .trailing)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(Press())
+        .disabled(url == nil)
     }
 }
 
@@ -1306,7 +1400,7 @@ private struct FollowedChips: View {
             HStack(spacing: 6) {
                 ForEach(model.followed) { c in
                     let on = model.selectedCaller == c.handle
-                    Button { model.tap(); model.selectedCaller = on ? nil : c.handle } label: {
+                    Button { model.tap(); model.selectedCaller = c.handle } label: {
                         HStack(spacing: 4) {
                             Text("@\(c.handle)").font(.system(size: 12, weight: .bold))
                             if let r = c.record { Text(r).font(.system(size: 11, weight: .semibold).monospacedDigit()).opacity(0.65) }
@@ -1893,8 +1987,8 @@ private struct DoneCard: View {
             if let note = model.linkNote { Text(note).font(.system(size: 12)).foregroundStyle(Kallr.muted).padding(.top, 4) }
             Spacer(minLength: 0)
             HStack(spacing: 8) {
-                Button { model.shareReceipt() } label: {
-                    Text(model.fillTx == nil ? "Finding it on Base…" : "Share BaseScan link")
+                Button { model.openFill() } label: {
+                    Text(model.fillTx == nil ? "Finding it on Base…" : "Open on Basescan")
                         .font(TradeFont.bold).foregroundStyle(model.fillTx == nil ? Kallr.muted : Kallr.black)
                         .frame(maxWidth: .infinity, minHeight: 52)
                         .background(model.fillTx == nil ? Kallr.keyDark : Kallr.lime, in: RoundedRectangle(cornerRadius: 14))
