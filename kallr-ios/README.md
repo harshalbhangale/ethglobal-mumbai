@@ -17,7 +17,7 @@ plays keyboard haptics only with Allow Full Access.
   `/api/keyboard/feed`: the post's text from its Swarm snapshot, the move since the post, time left, and
   **Trade**. Each call shows the hash of its Arkiv record; open the call and tap the record to see it on
   Arkiv's explorer. Chips for the callers you follow, with their hit rates, open each caller's page;
-  Active, Settled and starred Favorites filter the list.
+  Active and Settled filter the list.
   **Explore** lists every caller Kall Markets tracks or has priced, with their record and Follow. A
   caller's page (from `/api/callers/<handle>`) has every call they made: open ones with time left, closed
   ones in a "Closed calls" dropdown, each row call | result | Arkiv ↗ | X ↗, and how many of their posts
