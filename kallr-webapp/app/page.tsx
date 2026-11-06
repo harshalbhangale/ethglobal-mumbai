@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LogoMark } from "@/components/logo";
+import { HeroStory } from "@/components/hero-story";
 import { SignalField } from "@/components/signal-field";
 
 /** Real calls Kall Markets priced and wrote to Arkiv, for the ticker under the hero. */
@@ -119,9 +120,8 @@ export default function Landing() {
                 <span className="text-ink">FLASH</span>
               </div>
             </div>
-            <div className="devices relative" aria-label="Kall Markets on a laptop, on X and on a phone">
-              <img src="/brand/hero-devices.webp" alt="The Kall Web App on a laptop, the Kall Extension's trade card on X, and the Kall Keyboard on an iPhone" width={1600} height={1200} className="relative z-10 w-full" />
-              <div className="scan" aria-hidden="true" />
+            <div className="devices relative">
+              <HeroStory />
             </div>
           </div>
 
