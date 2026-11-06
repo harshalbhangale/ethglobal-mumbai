@@ -27,9 +27,10 @@ validate every order again before it reaches Flash.
 | Web app | Your Kall wallet (Privy embedded wallet, signed in with X) | In the browser |
 | Extension on X | Your Kall wallet | On our server through a Privy signer you turn on in the app, capped at $25 per order. Or MetaMask on the page if you pick it |
 | Android keyboard | Your Kall wallet | Privy on the phone, after you confirm |
-| iPhone keyboard | A demo wallet our server holds (`0xa8405c…8072`) | On our server, capped at $25 per order |
+| iPhone keyboard | Your Kall wallet, once you link the keyboard in the web app | On our server through the same Privy signer, capped at $25 per order |
 
-The iPhone keyboard is the odd one out; moving it to your own Kall wallet is on the list.
+Every surface now trades from the same Kall wallet. Keyboard builds from before the link still use the shared demo
+wallet our server holds (`0xa8405c…8072`) until its funds move.
 
 ## Code
 
