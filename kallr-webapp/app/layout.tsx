@@ -16,14 +16,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Kall Markets",
-    title: "Kall Markets: every call on X has an after market",
-    description: "Priced at posting. Copy it with take-profit and stop-loss on Base.",
+    title: "Kall Markets: Don’t trust. Check the caller. Trade it.",
+    description: "Every crypto call priced, scored and kept on Arkiv, then traded in one tap on Definitive Flash.",
     images: [{ url: "/brand/og.png", width: 1200, height: 630, alt: "Kall Markets" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Kall Markets: every call on X has an after market",
-    description: "Priced at posting. Copy it with take-profit and stop-loss on Base.",
+    title: "Kall Markets: Don’t trust. Check the caller. Trade it.",
+    description: "Every crypto call priced, scored and kept on Arkiv, then traded in one tap on Definitive Flash.",
     images: ["/brand/og.png"],
   },
   appleWebApp: { capable: true, title: "Kall Markets", statusBarStyle: "default" },
