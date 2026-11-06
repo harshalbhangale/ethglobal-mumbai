@@ -146,27 +146,12 @@ private fun Progress(text: String) {
     }
 }
 
-/** A mint check that springs in when an order lands. */
-@Composable
-private fun DoneMark() {
-    var shown by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { shown = true }
-    val scale by animateFloatAsState(if (shown) 1f else 0.3f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessLow), label = "kallr-done")
-    Box(
-        Modifier
-            .size(52.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .background(KallrLime, CircleShape),
-        contentAlignment = Alignment.Center,
-    ) { Icon(Icons.Default.Check, contentDescription = null, tint = KallrBlack, modifier = Modifier.size(30.dp)) }
-}
-
 private sealed interface SheetState {
     data object SignIn : SheetState
     data object Loading : SheetState
     data class Ready(val wallet: String, val quote: TradeQuote) : SheetState
     data class Working(val step: KallrTrader.Step) : SheetState
-    data class Done(val orderId: String, val title: String) : SheetState
+    data class Done(val orderId: String, val title: String, val wallet: String) : SheetState
     data class Failed(val message: String, val wallet: String?) : SheetState
 }
 
@@ -240,7 +225,7 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
                                         onSuccess = {
                                             // Back in the chat, the panel opens on Positions so the new order is right there.
                                             KallrPanelState.resumeOn(Tab.Positions)
-                                            state = SheetState.Done(it, p.title)
+                                            state = SheetState.Done(it, p.title, s.wallet)
                                         },
                                         onFailure = { state = SheetState.Failed(it.message ?: "The order didn't go through.", s.wallet) },
                                     )
@@ -250,13 +235,17 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
                     }
                     is SheetState.Working -> Progress(s.step.label)
                     is SheetState.Done -> {
-                        DoneMark()
-                        Spacer(Modifier.height(12.dp))
-                        Text("Order placed on Base", fontSize = 18.sp, fontWeight = FontWeight.Medium)
-                        Text(
-                            "${s.title} · Flash order ${s.orderId.take(10)}… · it shows on your Kall Markets trades.",
-                            modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        // Only reached once Flash returned an order ID; failures stay on the Failed screen.
+                        TradeSuccess(
+                            TradeSuccessInfo(
+                                orderId = s.orderId,
+                                wallet = s.wallet,
+                                title = s.title,
+                                amount = "$${order.usd}",
+                                asset = "${if (order.kind == "swap") "Bought" else "Buying"} ${order.symbol ?: order.token}",
+                                tpPct = order.tpPct,
+                                slPct = order.slPct,
+                            ),
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedButton(onClick = {

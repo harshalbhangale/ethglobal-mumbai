@@ -234,6 +234,53 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .swap-pending { color: var(--muted); font-weight: 500; animation: kallr-pulse 1.4s ease-in-out infinite; }
 @keyframes kallr-pulse { 50% { opacity: .45; } }
 
+/* ── Success burst: ring draws, lime disc springs in, check strokes, confetti fires (~1.3s) ── */
+.sb { --sb-ink: #050605; --sb-bone: #e6ebe3; --sb-soft: #8b978d; --sb-lime: #c6f25a; --sb-lime-2: #d6f985; --sb-on-lime: #0e1407;
+  position: relative; display: grid; justify-items: center; gap: 10px; padding: 18px 14px 14px; margin: -2px -4px 4px;
+  border-radius: 12px; background: radial-gradient(120% 90% at 50% 0%, #131815 0%, var(--sb-ink) 70%); color: var(--sb-bone);
+  text-align: center; animation: sb-pop .34s cubic-bezier(.34,1.56,.64,1) both; }
+.sb-mark { position: relative; width: 76px; height: 76px; display: grid; place-items: center;
+  animation: sb-thump .3s cubic-bezier(.34,1.8,.5,1) .54s both; }
+.sb-svg { width: 76px; height: 76px; overflow: visible; position: relative; z-index: 1; }
+.sb-ring { fill: none; stroke: var(--sb-lime); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1;
+  transform: rotate(-90deg); transform-origin: 32px 32px; animation: sb-draw .38s cubic-bezier(.65,0,.35,1) forwards; }
+.sb-disc { fill: var(--sb-lime); transform: scale(0); transform-origin: 32px 32px;
+  animation: sb-fill .42s cubic-bezier(.34,1.7,.5,1) .3s forwards; }
+.sb-tick { fill: none; stroke: var(--sb-on-lime); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1; animation: sb-draw .26s cubic-bezier(.4,0,.2,1) .52s forwards; }
+.sb-wave { position: absolute; inset: 6px; border-radius: 50%; border: 2px solid var(--sb-lime); opacity: 0;
+  animation: sb-wave .56s cubic-bezier(.2,.7,.3,1) .4s both; }
+.sb-piece { position: absolute; left: 50%; top: 50%; width: var(--s); height: var(--s); margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2);
+  background: var(--c); border-radius: 50%; opacity: 0; animation: sb-fly .64s cubic-bezier(.1,.8,.3,1) calc(.44s + var(--d)) both; }
+.sb-bar { width: calc(var(--s) * .45); height: calc(var(--s) * 1.5); border-radius: 2px; }
+.sb-text { display: grid; gap: 4px; justify-items: center; }
+.sb-text > * { margin: 0; opacity: 0; animation: sb-rise .36s cubic-bezier(.34,1.56,.64,1) calc(.66s + var(--i, 0) * 70ms) both; }
+.sb-title, .done-card .sb-title { font-size: 19px; font-weight: 800; letter-spacing: -.02em; color: var(--sb-bone); }
+.sb-amount { font-size: 14px; color: var(--sb-soft); }
+.sb-amount b { color: var(--sb-lime); font-weight: 800; font-size: 16px; }
+.sb-exits { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; font-size: 12px; font-weight: 700; }
+.sb-exits span { padding: 3px 9px; border-radius: 99px; border: 1px solid #2c3830; }
+.sb-tp { color: #8ad97c; } .sb-sl { color: #ff8a7a; }
+.sb-link { font-size: 12px; color: var(--sb-soft); }
+.inline-card .sb-link a, .sb-link a { color: var(--sb-lime); font-weight: 700; text-decoration: none; }
+.sb-link a:hover { text-decoration: underline; }
+.sb-pending { animation-name: sb-rise, kallr-pulse; animation-duration: .36s, 1.4s; animation-iteration-count: 1, infinite;
+  animation-delay: calc(.66s + var(--i, 0) * 70ms), 1.1s; }
+@keyframes sb-pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes sb-draw { to { stroke-dashoffset: 0; } }
+@keyframes sb-fill { to { transform: scale(1); } }
+@keyframes sb-thump { 0% { transform: scale(1); } 45% { transform: scale(1.1); } 100% { transform: scale(1); } }
+@keyframes sb-wave { 0% { opacity: .7; transform: scale(.85); } 100% { opacity: 0; transform: scale(2.1); } }
+@keyframes sb-fly { 0% { opacity: 1; transform: translate(0, 0) scale(.4) rotate(0); }
+  70% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--x), var(--y)) scale(1) rotate(var(--r)); } }
+@keyframes sb-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .sb, .sb-mark, .sb-text > *, .sb-pending { animation: none; opacity: 1; }
+  .sb-ring, .sb-tick { animation: none; stroke-dashoffset: 0; }
+  .sb-disc { animation: none; transform: none; }
+  .sb-wave, .sb-piece { display: none; }
+}
+
 .definitive-logo { display: block; color: var(--foreground); }
 .exits-toggle { justify-self: start; border: 0; background: none; padding: 4px 2px; color: #1d9bf0; font: 600 14px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; }
 .exits-toggle:hover { text-decoration: underline; }
