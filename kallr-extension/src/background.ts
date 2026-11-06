@@ -27,6 +27,7 @@ type Request =
   | { type: "flash-order"; order: unknown; signatures: unknown; context?: unknown }
   | { type: "token-search"; query: unknown }
   | { type: "flash-order-status"; orderId: unknown; funder?: unknown }
+  | { type: "trade-record"; orderId: unknown; funder: unknown }
   | { type: "cre-coin"; token: unknown; claimed: unknown }
   | { type: "x-status" }
   | { type: "signer"; signer: unknown }
@@ -155,6 +156,19 @@ chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
     // Flash finds an order by its funder wallet too; the card knows it from placing the order.
     const funder = typeof message.funder === "string" && /^0x[0-9a-fA-F]{40}$/.test(message.funder) ? `?funder=${message.funder}` : "";
     job = fetch(`${appOrigin}/api/flash/orders/${message.orderId}${funder}`).then((r) => (r.ok ? r.json() : { status: null, fills: [] }));
+  } else if (
+    message?.type === "trade-record" &&
+    fromX &&
+    typeof message.orderId === "string" &&
+    /^[0-9a-f-]{36}$/i.test(message.orderId) &&
+    typeof message.funder === "string" &&
+    /^0x[0-9a-fA-F]{40}$/.test(message.funder)
+  ) {
+    // The trade's own Arkiv entity, written by the app right after the order lands.
+    const orderId = message.orderId;
+    job = fetch(`${appOrigin}/api/history?wallets=${message.funder}`)
+      .then((r) => (r.ok ? r.json() : { orders: [] }))
+      .then((d: { orders?: Array<{ orderId: string; arkivKey: string | null }> }) => ({ key: d.orders?.find((o) => o.orderId === orderId)?.arkivKey ?? null }));
   } else if (message?.type === "x-key" && fromApp) {
     job = xKey(message);
   } else if (message?.type === "x-status" && fromX) {

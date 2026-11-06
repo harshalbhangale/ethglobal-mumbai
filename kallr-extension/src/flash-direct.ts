@@ -126,6 +126,16 @@ export async function waitForFill(orderId: string, funder: string, tries = 20, e
   return null;
 }
 
+/** The trade's record on Arkiv. The app writes it just after the order lands, so ask a few times. */
+export async function waitForTradeRecord(orderId: string, funder: string, tries = 10, everyMs = 3000): Promise<string | null> {
+  for (let i = 0; i < tries; i++) {
+    const res = await send<{ key: string | null }>({ type: "trade-record", orderId, funder }).catch(() => null);
+    if (res?.key && /^0x[0-9a-fA-F]{64}$/.test(res.key)) return res.key;
+    await new Promise((r) => setTimeout(r, everyMs));
+  }
+  return null;
+}
+
 export async function placeOnX(o: CardOrder, onStep: (step: Step) => void, onQuote?: (facts: QuoteFacts) => void) {
   onStep("connecting");
   const from = await connect();
