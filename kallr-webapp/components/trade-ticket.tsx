@@ -11,8 +11,8 @@ import { useUsdPrices } from "./order-desk";
 /**
  * The desk's trade ticket: pick everything with buttons (asset, side, amount, market or limit,
  * take-profit / stop-loss), with a sticky order summary holding the button, a step tracker and the
- * result, so nothing happens off screen. Typing an order still works and fills the form, and links
- * from the extension, keyboard and @Kallr bot (/app?order=…) open it prefilled.
+ * result, so nothing happens off screen. Links from the extension, keyboard and @Kallr bot
+ * (/app?order=…) and copied calls open it prefilled.
  */
 
 type Asset = "ETH" | "BTC";
@@ -78,14 +78,14 @@ export function TradeTicket({
   const [tp, setTp] = useState<number | null>(null);
   const [sl, setSl] = useState<number | null>(null);
   const [advanced, setAdvanced] = useState(false);
-  const [typed, setTyped] = useState("");
-  const [typedError, setTypedError] = useState<string | null>(null);
+  /** Why a copied call couldn't fill the ticket, if it couldn't. */
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [source, setSource] = useState<{ postId: string; caller: string | null } | null>(null);
   const [via, setVia] = useState<OrderContext["source"]>("desk");
   const [run, setRun] = useState<Run>({ kind: "idle" });
   const summaryRef = useRef<HTMLDivElement>(null);
 
-  /** Fill the form from a typed order or a link. Returns an error, or null when applied. */
+  /** Fill the form from a copied call or a link. Returns an error, or null when applied. */
   function apply(text: string): string | null {
     const parsed = parseOrder(text);
     if (!parsed.ok) return parsed.error;
@@ -131,7 +131,7 @@ export function TradeTicket({
   useEffect(() => {
     if (!prefill) return;
     setCustom(null);
-    setTypedError(apply(prefill.order));
+    setLinkError(apply(prefill.order));
     setSource({ postId: prefill.postId, caller: prefill.caller });
     setRun({ kind: "idle" });
     // apply only sets form state; nonce re-runs it for the same call.
@@ -419,46 +419,11 @@ export function TradeTicket({
         </div>
       </section>
 
-      {/* Type an order instead of picking. */}
-      <form
-        className="rounded-xl border border-rule bg-card p-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const err = typed.trim() ? apply(typed) : "Type an order first.";
-          setTypedError(err);
-          if (!err) setTyped("");
-        }}
-      >
-        <label htmlFor="typed-order" className="text-xs font-semibold text-slate">
-          Or type it
-        </label>
-        <div className="mt-1.5 flex gap-2">
-          <input
-            id="typed-order"
-            value={typed}
-            onChange={(e) => {
-              setTyped(e.target.value);
-              setTypedError(null);
-            }}
-            placeholder="buy $2 of ETH tp 10% sl 5%"
-            className="min-w-0 flex-1 rounded-md border border-rule bg-paper px-3 py-2 text-sm placeholder:text-slate/70 focus:border-lime focus:outline-none"
-          />
-          <button type="submit" className="rounded-md border border-rule-strong px-3 py-2 text-sm font-semibold hover:border-lime hover:text-lime">
-            Fill
-          </button>
-        </div>
-        {typedError && (
-          <p className="mt-1.5 text-xs text-down" aria-live="polite">
-            {typedError}
-          </p>
-        )}
-      </form>
-
-      <p className="px-1 text-xs leading-relaxed text-slate">
-        {wallet?.walletClientType === "metamask"
-          ? "MetaMask signs each order: confirm it there. Kall Markets never holds your keys."
-          : "Your Kall wallet signs each order, with no pop-ups. Kall Markets never holds its keys."}
-      </p>
+      {linkError && (
+        <p className="px-1 text-xs text-down" aria-live="polite">
+          {linkError}
+        </p>
+      )}
     </div>
   );
 }
