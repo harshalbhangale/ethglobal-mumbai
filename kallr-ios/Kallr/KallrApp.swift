@@ -38,6 +38,8 @@ struct RootView: View {
         }
         .tint(Kallr.lime)
         .task { await store.refresh() }
+        // Back from signing in with X on the web app: kallmarkets://link?key=…&address=…&expires=…
+        .onOpenURL { url in if store.linked(url) { tab = .wallet } }
         // Back from a wallet app after a deposit: read the balances again.
         .onChange(of: phase) { _, now in if now == .active { Task { await store.refresh() } } }
     }
@@ -102,18 +104,45 @@ final class AppStore: ObservableObject {
             .prefix(3).map { $0 }
     }
 
+    /** Your Kall wallet once linked with X; the keyboard and app trade from it. */
+    @Published var link: Kallr.Link? = Kallr.link
+    /** The old shared keyboard wallet, while it still holds funds to move to your Kall wallet. */
+    @Published var oldWallet: Kallr.Wallet?
+
+    /** Saves the link from the web app's sign-in and reads the wallet again. */
+    func linked(_ url: URL) -> Bool {
+        guard Kallr.handleLink(url) else { return false }
+        link = Kallr.link
+        wallet = nil
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Task { await refresh() }
+        return true
+    }
+
+    func unlink() {
+        Kallr.unlink()
+        link = nil
+        wallet = nil
+        oldWallet = nil
+        Task { await refresh() }
+    }
+
     func refresh() async {
         loading = true
+        link = Kallr.link
         async let w = Kallr.wallet()
         async let f = Kallr.feed()
-        let (wallet, feed) = await (w, f)
+        async let old = link == nil ? nil : Kallr.sharedWallet()
+        let (wallet, feed, oldWallet) = await (w, f, old)
         if let wallet {
-            if let before = self.wallet { noteDeposit(from: before, to: wallet) }
+            if let before = self.wallet, before.address == wallet.address { noteDeposit(from: before, to: wallet) }
             self.wallet = wallet
         }
+        self.oldWallet = oldWallet
         if let feed { self.feed = feed }
         // The Kall wallet (keyboard and app) and the person's own wallets (X and the web app), in one list.
         var wallets = kallAddress.map { [$0] } ?? []
+        if let old = oldWallet?.address, !wallets.contains(where: { $0.lowercased() == old.lowercased() }) { wallets.append(old) }
         for a in linkedWallets where !wallets.contains(where: { $0.lowercased() == a.lowercased() }) { wallets.append(a) }
         if !wallets.isEmpty {
             var fresh = await Kallr.history(wallets: wallets)
@@ -171,6 +200,7 @@ private struct WalletHome: View {
     let seeHistory: () -> Void
     @State private var depositing = false
     @State private var withdrawing = false
+    @State private var moving = false
     @State private var copied = false
     @Environment(\.openURL) private var openURL
 
@@ -178,6 +208,7 @@ private struct WalletHome: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 Header(eyebrow: "KALL MARKETS", title: "WALLET")
+                LinkCard(store: store)
                 balances
                 if let address = store.wallet?.address {
                     HStack(spacing: 10) {
@@ -204,6 +235,12 @@ private struct WalletHome: View {
                     Label(received, systemImage: "checkmark.circle.fill")
                         .font(.footnote.weight(.semibold)).foregroundStyle(Kallr.lime)
                 }
+                if let link = store.link, let old = store.oldWallet, old.holdsFunds {
+                    OldFunds(wallet: old) { moving = true }
+                        .sheet(isPresented: $moving, onDismiss: { Task { await store.refresh() } }) {
+                            WithdrawSheet(store: store, source: old, presetTo: link.address)
+                        }
+                }
                 HStack(spacing: 10) {
                     Button { depositing = true } label: {
                         Label("DEPOSIT", systemImage: "arrow.down.circle.fill")
@@ -212,14 +249,15 @@ private struct WalletHome: View {
                             .frame(maxWidth: .infinity, minHeight: 52)
                             .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 12))
                     }
-                    Button { withdrawing = true } label: {
+                    // Withdraw sends from the old shared wallet; a linked Kall wallet sends from the web app.
+                    if store.link == nil { Button { withdrawing = true } label: {
                         Label("WITHDRAW", systemImage: "arrow.up.circle")
                             .font(.system(size: 15, weight: .heavy)).tracking(0.5)
                             .foregroundStyle(Kallr.bone)
                             .frame(maxWidth: .infinity, minHeight: 52)
                             .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 12))
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Kallr.hairline))
-                    }
+                    } }
                 }
                 .disabled(store.wallet?.address == nil)
                 hint
@@ -227,7 +265,8 @@ private struct WalletHome: View {
                 recent
                 callers
                 PoweredByDefinitive(height: 12, suffix: "Flash on Base")
-                Text("Held by Kall Markets for the keyboard. Up to $\(Kallr.fmt(store.wallet?.maxUsd ?? 25)) per order.")
+                Text(store.link == nil ? "Shared demo wallet held by Kall Markets. Up to $\(Kallr.fmt(store.wallet?.maxUsd ?? 25)) per order."
+                     : "Your Kall wallet, signed by Kall's Privy signer. Up to $\(Kallr.fmt(store.wallet?.maxUsd ?? 25)) per order.")
                     .font(.footnote).foregroundStyle(Kallr.muted)
             }
             .padding(20)
@@ -240,7 +279,7 @@ private struct WalletHome: View {
             if let address = store.wallet?.address { DepositSheet(address: address, ethPrice: store.ethPrice) }
         }
         .sheet(isPresented: $withdrawing, onDismiss: { Task { await store.refresh() } }) {
-            WithdrawSheet(store: store)
+            WithdrawSheet(store: store, source: store.wallet)
         }
     }
 
@@ -533,12 +572,68 @@ private struct Amount: View {
 // MARK: - Deposit
 
 /** Pick USDC or ETH and an amount; copy the address, open a wallet app with the transfer filled in, or scan the QR. */
+/** Sign in with X to trade from your own Kall wallet; once linked, which wallet it is and Unlink. */
+private struct LinkCard: View {
+    @ObservedObject var store: AppStore
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        if let link = store.link {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal.fill").foregroundStyle(Kallr.lime)
+                Text("Your Kall wallet · \(shortAddress(link.address))").font(.footnote.weight(.semibold)).foregroundStyle(Kallr.bone)
+                Spacer(minLength: 4)
+                Button("Unlink") { store.unlink() }.font(.footnote.weight(.semibold)).tint(Kallr.muted)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Trade from your Kall wallet").font(.system(size: 15, weight: .heavy)).foregroundStyle(Kallr.bone)
+                Text("The same wallet as X and the web app.").font(.footnote).foregroundStyle(Kallr.muted)
+                Button { openURL(Kallr.linkPage) } label: {
+                    Text("SIGN IN WITH X  ↗").font(.system(size: 14, weight: .heavy)).foregroundStyle(Kallr.black)
+                        .frame(maxWidth: .infinity, minHeight: 46)
+                        .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 11))
+                }
+            }
+            .padding(14)
+            .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Kallr.lime.opacity(0.4)))
+        }
+    }
+}
+
+/** What's still in the old shared keyboard wallet, and one button to move it to your Kall wallet. */
+private struct OldFunds: View {
+    let wallet: Kallr.Wallet
+    let move: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("OLD KEYBOARD WALLET").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
+            Text([wallet.usdcValue.map { String(format: "%.2f USDC", $0) }, wallet.ethValue.map { String(format: "%.5f ETH", $0) }]
+                .compactMap { $0 }.joined(separator: " · "))
+                .font(.system(size: 17, weight: .heavy).monospacedDigit()).foregroundStyle(Kallr.bone)
+            Button(action: move) {
+                Text("MOVE TO YOUR KALL WALLET").font(.system(size: 14, weight: .heavy)).foregroundStyle(Kallr.bone)
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(Kallr.hairline))
+            }
+        }
+        .padding(14)
+        .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
 /**
  * Withdraw from the Kall wallet to your own wallet on Base: pick ETH or USDC, an amount (or Max), paste the
  * address, review, then hold to send. The server checks the balance and caps each withdrawal.
  */
 private struct WithdrawSheet: View {
     @ObservedObject var store: AppStore
+    /** The old shared keyboard wallet: the one /api/keyboard/withdraw sends from. */
+    let source: Kallr.Wallet?
+    /** Your Kall wallet, when moving the old wallet's funds over. */
+    var presetTo: String? = nil
     @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
     @State private var asset = "USDC"
@@ -551,7 +646,7 @@ private struct WithdrawSheet: View {
 
     /** What can go out: ETH keeps a little for gas. */
     private var most: Double? {
-        asset == "ETH" ? store.wallet?.ethValue.map { max(0, $0 - 0.00005) } : store.wallet?.usdcValue
+        asset == "ETH" ? source?.ethValue.map { max(0, $0 - 0.00005) } : source?.usdcValue
     }
     private var mostText: String { most.map { asset == "ETH" ? String(format: "%.6f", floor($0 * 1e6) / 1e6) : String(format: "%.2f", floor($0 * 100) / 100) } ?? "…" }
     private var validTo: Bool { to.range(of: "^0x[0-9a-fA-F]{40}$", options: .regularExpression) != nil }
@@ -561,7 +656,8 @@ private struct WithdrawSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Text("WITHDRAW").font(.system(size: 22, weight: .black)).foregroundStyle(Kallr.bone)
+                    Text(presetTo == nil ? "WITHDRAW" : "MOVE TO YOUR KALL WALLET").font(.system(size: 22, weight: .black)).foregroundStyle(Kallr.bone)
+                        .lineLimit(1).minimumScaleFactor(0.6)
                     Spacer()
                     Button("Done") { dismiss() }.tint(Kallr.lime)
                 }
@@ -569,6 +665,7 @@ private struct WithdrawSheet: View {
             }
             .padding(20)
         }
+        .onAppear { if let presetTo, to.isEmpty { to = presetTo } }
         .background(Kallr.black.ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
     }

@@ -38,10 +38,17 @@ plays keyboard haptics only with Allow Full Access.
   Flash's gasless signed message and is final.
 - **Wallet:** the Kall wallet's address and balances.
 
-**How a trade is placed.** The keyboard sends the order to `/api/keyboard/execute` with a secret only these
-builds carry. The server re-quotes on Flash, approves exactly this USDC amount, signs with the Kall wallet
-and submits, then records the trade on Arkiv as a keyboard trade. The Kall wallet is a demo hot wallet held
-by the server, funded with ETH on Base (swapped to USDC in the app), with a per-order cap (`KALL_EXEC_MAX_USD`, $25).
+**Your Kall wallet.** Wallet › **Sign in with X** opens the web app's `/app/keyboard-link`: sign in with X,
+allow Kall's signer once, and the app opens with `kallmarkets://link?key=…&address=…&expires=…`. The key is
+kept in a keychain group the app and the keyboard share, and every keyboard call carries it, so the
+keyboard trades, swaps and cancels from the same Privy wallet as X and the web app, signed on the server by
+Kall's Privy signer and capped per order. Funds left in the old shared keyboard wallet move over with
+**Move to your Kall wallet**.
+
+**How a trade is placed.** The keyboard sends the order to `/api/keyboard/execute` with your Kall wallet's
+key (or, before you link, a secret only these builds carry, for the shared demo wallet). The server
+re-quotes on Flash, approves exactly this USDC amount, signs and submits, then records the trade on Arkiv as
+a keyboard trade, with a per-order cap ($25).
 An order typed on the iPhone keyboard ("buy $20 of eth tp 10% sl 5%") is filled in when you switch to Kall.
 
 iOS doesn't let keyboards use the microphone, so voice orders are Android only.
