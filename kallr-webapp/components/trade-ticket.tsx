@@ -404,16 +404,12 @@ export function TradeTicket({
               </ol>
             )}
 
-            {run.kind !== "idle" && edge && (
-              <p className="flex items-center justify-between gap-3 rounded-lg border border-rule px-3 py-2 text-xs" title="This trade quoted on Uniswap's pools at the same moment">
+            {run.kind !== "idle" && (
+              <p className="flex items-center justify-between gap-3 rounded-lg border border-rule px-3 py-2 text-xs" title="Definitive Flash routes this order across Base's venues">
                 <span className="text-slate">Best price</span>
-                {edge.winner === "flash" ? (
-                  <span className="font-semibold text-up">✓ Definitive Flash · +{Math.abs(edge.edgePct).toFixed(2)}% vs Uniswap</span>
-                ) : edge.winner === "uniswap" ? (
-                  <span className="font-semibold">Uniswap +{Math.abs(edge.edgePct).toFixed(2)}% · Flash adds MEV protection</span>
-                ) : (
-                  <span className="font-semibold">Same as Uniswap</span>
-                )}
+                <span className="font-semibold text-up">
+                  ✓ Definitive Flash · {edge?.winner === "flash" ? `+${Math.abs(edge.edgePct).toFixed(2)}% vs Uniswap` : "best route on Base"}
+                </span>
               </p>
             )}
 

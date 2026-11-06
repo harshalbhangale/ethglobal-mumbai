@@ -28,13 +28,14 @@ describe("quote facts", () => {
       "Price impact=1.98%",
       "Max slippage=5.00%",
       "Flash fee=Free",
+      "Best price=✓ Definitive Flash · best route on Base",
     ]);
   });
 
   it("flags heavy impact and skips numbers Flash didn't send", () => {
     const f = quoteFacts({ ...quote, estimatedPriceImpact: "-0.045", recommendedSlippage: null, fees: null });
     const node = quoteSummary(f, "USDC");
-    expect(text(node)).toEqual(["You get=5,991,128.5071 USDC · ≈$4,898.61", "Price impact=4.50%"]);
+    expect(text(node)).toEqual(["You get=5,991,128.5071 USDC · ≈$4,898.61", "Price impact=4.50%", "Best price=✓ Definitive Flash · best route on Base"]);
     expect(node.querySelector(".down")?.textContent).toBe("4.50%");
   });
 
