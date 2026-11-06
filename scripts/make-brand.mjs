@@ -1,6 +1,7 @@
 /**
- * Builds every Kallr brand asset from docs/brand/logo-source.png (white mark on black):
- * the transparent mark, web favicons / PWA / Apple icons, the share card, and the extension icons.
+ * Builds every Kall Markets brand asset from docs/brand/logo-source.png (white mark on black):
+ * a lime mark on a black tile, the same look as the app: web favicons / PWA / Apple icons, the share
+ * card, and the extension icons.
  * Run after changing the logo:  npm run brand
  */
 import { createRequire } from "node:module";
@@ -10,14 +11,16 @@ import { fileURLToPath } from "node:url";
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sharp = createRequire(`${REPO}/package.json`)("sharp");
 const SRC = `${REPO}/docs/brand/logo-source.png`;
-const INK = "#14213D";
+const INK = "#0b0d0c"; // black, the app's paper
+const LIME = [0xc6, 0xf2, 0x5a]; // the app's lime (#c6f25a)
 
-// 1. Brightness → alpha: a white mark on transparent, with the soft edge kept but the glow trimmed.
+// 1. Brightness → alpha: a lime mark on transparent, with the soft edge kept but the glow trimmed.
 const { data, info } = await sharp(SRC).removeAlpha().greyscale().raw().toBuffer({ resolveWithObject: true });
 const LO = 60, HI = 215;
 const rgba = Buffer.alloc(info.width * info.height * 4, 255);
 for (let i = 0; i < info.width * info.height; i++) {
   const v = data[i];
+  [rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2]] = LIME;
   rgba[i * 4 + 3] = v <= LO ? 0 : v >= HI ? 255 : Math.round(((v - LO) * 255) / (HI - LO));
 }
 const trimmed = await sharp(rgba, { raw: { width: info.width, height: info.height, channels: 4 } })
@@ -35,7 +38,7 @@ console.log(`mark: ${W}x${H} → ${side}² master`);
 
 const markAt = (px) => sharp(mark).resize(px, px, { fit: "contain", kernel: "lanczos3" }).png().toBuffer();
 
-/** A tile: `color` background (rounded unless full-bleed) with the white mark centred at `frac` of the tile. */
+/** A tile: `color` background (rounded unless full-bleed) with the lime mark centred at `frac` of the tile. */
 async function tile(size, { frac, radius = 0.225, color = INK }) {
   const r = Math.round(size * radius);
   const bg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="${size}" height="${size}" rx="${r}" ry="${r}" fill="${color}"/></svg>`);
@@ -51,7 +54,7 @@ const out = async (path, buf) => {
   console.log(`${path.replace(REPO + "/", "")}  ${meta.width}x${meta.height}  ${(buf.length / 1024).toFixed(1)}KB`);
 };
 
-// Web app (light, navy-ink brand)
+// Web app (black and lime)
 const web = `${REPO}/kallr-webapp/public`;
 await out(`${web}/brand/mark.png`, await markAt(256));
 await out(`${web}/icons/icon-192.png`, await tile(192, { frac: 0.68 }));
@@ -73,20 +76,20 @@ const font = "Helvetica Neue, Helvetica, Arial, sans-serif";
 const bg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
   <defs>
     <radialGradient id="g" cx="78%" cy="38%" r="70%">
-      <stop offset="0" stop-color="#22345f"/><stop offset="1" stop-color="${INK}"/>
+      <stop offset="0" stop-color="#1a2410"/><stop offset="1" stop-color="${INK}"/>
     </radialGradient>
   </defs>
   <rect width="${W}" height="${H}" fill="url(#g)"/>
   <text x="142" y="142" fill="#ffffff" font-family="${font}" font-size="40" font-weight="700" letter-spacing="-0.5">Kall Markets</text>
   <text x="80" y="300" fill="#ffffff" font-family="${font}" font-size="76" font-weight="700" letter-spacing="-2.5">Every call on X</text>
   <text x="80" y="388" fill="#ffffff" font-family="${font}" font-size="76" font-weight="700" letter-spacing="-2.5">has an after market.</text>
-  <text x="80" y="470" fill="#b9c3d6" font-family="${font}" font-size="28" letter-spacing="-0.2">Priced at posting. Copy it with TP/SL on Base.</text>
-  <text x="80" y="560" fill="#f2a93b" font-family="${font}" font-size="24" font-weight="600">kallr.vercel.app</text>
+  <text x="80" y="470" fill="#b8c2b7" font-family="${font}" font-size="28" letter-spacing="-0.2">Priced at posting. Copy it on Base with Definitive Flash.</text>
+  <text x="80" y="560" fill="#c6f25a" font-family="${font}" font-size="24" font-weight="600">kallr.vercel.app</text>
 </svg>`);
 const mark = await sharp(`${REPO}/kallr-webapp/public/brand/mark.png`).resize(360, 360).png().toBuffer();
 const markSmall = await sharp(`${REPO}/kallr-webapp/public/brand/mark.png`).resize(48, 48).png().toBuffer();
 // Faint large mark on the right, small mark beside the name.
-const faint = await sharp(mark).ensureAlpha().composite([{ input: Buffer.from([255, 255, 255, 235]), raw: { width: 1, height: 1, channels: 4 }, tile: true, blend: "dest-in" }]).png().toBuffer();
+const faint = await sharp(mark).ensureAlpha().composite([{ input: Buffer.from([255, 255, 255, 60]), raw: { width: 1, height: 1, channels: 4 }, tile: true, blend: "dest-in" }]).png().toBuffer();
 await sharp(bg)
   .composite([
     { input: faint, left: W - 360 - 70, top: 120 },

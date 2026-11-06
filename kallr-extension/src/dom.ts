@@ -36,8 +36,8 @@ export function assetUrl(path: string) {
 }
 
 /**
- * The Kallr mark. The packaged PNG is used as a mask and filled with currentColor, so the
- * mark is white on X's dark theme and ink on light without separate assets.
+ * The Kall Markets mark. The packaged PNG is used as a mask and filled with lime, so the
+ * mark is lime (black on X's white theme) without separate assets.
  */
 export function brandMark(size = 16) {
   // Inlined, so the mark survives extension reloads (file URLs from an old install break).

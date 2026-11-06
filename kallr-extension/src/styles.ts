@@ -18,7 +18,7 @@ a { color: inherit; }
   --lime: #c6f25a; --on-lime: #0e1407; --positive: #8ad97c; --negative: #ff8a7a; --warning: #f0c766;
 }
 .wordmark { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; letter-spacing: -0.02em; color: var(--foreground); }
-.brand-mark-glyph { display: inline-block; flex: 0 0 auto; background-color: currentColor;
+.brand-mark-glyph { display: inline-block; flex: 0 0 auto; background-color: var(--lime);
   -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
   -webkit-mask-position: center; mask-position: center; }
 .card .title .wordmark { font: 800 15px/1 Inter, system-ui, sans-serif; gap: 8px; }
@@ -37,6 +37,8 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 :host([data-theme="light"]) .inline-card { --surface: #fff; --raised: #f7f9f9; --foreground: #0f1419; --muted: #536471;
   --line: #cfd9de; --line-strong: #aab8c2; --positive: #00875a; --negative: #d0182a; }
 .inline-card * { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+/* Lime mark on X's dark themes; on the white theme lime is too faint, so it goes black. */
+:host([data-theme="light"]) .inline-card .brand-mark-glyph { background-color: #0e1407; }
 .inline-card a { color: #1d9bf0; }
 .inline-card button:focus-visible, .inline-card summary:focus-visible, .inline-card input:focus-visible { outline: 2px solid #1d9bf0; outline-offset: 3px; }
 .inline-card.inline-attached { margin-top: 8px; }
