@@ -55,6 +55,10 @@ export function writeVerdict(runtime: Runtime<ChainConfig>, kind: number, body: 
     .writeReport(runtime, { receiver: runtime.config.verdicts, report, gasConfig: { gasLimit: runtime.config.gasLimit } })
     .result();
   const txHash = bytesToHex(res.txHash || new Uint8Array(32));
-  runtime.log(`Verdict written: https://sepolia.basescan.org/tx/${txHash}`);
+  runtime.log(
+    /^0x0+$/.test(txHash)
+      ? "Verdict signed (dry run: add --broadcast to write it on-chain)"
+      : `Verdict written: https://sepolia.basescan.org/tx/${txHash}`,
+  );
   return txHash;
 }
