@@ -10,6 +10,7 @@ import {
   shortHex,
   shortOrderId,
   startReceipt,
+  uniswapEdge,
 } from "./flash-receipt";
 
 const WALLET = "0x1234567890abcdef1234567890abcdef1234abcd";
@@ -95,10 +96,20 @@ describe("Flash receipt rows", () => {
 describe("quote numbers", () => {
   it("prices a buy and a sell from the quote's own amounts", () => {
     const buy = receiptQuote({ from: { amount: "1" }, to: { amount: "0.0005" }, estimatedPriceImpact: "-0.0012", fees: { estimatedFeeNotional: "0.003" } }, "buy");
-    expect(buy).toEqual({ price: 2000, impact: 0.0012, feeUsd: 0.003 });
+    expect(buy).toEqual({ price: 2000, impact: 0.0012, feeUsd: 0.003, vsUniswap: null });
     const sell = receiptQuote({ from: { amount: "0.001" }, to: { amount: "3.4" } }, "sell");
-    expect(sell).toEqual({ price: 3400, impact: null, feeUsd: null });
+    expect(sell).toEqual({ price: 3400, impact: null, feeUsd: null, vsUniswap: null });
     expect(receiptQuote({ from: { amount: "1" }, to: { amount: "0" } }, "buy").price).toBeNull();
+  });
+
+  it("measures Flash against Uniswap for the same trade", () => {
+    expect(uniswapEdge("1.004", "1")).toBeCloseTo(0.004, 10);
+    expect(uniswapEdge("0.99", "1")).toBeCloseTo(-0.01, 10);
+    expect(uniswapEdge("1", null)).toBeNull();
+    expect(uniswapEdge("1", "0")).toBeNull();
+    expect(receiptQuote({ from: { amount: "1" }, to: { amount: "0.0005" } }, "buy", "0.000498").vsUniswap).toBeCloseTo(0.004016, 5);
+    expect(quoteLine({ price: 2000, impact: 0.0012, feeUsd: 0, vsUniswap: 0.0042 })).toBe("$2,000.00 · 0.42% more than Uniswap · no fee");
+    expect(quoteLine({ price: 2000, impact: 0.0012, feeUsd: 0, vsUniswap: -0.003 })).toBe("$2,000.00 · impact 0.12% · no fee");
   });
 
   it("writes the quote line compactly", () => {

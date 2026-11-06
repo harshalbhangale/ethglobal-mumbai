@@ -37,14 +37,14 @@ const signTyped = (provider: Eip1193, from: string, typedDataJson: string) =>
   provider.request({ method: "eth_signTypedData_v4", params: [from, typedDataJson] }) as Promise<Hex>;
 
 export async function quoteFlashOrder(order: FlashOrderInput) {
-  return api<{ quote: FlashQuote }>("/api/flash/quote", { method: "POST", body: JSON.stringify({ order }) });
+  return api<{ quote: FlashQuote; uniswapOut?: string | null }>("/api/flash/quote", { method: "POST", body: JSON.stringify({ order }) });
 }
 
 /** Which surface sent the user to the desk, and whose call they copied. Recorded on Arkiv. */
 export type OrderContext = { source: "desk" | "extension" | "keyboard"; caller?: string | null };
 
 /** What each step after the quote knows: Flash's quote and the wallet signing it. */
-export type StepInfo = { quote: FlashQuote; from: string };
+export type StepInfo = { quote: FlashQuote; from: string; uniswapOut?: string | null };
 
 /**
  * A placement step as Flash receipt events: the quote row completes on the first step after it,
@@ -52,7 +52,7 @@ export type StepInfo = { quote: FlashQuote; from: string };
  */
 export function receiptEvents(step: PlaceStep, info: StepInfo | undefined, side: "buy" | "sell"): ReceiptEvent[] {
   if (step === "quoting") return [{ type: "quoting" }];
-  const quoted: ReceiptEvent[] = info ? [{ type: "quoted", quote: receiptQuote(info.quote, side) }] : [];
+  const quoted: ReceiptEvent[] = info ? [{ type: "quoted", quote: receiptQuote(info.quote, side, info.uniswapOut) }] : [];
   if (step === "submitting") return [...quoted, ...(info ? [{ type: "signed", wallet: info.from } as const] : []), { type: "sending" }];
   return [...quoted, { type: "signing", wallet: info?.from ?? null, note: stepLabel[step] }];
 }
@@ -78,10 +78,10 @@ export async function placeFlashOrder(
   context: OrderContext = { source: "desk" },
 ): Promise<Placed> {
   report("quoting");
-  const { quote } = await quoteFlashOrder(order);
+  const { quote, uniswapOut } = await quoteFlashOrder(order);
   const from = wallet.address;
   // Every later step carries the quote and the signing wallet, for the Flash receipt.
-  const onStep = (step: PlaceStep) => report(step, { quote, from });
+  const onStep = (step: PlaceStep) => report(step, { quote, from, uniswapOut: uniswapOut ?? null });
 
   await wallet.switchChain(8453);
   const provider = (await wallet.getEthereumProvider()) as Eip1193;

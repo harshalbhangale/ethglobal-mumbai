@@ -2,7 +2,7 @@ import type { Answer, PostRef } from "./call-view";
 import { appOrigin } from "./config";
 import { el, openDesk, safeLink, send, wordmark } from "./dom";
 import { type QuoteNumbers, receiptQuote } from "@kallr/domain/flash-receipt";
-import { BASESCAN, type CardOrder, placeOnX, type QuoteFacts, toFlashInput, waitForFill, waitForTradeRecord } from "./flash-direct";
+import { BASESCAN, type CardOrder, placeOnX, toFlashInput, waitForFill, waitForTradeRecord } from "./flash-direct";
 import { type FlashReceiptRows, flashReceiptRows, stepEvents } from "./flash-receipt-card";
 import { followButton } from "./follows";
 import { baseLogo, definitiveLogo, tokenIcon } from "./logos";
@@ -196,6 +196,7 @@ export function flashCard(input: {
       side = value;
       for (const b of sides.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b === button));
       amount.value = "";
+      newOrder();
       update();
     });
     sides.append(button);
@@ -207,6 +208,7 @@ export function flashCard(input: {
       // On a sell the box takes the asset amount: convert the dollar preset at the live price.
       const p = price();
       amount.value = side === "buy" ? String(usd) : Number.isFinite(p) ? String(Math.floor((usd / p) * 1e8) / 1e8) : "";
+      newOrder();
       update();
     });
     presets.append(b);
@@ -333,7 +335,20 @@ export function flashCard(input: {
     else void refreshPrice();
   }, 30_000);
 
-  amount.addEventListener("input", update);
+  amount.addEventListener("input", () => {
+    newOrder();
+    update();
+  });
+
+  /** A placed trade's result stays on its own (the card stays short); starting a new order brings the review back. */
+  let showingResult = false;
+  function newOrder() {
+    if (!showingResult || busy) return;
+    showingResult = false;
+    progress.replaceChildren();
+    progress.hidden = true;
+    review.hidden = false;
+  }
 
   /** Who signs, as the review shows it, with a switch when MetaMask is on the page. */
   function signedBy() {
@@ -373,6 +388,8 @@ export function flashCard(input: {
     signature: string | null;
     /** Flash's quote numbers, from the Kall-wallet path (the server quoted). */
     quote?: QuoteNumbers | null;
+    /** What Uniswap's pools would give for the same trade, measured by the server. */
+    uniswapOut?: string | null;
   };
 
   let busy = false;
@@ -412,7 +429,6 @@ export function flashCard(input: {
           exits: result.exits,
           orderId: result.orderId,
           from: result.from,
-          signer,
           signature: result.signature,
           txs: result.txs,
           rows,
@@ -421,13 +437,14 @@ export function flashCard(input: {
         }),
       );
       amount.value = "";
+      showingResult = true;
     } catch (error) {
       const message = friendlyError(error, side === "buy" ? "USDC" : choice?.kind === "known" && choice.key === "ETH" ? "ETH" : tokenSym());
       rows.emit({ type: "failed", message });
       status.textContent = message;
     } finally {
       busy = false;
-      review.hidden = false;
+      review.hidden = showingResult;
       const keep = [...status.childNodes];
       update();
       // update() rewrites the hint; keep the result line the user needs to see.
@@ -442,10 +459,8 @@ export function flashCard(input: {
       return placeOnX(
         cardOrder(),
         (step, from) => rows.emit(...stepEvents(step, from)),
-        (facts, quote) => {
-          rows.emit({ type: "quoted", quote: receiptQuote(quote, placing) });
-          progress.prepend(quoteSummary(facts, placing === "buy" ? tokenSym() : "USDC"));
-        },
+        // The quote row carries Flash's numbers (and its edge over Uniswap): no separate block.
+        (_facts, quote, uniswapOut) => rows.emit({ type: "quoted", quote: receiptQuote(quote, placing, uniswapOut) }),
       );
     });
 
@@ -461,7 +476,7 @@ export function flashCard(input: {
       if (!res) throw new Error("Couldn't reach Kall Markets. Check the app is running, then try again.");
       if (res.failed) throw new Error(res.failed);
       rows.emit(
-        { type: "quoted", quote: res.quote ? receiptQuote(res.quote, placing) : { price: null, impact: null, feeUsd: null } },
+        { type: "quoted", quote: res.quote ? receiptQuote(res.quote, placing, res.uniswapOut) : { price: null, impact: null, feeUsd: null } },
         { type: "signed", wallet: res.from },
         { type: "sending" },
       );
@@ -649,26 +664,6 @@ export function flashCard(input: {
   return { card, open: () => tradable && toggle(true) };
 }
 
-const pct = (f: number) => `${(f * 100).toFixed(f >= 0.1 ? 1 : 2)}%`;
-
-/** Flash's own numbers for this fill, shown the moment the quote lands (before any wallet prompt). */
-export function quoteSummary(f: QuoteFacts, symbol: string) {
-  const row = (k: string, v: Node | string, hint?: string) => [el("dt", hint ? { title: hint } : {}, k), el("dd", {}, v)];
-  const amount = Number(f.received);
-  const got = Number.isFinite(amount) ? amount.toLocaleString("en-US", { maximumFractionDigits: amount >= 1 ? 4 : 8 }) : f.received;
-  const tone = f.impact === null ? "" : f.impact >= 0.03 ? "down" : f.impact >= 0.01 ? "warn" : "up";
-  const facts = el(
-    "dl",
-    { class: "review quote-facts" },
-    ...row("You get", `${got} ${symbol}${f.receivedUsd !== null ? ` · ≈$${f.receivedUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}`),
-    ...(f.impact !== null ? row("Price impact", el("span", { class: tone }, pct(f.impact)), "How much this order moves the price") : []),
-    ...(f.slippage !== null ? row("Max slippage", pct(f.slippage), "Recommended by Definitive for this quote") : []),
-    ...(f.feeUsd !== null ? row("Flash fee", f.feeUsd === 0 ? "Free" : `$${f.feeUsd.toFixed(2)}`) : []),
-    ...row("Best price", el("span", { class: "up best-price-line" }, "✓ Definitive Flash · best route on Base"), "Definitive Flash routes this order across Base's venues"),
-  );
-  return facts;
-}
-
 const short = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;
 const venueName = (v: string) => v.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -684,8 +679,6 @@ export function receipt(r: {
   exits: string | null;
   orderId: string;
   from: string;
-  /** Who signed: "Your Kall wallet" or "MetaMask". */
-  signer?: string;
   /** The order's EIP-712 signature, when known. */
   signature?: string | null;
   txs: Array<{ label: string; hash: string }>;
@@ -712,10 +705,7 @@ export function receipt(r: {
       el("dt", {}, "Route"),
       venue,
       ...r.txs.flatMap((t) => row(t.label, safeLink(`${BASESCAN}/tx/${t.hash}`, `${short(t.hash)} ↗`))),
-      ...row("Wallet", safeLink(`${BASESCAN}/address/${r.from}`, `${short(r.from)} ↗`)),
-      ...(r.signer ? row("Signed by", r.signer) : []),
       ...(r.signature ? row("Signature", el("span", { class: "mono", title: `EIP-712 signature: ${r.signature}` }, short(r.signature))) : []),
-      ...row("Order", safeLink(`${appOrigin}/app#orders`, `${r.orderId.slice(0, 8)}… ↗`)),
       arkivTerm,
       arkiv,
       ...(r.exits ? row("TP/SL", r.exits === "pending_activation" ? "Arms on the first fill" : r.exits) : []),

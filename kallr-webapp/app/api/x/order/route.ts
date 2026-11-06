@@ -5,6 +5,7 @@ import { recordTrade } from "@/lib/server/arkiv";
 import { errorResponse } from "@/lib/server/flash";
 import { placeWithSigner } from "@/lib/server/flash-place";
 import { privySigner, serverSigningReady } from "@/lib/server/privy-wallet";
+import { uniswapOut } from "@/lib/server/uniswap";
 import { bearer, readXKey } from "@/lib/server/x-key";
 
 /**
@@ -36,6 +37,8 @@ export async function POST(req: Request) {
     const over = `Trades from X are up to $${MAX_X_ORDER_USD} each. Use Kall Markets for more.`;
     if (input.side === "buy" && Number(input.qty) > MAX_X_ORDER_USD) return Response.json({ error: over }, { status: 400 });
 
+    // Uniswap's pools for the same trade, measured alongside: shown on the receipt, never traded on.
+    const uniswap = uniswapOut(input);
     const run = (queues.get(key.walletId) ?? Promise.resolve()).then(() =>
       placeWithSigner(input, privySigner(key.walletId, key.address), {
         // A sell's size is in tokens: check its dollar value on the quote, before anything is signed.
@@ -63,6 +66,7 @@ export async function POST(req: Request) {
         estimatedPriceImpact: placed.quote.estimatedPriceImpact ?? null,
         fees: placed.quote.fees ?? null,
       },
+      uniswapOut: await uniswap,
     });
   } catch (err) {
     return errorResponse(err);

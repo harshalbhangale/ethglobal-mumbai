@@ -14,8 +14,12 @@
 export type ReceiptRowState = "pending" | "live" | "done" | "failed";
 export type ReceiptRowKey = "quote" | "signed" | "sent" | "filled";
 
-/** Flash's own numbers for the fill. Impact and fee are as Flash quotes them; impact 0.01 = 1%. */
-export type ReceiptQuote = { price: number | null; impact: number | null; feeUsd: number | null };
+/**
+ * Flash's own numbers for the fill. Impact and fee are as Flash quotes them; impact 0.01 = 1%.
+ * `vsUniswap`: how much more Flash gives than Uniswap's pools for the same trade (0.004 = 0.4%;
+ * negative when Uniswap gives more), when it was measured.
+ */
+export type ReceiptQuote = { price: number | null; impact: number | null; feeUsd: number | null; vsUniswap?: number | null };
 
 export type FlashReceipt = {
   /** Who signs, as the row reads: "your Kall wallet", "MetaMask". */
@@ -106,10 +110,15 @@ export function formatAmount(v: string | number) {
   return n.toLocaleString("en-US", { maximumSignificantDigits: 6 });
 }
 
+/** Edges under this read as a tie: too small to claim. */
+const MIN_EDGE = 0.0001;
+
 export function quoteLine(q: ReceiptQuote) {
   const parts: string[] = [];
   if (q.price !== null) parts.push(formatUsdPrice(q.price));
-  if (q.impact !== null) parts.push(`impact ${pct(q.impact)}`);
+  // Flash beat Uniswap on this exact trade: say by how much, in place of the impact.
+  if (q.vsUniswap != null && q.vsUniswap >= MIN_EDGE) parts.push(`${pct(q.vsUniswap)} more than Uniswap`);
+  else if (q.impact !== null) parts.push(`impact ${pct(q.impact)}`);
   if (q.feeUsd !== null) parts.push(q.feeUsd === 0 ? "no fee" : `fee $${q.feeUsd.toFixed(q.feeUsd < 0.01 ? 4 : 2)}`);
   return parts.length ? parts.join(" · ") : "Quoted";
 }
@@ -172,7 +181,7 @@ const num = (v: string | null | undefined) => (v == null || v === "" || !Number.
  * Price per token from the quote's own amounts: a buy spends USDC (from) for tokens (to), a sell the
  * other way round.
  */
-export function receiptQuote(q: QuoteNumbers, side: "buy" | "sell"): ReceiptQuote {
+export function receiptQuote(q: QuoteNumbers, side: "buy" | "sell", uniswapOut?: string | null): ReceiptQuote {
   const usdc = num(side === "buy" ? q.from.amount : q.to.amount);
   const tokens = num(side === "buy" ? q.to.amount : q.from.amount);
   const impact = num(q.estimatedPriceImpact);
@@ -180,7 +189,19 @@ export function receiptQuote(q: QuoteNumbers, side: "buy" | "sell"): ReceiptQuot
     price: usdc !== null && tokens !== null && tokens > 0 ? usdc / tokens : null,
     impact: impact === null ? null : Math.abs(impact),
     feeUsd: num(q.fees?.estimatedFeeNotional),
+    vsUniswap: uniswapEdge(q.to.amount, uniswapOut),
   };
+}
+
+/**
+ * How much more Flash's quote gives than Uniswap for the same trade (both in the output token):
+ * 0.004 = 0.4% more; negative when Uniswap gives more. Null when either is missing.
+ */
+export function uniswapEdge(flashOut: string, uniswapOut: string | null | undefined): number | null {
+  const flash = num(flashOut);
+  const uni = num(uniswapOut);
+  if (flash === null || uni === null || flash <= 0 || uni <= 0) return null;
+  return (flash - uni) / uni;
 }
 
 /** A Flash order status that means it will never fill. */

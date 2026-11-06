@@ -37,7 +37,9 @@ wallet our server holds (`0xa8405c…8072`) until its funds move.
 With the Kall wallet there is no wallet pop-up, so every trade in the web app and on the X card ends with a
 Definitive Flash receipt that fills in step by step and stays on screen:
 
-1. **Quote from Definitive**: price, price impact and fee, from the Flash quote
+1. **Quote from Definitive**: price, price impact and fee, from the Flash quote. When Flash gives more than
+   Uniswap's best v3 pool for the same trade (read from Uniswap's QuoterV2 on Base at the same moment, no API key),
+   the row says by how much, e.g. "0.42% more than Uniswap". Uniswap is only a benchmark: every order goes to Flash
 2. **Signed by your Kall wallet** (or MetaMask): the signing wallet
 3. **Sent to Definitive Flash**: the Flash order ID, with a copy button
 4. **Filled**: the amount received and the swap on Basescan, polled from the order's fills. A limit or TWAP order
@@ -52,6 +54,7 @@ order's ID and, once filled, its swap on Basescan.
 - [`packages/integrations/src/definitive.ts`](../packages/integrations/src/definitive.ts): the Flash client, order
   validation, quote and submit bodies
 - [`kallr-webapp/app/api/flash`](../kallr-webapp/app/api/flash): quote, order, orders and fills
+- [`kallr-webapp/lib/server/uniswap.ts`](../kallr-webapp/lib/server/uniswap.ts): the Uniswap price benchmark
 - [`kallr-webapp/app/api/x/order`](../kallr-webapp/app/api/x/order/route.ts): extension trades signed by the Kall wallet
 - [`kallr-webapp/app/api/keyboard/execute`](../kallr-webapp/app/api/keyboard/execute/route.ts): iPhone keyboard trades
 - [`kallr-extension/src/flash-direct.ts`](../kallr-extension/src/flash-direct.ts): the MetaMask path on X

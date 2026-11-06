@@ -21,9 +21,14 @@ describe("web placement steps as Flash receipt events", () => {
 
   it("the first step after the quote completes the quote row and shows what is signing", () => {
     expect(receiptEvents("approving", info, "buy")).toEqual([
-      { type: "quoted", quote: { price: 2000, impact: 0.0005, feeUsd: 0 } },
+      { type: "quoted", quote: { price: 2000, impact: 0.0005, feeUsd: 0, vsUniswap: null } },
       { type: "signing", wallet: FROM, note: stepLabel.approving },
     ]);
+  });
+
+  it("carries the Uniswap benchmark into the quote row", () => {
+    const [quoted] = receiptEvents("signing", { ...info, uniswapOut: "0.000996" }, "buy");
+    expect(quoted?.type === "quoted" && quoted.quote.vsUniswap).toBeCloseTo(0.004016, 5);
   });
 
   it("submitting marks the Kall wallet's signature done", () => {

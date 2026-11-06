@@ -152,7 +152,8 @@ export async function waitForTradeRecord(orderId: string, funder: string, tries 
 export async function placeOnX(
   o: CardOrder,
   report: (step: Step, from?: string) => void,
-  onQuote?: (facts: QuoteFacts, quote: FlashQuote) => void,
+  /** The quote, and what Uniswap's pools would give for the same trade (the server's benchmark). */
+  onQuote?: (facts: QuoteFacts, quote: FlashQuote, uniswapOut: string | null) => void,
 ) {
   report("connecting");
   const from = await connect();
@@ -164,11 +165,11 @@ export async function placeOnX(
   const order = built.input;
 
   onStep("quoting");
-  const raw = await api<{ quote: unknown }>("flash-quote", { order });
+  const raw = await api<{ quote: unknown; uniswapOut?: string | null }>("flash-quote", { order });
   const parsed = flashQuoteSchema.safeParse(raw.quote);
   if (!parsed.success) throw new Error("Flash returned a quote we couldn't read. Try again.");
   const quote: FlashQuote = parsed.data;
-  onQuote?.(quoteFacts(quote), quote);
+  onQuote?.(quoteFacts(quote), quote, typeof raw.uniswapOut === "string" ? raw.uniswapOut : null);
   /** Transactions the wallet sent itself (wrap, approvals), for Basescan links. */
   const txs: Array<{ label: string; hash: string }> = [];
 
