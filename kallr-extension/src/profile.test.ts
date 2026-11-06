@@ -135,7 +135,7 @@ describe("scanProfile", () => {
     // Small: who and Follow, one line of numbers, the last calls, one footer line. No stat tiles.
     expect(root?.querySelector(".pc-title")?.textContent).toBe("@kol on Kall");
     expect(root?.querySelector(".pc-head .pc-follow")?.textContent).toBe("Follow");
-    expect(root?.querySelector(".pc-line")?.textContent).toBe("2 calls · 100% hit · +2.2% avg");
+    expect(root?.querySelector(".pc-line")?.textContent).toBe("2 calls · 100% hit · +2.2% avg · 1 deleted");
     expect(root?.querySelectorAll(".pc-stat")).toHaveLength(0);
     expect(root?.querySelectorAll(".pc-calls li")).toHaveLength(2);
     // A call whose post is gone from X is still on the record, and says so.
@@ -152,7 +152,7 @@ describe("scanProfile", () => {
       "https://rabdi.explorer.arkiv.network/address/0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53",
       "https://kallr.test/app?caller=kol",
     ]);
-    expect(root?.querySelector(".pc-foot")?.textContent).toContain("Too few to judge · 1 deleted on X · Priced at post time");
+    expect(root?.querySelector(".pc-foot")?.textContent).toContain("Too few to judge · Priced at post time");
   });
   it("is honest when a caller has no calls yet, and leaves non-profile pages alone", async () => {
     await wire({ calls: [], writer: null });

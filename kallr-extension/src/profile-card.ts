@@ -86,8 +86,8 @@ function callRow(handle: string, c: SeenCall & { gone?: boolean }) {
 }
 
 /**
- * Small on purpose: who and Follow, one line of numbers (calls, hit rate, average), the last three
- * calls with their records on Arkiv, and one footer line.
+ * Small on purpose: who and Follow, one line of numbers (calls, hit rate, average, deleted), the last
+ * three calls with their records on Arkiv, and one footer line.
  */
 export function callerCard(opts: {
   handle: string;
@@ -122,6 +122,8 @@ export function callerCard(opts: {
       el("b", { class: toneOf(s.avgBps) }, formatBps(s.avgBps ?? 0)),
       " avg",
     );
+  // Call posts the caller deleted from X: still on the record, and counted here.
+  if (deleted && deleted.checked) line.append(" · ", el("b", { class: deleted.count ? "down" : "" }, String(deleted.count)), " deleted");
   return el(
     "div",
     { class: "pc" },
@@ -132,7 +134,6 @@ export function callerCard(opts: {
       "p",
       { class: "pc-foot" },
       s.scored < MIN_SAMPLE ? "Too few to judge · " : "",
-      deleted?.count ? `${deleted.count} deleted on X · ` : "",
       "Priced at post time · ",
       writer ? safeLink(`${ARKIV}/address/${writer}`, "All on Arkiv ↗") : "Arkiv",
       " · ",
