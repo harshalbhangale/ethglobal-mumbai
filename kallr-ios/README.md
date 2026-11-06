@@ -49,7 +49,7 @@ xcrun devicectl device install app --device <iPhone UDID> build/Build/Products/D
 ## On the iPhone
 
 1. **Settings → General → VPN & Device Management →** your Apple ID under Developer App **→ Trust**.
-2. **Settings → General → Keyboard → Keyboards → Add New Keyboard → Kallr.**
-3. Tap **Kallr** and turn on **Allow Full Access**, so it can reach Kallr and read what you copy when you
+2. **Settings → General → Keyboard → Keyboards → Add New Keyboard → Kall Keyboard.**
+3. Tap **Kall Keyboard** and turn on **Allow Full Access**, so it can reach Kall Markets and read what you copy when you
    tap Check.
-4. In any app, hold the globe key and pick Kallr.
+4. In any app, hold the globe key and pick Kall Keyboard.
