@@ -305,8 +305,11 @@ enum Kallr {
         var live: Bool { expires > Date().timeIntervalSince1970 * 1000 }
     }
 
+    /** Signing in with X to trade from your own Kall wallet: off for now, so everything uses the shared Kall wallet. */
+    static let linkingEnabled = false
+
     static var link: Link? {
-        guard let data = SharedKeychain.read("kall.link"), let l = try? JSONDecoder().decode(Link.self, from: data), l.live else { return nil }
+        guard linkingEnabled, let data = SharedKeychain.read("kall.link"), let l = try? JSONDecoder().decode(Link.self, from: data), l.live else { return nil }
         return l
     }
 
@@ -588,6 +591,13 @@ enum Kallr {
     static func orders(funder: String) async -> [Order]? {
         struct Body: Codable { let orders: [Order] }
         let body: Body? = await get("api/flash/orders?funder=\(funder)")
+        return body?.orders
+    }
+
+    /** Every trade placed through Kall (/api/history?all=1), for a wallet that hasn't traded yet; nil on servers without it. */
+    static func allHistory() async -> [Order]? {
+        struct Body: Codable { let orders: [Order] }
+        let body: Body? = await get("api/history?all=1")
         return body?.orders
     }
 

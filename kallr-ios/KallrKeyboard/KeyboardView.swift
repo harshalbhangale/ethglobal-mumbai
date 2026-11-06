@@ -805,11 +805,14 @@ final class KeyboardModel: ObservableObject {
         tap(.heavy)
         placing = .placing
         let swapping = payingETH
+        if fullAccess { Chime.prepare() }
         Task {
             let result = swapping ? await Kallr.swap(usd: usd) : await Kallr.execute(order)
             switch result {
             case .success(let placed):
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
+                // The trade is placed: one short chime (keyboards can play sounds only with Full Access).
+                if fullAccess { Chime.play() }
                 lastPlaced = placed
                 findFill(orderId: placed.orderId)
                 placing = .done("\(placed.preview.title) · \(placed.preview.get)")
@@ -2508,7 +2511,7 @@ private struct WalletTab: View {
         VStack(alignment: .leading, spacing: 10) {
             if let w = model.wallet, let address = w.address {
                 let linked = Kallr.link != nil
-                HStack(spacing: 6) {
+                if Kallr.linkingEnabled { HStack(spacing: 6) {
                     Text(linked ? "YOUR KALL WALLET" : "SHARED DEMO WALLET").font(.system(size: 10, weight: .heavy))
                         .foregroundStyle(linked ? Kallr.lime : Kallr.muted)
                     Spacer(minLength: 0)
@@ -2518,7 +2521,7 @@ private struct WalletTab: View {
                         }
                         .buttonStyle(Press())
                     }
-                }
+                } }
                 HStack(spacing: 8) {
                     Balance(label: "ETH", value: w.ethValue.map { String(format: "%.5f", $0) } ?? "…")
                     Balance(label: "USDC", value: w.usdcValue.map { String(format: "%.2f", $0) } ?? "…")

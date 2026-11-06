@@ -30,7 +30,8 @@ plays keyboard haptics only with Allow Full Access.
   "Best price: ✓ Definitive Flash · best route on Base"; orders go only to Flash. Market, Limit or TWAP is a small toggle; take-profit and stop-loss fold into Advanced (with the
   limit offset, −1 to −10%, or the TWAP length, 10 minutes to 12 hours) and show where they'd sell. **Review** gets a fresh
   Definitive Flash quote (you pay, you get, price impact and fee, exits, approval) without sending
-  anything; **press and hold** the lime button to send it (letting go early cancels).
+  anything; **press and hold** the lime button to send it (letting go early cancels). When the order is
+  placed, a short chime plays (with Allow Full Access; it follows the ringer switch, like key clicks).
 - **Orders:** the Kall wallet's Flash orders with live status (re-read every 5 seconds while one is
   working), which call each one copied, its Arkiv trade record (a seal in the list; the hash and a link
   in the order), and **Cancel** for working limit and TWAP orders. After a trade, the done screen shows

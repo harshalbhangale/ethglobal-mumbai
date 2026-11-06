@@ -20,7 +20,7 @@ struct KallrApp: App {
     }
 }
 
-/** Wallet (balances, deposit, recent orders), History (every order) and Keyboard (setup and tools). */
+/** Wallet (balances, deposit, swap), History (every trade) and Keyboard (setup). */
 struct RootView: View {
     enum Tab { case wallet, history, keyboard }
     @State private var tab = Tab.wallet
@@ -148,6 +148,8 @@ final class AppStore: ObservableObject {
             var fresh = await Kallr.history(wallets: wallets)
             // A server without /api/history yet: the Kall wallet's orders straight from Flash.
             if fresh == nil, let kall = kallAddress { fresh = await Kallr.orders(funder: kall) }
+            // A wallet that hasn't traded yet: every trade placed through Kall.
+            if let mine = fresh, mine.isEmpty, let all = await Kallr.allHistory(), !all.isEmpty { fresh = all }
             if let fresh {
                 orders = fresh
                 ordersFailed = false
@@ -208,7 +210,7 @@ private struct WalletHome: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 Header(eyebrow: "KALL MARKETS", title: "WALLET")
-                LinkCard(store: store)
+                if Kallr.linkingEnabled { LinkCard(store: store) }
                 balances
                 if let address = store.wallet?.address {
                     HStack(spacing: 10) {
@@ -262,8 +264,6 @@ private struct WalletHome: View {
                 .disabled(store.wallet?.address == nil)
                 hint
                 SwapCard(store: store)
-                recent
-                callers
                 PoweredByDefinitive(height: 12, suffix: "Flash on Base")
                 Text(store.link == nil ? "Shared demo wallet held by Kall Markets. Up to $\(Kallr.fmt(store.wallet?.maxUsd ?? 25)) per order."
                      : "Your Kall wallet, signed by Kall's Privy signer. Up to $\(Kallr.fmt(store.wallet?.maxUsd ?? 25)) per order.")
@@ -302,44 +302,7 @@ private struct WalletHome: View {
         }
     }
 
-    @ViewBuilder private var recent: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("RECENT ORDERS").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
-                Spacer()
-                Button("See all", action: seeHistory).font(.footnote.weight(.semibold)).tint(Kallr.lime)
-            }
-            if let orders = store.kallOrders, !orders.isEmpty {
-                ForEach(orders.prefix(3), id: \.orderId) { o in OrderRow(order: o, store: store, compact: true) }
-            } else {
-                Text(store.orders == nil ? (store.ordersFailed ? "Couldn't load orders. Pull to retry." : "Loading…") : "No orders yet.")
-                    .font(.footnote).foregroundStyle(Kallr.muted)
-            }
-        }
-    }
 
-    @ViewBuilder private var callers: some View {
-        let top = store.topCallers
-        if !top.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("TOP CALLERS").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
-                ForEach(top, id: \.handle) { c in
-                    let rate = Int(((c.hitRate ?? 0) * 100).rounded())
-                    HStack(spacing: 10) {
-                        Text("@\(c.handle)").font(.system(size: 15, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
-                        Spacer(minLength: 6)
-                        Text("\(c.hits)/\(c.settled) right").font(.footnote.monospacedDigit()).foregroundStyle(Kallr.muted)
-                        Text("\(rate)%").font(.system(size: 15, weight: .black).monospacedDigit())
-                            .foregroundStyle(rate >= 50 ? Kallr.lime : Kallr.danger)
-                            .frame(minWidth: 44, alignment: .trailing)
-                    }
-                    .padding(.horizontal, 12).frame(minHeight: 46)
-                    .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
-                }
-            }
-        }
-    }
 }
 
 /**
@@ -504,10 +467,12 @@ private struct SwapCard: View {
         guard !busy else { return }
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
         step = .swapping
+        Chime.prepare()
         Task {
             switch await Kallr.swap(usd: usd) {
             case .success(let placed):
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
+                Chime.play()
                 step = .done("Swapped on Flash: \(placed.preview.get) is on its way.")
                 usd = ""
                 // The fill takes a moment: read the balances until the USDC shows.
@@ -977,7 +942,6 @@ private struct HistoryView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Header(eyebrow: "KEYBOARD · X · WEB APP — ON FLASH AND ARKIV", title: "HISTORY")
                 if let note = store.note { Text(note).font(.footnote).foregroundStyle(Kallr.muted) }
-                if store.linkedWallets.isEmpty, store.orders != nil { WalletsCard(store: store) }
                 if let orders = store.orders {
                     if orders.isEmpty {
                         empty
@@ -994,7 +958,7 @@ private struct HistoryView: View {
                         .pickerStyle(.segmented)
                         if shown.isEmpty {
                             Text(filter == .working ? "Nothing working on Flash right now."
-                                 : filter == .x ? (store.linkedWallets.isEmpty ? "Link the wallet you trade with on X to see those trades." : "No trades from X or the web app yet.")
+                                 : filter == .x ? "No trades from X or the web app yet."
                                  : "No keyboard trades yet.")
                                 .font(.footnote).foregroundStyle(Kallr.muted)
                         }
@@ -1014,7 +978,6 @@ private struct HistoryView: View {
                 } else {
                     ProgressView().tint(Kallr.lime).frame(maxWidth: .infinity)
                 }
-                if !store.linkedWallets.isEmpty { WalletsCard(store: store).padding(.top, 6) }
                 PoweredByDefinitive(height: 12, suffix: "Flash on Base").padding(.top, 8)
             }
             .padding(20)
@@ -1042,81 +1005,6 @@ private struct HistoryView: View {
                     .foregroundStyle(Kallr.bone)
                     .frame(maxWidth: .infinity, minHeight: 48)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
-            }
-        }
-    }
-}
-
-/** The wallets History reads: the Kall wallet, and the person's own wallet for X and the web app. */
-private struct WalletsCard: View {
-    @ObservedObject var store: AppStore
-    @State private var draft = ""
-    @State private var bad = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("YOUR WALLETS").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
-            if let kall = store.kallAddress {
-                wallet(.keyboard, "Kall wallet", "keyboard and app", kall, removable: false)
-            }
-            ForEach(store.linkedWallets, id: \.self) { a in
-                wallet(.x, "Your wallet", "X and the web app", a, removable: true)
-            }
-            HStack(spacing: 8) {
-                TextField("", text: $draft, prompt: Text("0x… your wallet on X").foregroundColor(Kallr.muted))
-                    .font(.system(size: 13, design: .monospaced)).foregroundStyle(Kallr.bone)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .submitLabel(.done).onSubmit(add)
-                    .padding(.horizontal, 12).frame(height: 42)
-                    .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
-                if draft.isEmpty {
-                    // The system Paste button reads the clipboard without iOS's "Allow Paste" prompt.
-                    PasteButton(payloadType: String.self) { strings in
-                        let text = strings.joined(separator: " ")
-                        Task { @MainActor in bad = !store.link(text) }
-                    }
-                    .labelStyle(.titleOnly)
-                    .buttonBorderShape(.roundedRectangle(radius: 10))
-                    .tint(Kallr.lime)
-                } else {
-                    Button(action: add) {
-                        Text("LINK").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.black)
-                            .padding(.horizontal, 16).frame(height: 42)
-                            .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 10))
-                    }
-                }
-            }
-            Text(bad ? "That isn't a wallet address. Copy it from Wallet in the Kall web app."
-                 : "Trades you place on X with the Kall extension, or in the Kall web app, come from your own wallet. Link it and they show up here next to your keyboard trades. Only the address is kept, on this phone.")
-                .font(.footnote).foregroundStyle(bad ? Kallr.danger : Kallr.muted)
-        }
-        .padding(14)
-        .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Kallr.hairline))
-    }
-
-    private func add() {
-        if store.link(draft) {
-            draft = ""
-            bad = false
-        } else {
-            bad = true
-        }
-    }
-
-    private func wallet(_ origin: Origin, _ title: String, _ used: String, _ address: String, removable: Bool) -> some View {
-        HStack(spacing: 10) {
-            OriginIcon(origin: origin, size: 30)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Kallr.bone)
-                Text("\(used) · \(shortAddress(address))").font(.system(size: 12, design: .monospaced)).foregroundStyle(Kallr.muted).lineLimit(1)
-            }
-            Spacer(minLength: 6)
-            if removable {
-                Button { store.unlink(address) } label: {
-                    Image(systemName: "xmark.circle.fill").font(.system(size: 18)).foregroundStyle(Kallr.muted)
-                }
-                .accessibilityLabel("Remove \(shortAddress(address))")
             }
         }
     }
@@ -1308,74 +1196,6 @@ private struct OrderDetail: View {
 
 // MARK: - Keyboard setup and tools
 
-/**
- * Calls to try, written the way Telegram channels post them. Copy one, open any chat, switch to Kall
- * Keyboard and tap Paste: Trade opens on it (or Chainlink CRE blocks it, for the fake one).
- */
-private struct TelegramCalls: View {
-    struct Post: Identifiable {
-        let id: String
-        let title: String
-        let text: String
-        let note: String
-    }
-    static let posts = [
-        Post(id: "eth", title: "ETH long, with targets", text: """
-            #ETHUSDT 4H
-
-            $ETH is holding the $2,200 support and breaking out of the falling wedge. Long from here.
-
-            🎯 $2,350
-            🎯 $2,480
-            🛑 SL $2,120
-            """, note: "Opens Trade with the targets and stop."),
-        Post(id: "toshi", title: "A fake contract", text: """
-            🚀 $TOSHI is about to send. Aping now.
-
-            CA: 0x8544FE9D190fD7EC52860abBf45088E81Ee24a8c
-            """, note: "Chainlink CRE blocks it."),
-        Post(id: "degen", title: "The real contract", text: """
-            Loading up on $DEGEN here.
-
-            CA: 0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed
-            """, note: "Chainlink CRE confirms it, then Trade opens."),
-    ]
-
-    @State private var copied: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("TRY A CALL", systemImage: "paperplane.fill").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)
-            Text("Copy one, then tap Paste in Kall Keyboard.")
-                .font(.footnote).foregroundStyle(Kallr.muted)
-            ForEach(Self.posts) { post in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(post.title).font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.bone)
-                        Spacer()
-                        Button {
-                            UIPasteboard.general.string = post.text
-                            UINotificationFeedbackGenerator().notificationOccurred(.success)
-                            copied = post.id
-                        } label: {
-                            Label(copied == post.id ? "Copied" : "Copy", systemImage: copied == post.id ? "checkmark" : "doc.on.doc")
-                                .font(.system(size: 13, weight: .heavy))
-                                .foregroundStyle(copied == post.id ? Kallr.lime : Kallr.black)
-                                .padding(.horizontal, 12).frame(height: 32)
-                                .background(copied == post.id ? Kallr.graphite : Kallr.lime, in: Capsule())
-                        }
-                    }
-                    Text(post.text).font(.system(size: 15)).foregroundStyle(Kallr.bone)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
-                        .background(Color(red: 0.12, green: 0.14, blue: 0.16), in: RoundedRectangle(cornerRadius: 14))
-                    Text(post.note).font(.footnote).foregroundStyle(Kallr.muted)
-                }
-            }
-        }
-    }
-}
-
 private struct KeyboardSetup: View {
     @Environment(\.openURL) private var openURL
 
@@ -1384,7 +1204,6 @@ private struct KeyboardSetup: View {
             VStack(alignment: .leading, spacing: 26) {
                 Header(eyebrow: "KALL MARKETS", title: "KEYBOARD")
                 setup
-                TelegramCalls()
                 Button { openURL(Kallr.origin.appendingPathComponent("dashboard")) } label: {
                     Text("OPEN THE KALL WEB APP  ↗")
                         .font(.system(size: 14, weight: .heavy)).tracking(0.6)
