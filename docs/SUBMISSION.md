@@ -39,9 +39,10 @@ Kall Markets is one product in three places, wherever calls actually show up:
   snapshotted to Swarm, so a deleted tweet still has a record.
 - **Catch fakes.** A post that names a coin next to a contract that isn’t that coin gets a red “Call check
   failed”, and no trade is offered.
-- **Trade it.** One tap builds a Definitive Flash order on Base: quote, price impact and fee up front, signed in
-  your own wallet (MetaMask or a Privy wallet from signing in with X).
-- **Get a receipt.** After the fill you get the Basescan transaction and the route Definitive took.
+- **Trade it.** One tap builds a Definitive Flash order on Base: quote, price impact and fee up front, signed by
+  your Kall wallet, the embedded wallet Privy makes when you sign in with X. No wallet pop-ups.
+- **Get a receipt.** After the fill: the order, its EIP-712 signature (checked against your wallet), the Basescan
+  transaction and the Arkiv record.
 
 ## Built with
 

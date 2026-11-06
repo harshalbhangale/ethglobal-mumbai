@@ -2,106 +2,29 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Address } from "viem";
-import type { Session, SessionWallet } from "@/components/auth";
+import type { Session } from "@/components/auth";
 import { formatAmount, getBalances, shortAddress, type Balances } from "@/lib/chain";
 
 const BASESCAN = "https://basescan.org/address/";
 
 /**
- * Which wallet Kallr trades from, said plainly (MetaMask or the Kall Markets wallet Privy made for you), its
- * balances on Base, and a switch to any other connected wallet.
+ * Your Kall wallet: the embedded wallet Privy made when you signed in, its balances on Base, and
+ * how to fund it.
  */
 export function WalletPanel({ session }: { session: Session }) {
-  const active = session.wallets.find((w) => w.address.toLowerCase() === session.address?.toLowerCase()) ?? null;
-  const others = session.wallets.filter((w) => w !== active);
-
-  if (!session.address) {
-    return <section className="rounded-lg border border-rule bg-card p-6 text-sm text-slate">Setting up your wallet…</section>;
-  }
-
+  if (!session.address) return <p className="p-6 text-sm text-slate">Setting up your wallet…</p>;
   return (
-    <div className="space-y-4">
-      <section aria-labelledby="wallet-heading" className="rounded-lg border border-rule bg-card p-6">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate">Trading from</p>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-          <h2 id="wallet-heading" className="font-display flex items-center gap-2 text-xl font-semibold">
-            <WalletKind wallet={active} />
-            {active?.name ?? session.walletName}
-          </h2>
-          <CopyAddress address={session.address} />
-        </div>
-        <p className="mt-1 text-sm text-slate">
-          {active?.embedded
-            ? "The wallet Privy made for you when you signed in with X. Only you can sign from it."
-            : "Your own wallet. Kall Markets asks it to sign every order; funds never leave it until a trade fills."}{" "}
-          Network: <span className="font-semibold text-ink">Base</span>.
-        </p>
-        <Balances address={session.address} />
-      </section>
-
-      <Deposit address={session.address} />
-
-      <section className="rounded-lg border border-rule bg-card p-6">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="font-semibold">Your wallets</h3>
-          <button
-            type="button"
-            onClick={session.connectWallet}
-            className="rounded-md border border-rule-strong px-3 py-1.5 text-sm font-semibold hover:border-lime hover:bg-lime hover:text-on-lime"
-          >
-            Connect a wallet
-          </button>
-        </div>
-        <ul className="mt-3 divide-y divide-rule">
-          {active && <WalletRow wallet={active} current />}
-          {others.map((w) => (
-            <WalletRow key={w.address} wallet={w} onUse={() => session.selectWallet(w.address)} />
-          ))}
-        </ul>
-        {others.length === 0 && (
-          <p className="mt-3 text-sm text-slate">
-            {active?.embedded
-              ? "Have funds in MetaMask? Connect it and trade from it directly."
-              : "Your Kall Markets (Privy) wallet appears here too once it's created."}
-          </p>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function WalletKind({ wallet }: { wallet: SessionWallet | null }) {
-  const embedded = wallet?.embedded ?? true;
-  return (
-    <span
-      className={`rounded-md px-2 py-0.5 text-xs font-semibold ${embedded ? "bg-raised text-ink" : "bg-lime text-on-lime"}`}
-      title={embedded ? "Embedded wallet made by Privy" : "A wallet you connected"}
-    >
-      {embedded ? "Embedded" : "Connected"}
-    </span>
-  );
-}
-
-function WalletRow({ wallet, current, onUse }: { wallet: SessionWallet; current?: boolean; onUse?: () => void }) {
-  return (
-    <li className="flex items-center justify-between gap-3 py-3">
-      <div className="min-w-0">
-        <p className="flex items-center gap-2 font-semibold">
-          <WalletKind wallet={wallet} />
-          {wallet.name}
-        </p>
-        <a href={`${BASESCAN}${wallet.address}`} target="_blank" rel="noreferrer" className="text-sm text-slate hover:text-ink">
-          {shortAddress(wallet.address)} on Basescan ↗
-        </a>
+    <section aria-labelledby="wallet-heading" className="rounded-lg border border-rule bg-card p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="wallet-heading" className="font-display text-xl font-semibold">
+          Your Kall wallet
+        </h2>
+        <CopyAddress address={session.address} />
       </div>
-      {current ? (
-        <span className="text-sm font-semibold text-up">Trading from this</span>
-      ) : (
-        <button type="button" onClick={onUse} className="rounded-md border border-rule-strong px-3 py-1.5 text-sm font-semibold hover:border-lime hover:bg-lime hover:text-on-lime">
-          Use this
-        </button>
-      )}
-    </li>
+      <p className="mt-1 text-sm text-slate">Made when you signed in with X. It signs your orders on Base, and only you can use it.</p>
+      <Balances address={session.address} />
+      <Deposit address={session.address} />
+    </section>
   );
 }
 
@@ -166,15 +89,15 @@ function Balances({ address }: { address: Address }) {
       {error ? (
         <p className="mt-3 text-sm text-down">{error}</p>
       ) : empty ? (
-        <p className="mt-3 text-sm text-slate">This wallet is empty on Base. Send it USDC or ETH on Base, or switch to a wallet that has funds.</p>
+        <p className="mt-3 text-sm text-slate">Empty on Base. Deposit below to start.</p>
       ) : lowGas ? (
-        <p className="mt-3 text-sm text-slate">Add a few cents of ETH on Base for gas: the first trade needs one approval.</p>
+        <p className="mt-3 text-sm text-slate">Add about $1 of ETH on Base for gas.</p>
       ) : null}
     </>
   );
 }
 
-/** Add funds: this wallet's address on Base, with the one rule that matters (Base only). */
+/** Add funds: the address on Base, and the one rule that matters. */
 function Deposit({ address }: { address: Address }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -185,45 +108,18 @@ function Deposit({ address }: { address: Address }) {
     } catch {}
   };
   return (
-    <section aria-labelledby="deposit-heading" className="rounded-lg border border-rule bg-card p-6">
-      <div className="flex items-center justify-between gap-3">
-        <h3 id="deposit-heading" className="font-display text-lg font-semibold">
-          Deposit
-        </h3>
-        <span className="rounded-md bg-[#0052ff]/15 px-2 py-0.5 text-xs font-semibold text-[#6e9bff]">Base network</span>
+    <div className="mt-6 border-t border-rule pt-5">
+      <h3 className="font-semibold">Deposit</h3>
+      <p className="mt-1 text-sm text-slate">Send USDC to trade and about $1 of ETH for gas, on Base only.</p>
+      <p className="mt-3 font-mono text-sm break-all text-ink">{address}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" onClick={copy} className="rounded-md bg-lime px-4 py-2 text-sm font-semibold text-on-lime hover:bg-lime-strong">
+          {copied ? "Copied" : "Copy address"}
+        </button>
+        <a href={`${BASESCAN}${address}`} target="_blank" rel="noreferrer" className="rounded-md px-4 py-2 text-sm font-semibold text-slate hover:text-ink">
+          Basescan ↗
+        </a>
       </div>
-      <p className="mt-1 text-sm text-slate">Send USDC to trade, plus a little ETH for gas (about $1 covers many trades).</p>
-
-      <div className="mt-4 rounded-lg border border-rule bg-paper p-4">
-        <p className="text-xs uppercase tracking-wider text-slate">Your address on Base</p>
-        <p className="mt-1.5 font-mono text-sm break-all text-ink">{address}</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" onClick={copy} className="rounded-md bg-lime px-4 py-2 text-sm font-semibold text-on-lime hover:bg-lime-strong">
-            {copied ? "Copied ✓" : "Copy address"}
-          </button>
-          <a href={`${BASESCAN}${address}`} target="_blank" rel="noreferrer" className="rounded-md border border-rule px-4 py-2 text-sm font-semibold hover:border-ink">
-            View on Basescan ↗
-          </a>
-        </div>
-      </div>
-
-      <ol className="mt-4 space-y-2 text-sm">
-        {[
-          ["From an exchange", "Withdraw USDC to this address and pick Base as the network (Coinbase, Binance, OKX all support it)."],
-          ["From another wallet", "Send USDC or ETH on Base. Coming from Ethereum or another chain? Bridge first, e.g. with the Base bridge."],
-          ["Then trade", "Your balance above updates within seconds; every order is signed by this wallet."],
-        ].map(([t, d], i) => (
-          <li key={t} className="flex gap-3">
-            <span className="grid size-5 shrink-0 place-items-center rounded-full bg-raised text-xs font-semibold text-lime">{i + 1}</span>
-            <span>
-              <span className="font-semibold">{t}.</span> <span className="text-slate">{d}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-      <p className="mt-4 rounded-md border border-amber/40 bg-amber/10 px-3 py-2 text-xs text-ink">
-        Only send on <strong>Base</strong>. Funds sent on another network to this address won’t show up here.
-      </p>
-    </section>
+    </div>
   );
 }

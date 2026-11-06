@@ -356,7 +356,7 @@ private fun WalletScreen() {
                 Line("ETH (for gas)", balances?.second?.let { "%.5f".format(it.toDoubleOrNull() ?: 0.0) } ?: "…")
                 HorizontalDivider()
                 Text(
-                    "To fund it, send USDC and about $1 of ETH on Base to this address, from MetaMask or any wallet. Only use Base.",
+                    "To fund it, send USDC and about $1 of ETH on Base to this address from any wallet or exchange. Only use Base.",
                     modifier = Modifier.padding(top = 14.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,

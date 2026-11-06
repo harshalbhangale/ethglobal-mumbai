@@ -83,7 +83,7 @@ your wallet. They're matched when a new call is written to Arkiv. Notifications 
 - Flash client: quote → approve (minimal) → sign entry + TP/SL → submit (`packages/integrations/src/definitive.ts`, `/api/flash/*`)
 - Desk order parser and composer, open orders from Flash
 - Call classifier and scoring at expiry (`directional-return-v1`, Chainlink prices on Base)
-- Extension: trade card, ticker Buy button, record panel, call-check drawer, profile card, follows, MetaMask/Rabby signing, popup
+- Extension: trade card, ticker Buy button, record panel, call-check drawer, profile card, follows, trades open in the web app for the Kall wallet to sign, popup
 - Token safety checks (GoPlus, Dexscreener) and caller wallet check (Etherscan V2, needs a free key)
 - Arkiv: `kallr.trades`, `kallr.calls`, `kallr.call-results`, `/trades` dashboard reading Arkiv from the browser, `/api/arkiv/score`
 - Android keyboard row and `/api/keyboard`

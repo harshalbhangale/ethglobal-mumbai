@@ -22,39 +22,9 @@ function stubWorker(after: Answer | null = answer()) {
   return sendMessage;
 }
 
-/**
- * Stands in for wallet-bridge.ts in X's page: answers the content script's wallet requests.
- * `wallet: null` means no MetaMask / Rabby installed.
- */
-type WalletImpl = Record<string, (params: unknown[]) => unknown>;
-let walletListener: ((e: MessageEvent) => void) | null = null;
-function fakeWallet(wallet: WalletImpl | null) {
-  const calls: Array<{ method: string; params: unknown[] }> = [];
-  walletListener = (event: MessageEvent) => {
-    const d = event.data as { type?: string; id?: string; method?: string; params?: unknown[] };
-    if (d?.type !== "kallr-wallet-request" || !d.id || !d.method) return;
-    calls.push({ method: d.method, params: d.params ?? [] });
-    const reply = (body: Record<string, unknown>) =>
-      window.dispatchEvent(
-        new MessageEvent("message", { data: { type: "kallr-wallet-response", id: d.id, ...body }, origin: location.origin, source: window }),
-      );
-    if (d.method === "kallr_ping") return void queueMicrotask(() => reply({ result: wallet !== null }));
-    const impl = wallet?.[d.method];
-    queueMicrotask(() =>
-      impl ? Promise.resolve(impl(d.params ?? [])).then((result) => reply({ result }), (e) => reply({ error: e })) : reply({ error: { code: 4200, message: "nope" } }),
-    );
-  };
-  window.addEventListener("message", walletListener);
-  // happy-dom's postMessage doesn't set source/origin; route requests straight to the fake bridge.
-  vi.spyOn(window, "postMessage").mockImplementation((data: unknown) => walletListener?.({ data } as MessageEvent));
-  return calls;
-}
-
 beforeEach(() => vi.stubGlobal("KALLR_APP_ORIGIN", "https://kallr.test"));
 afterEach(() => {
   document.body.innerHTML = "";
-  if (walletListener) window.removeEventListener("message", walletListener);
-  walletListener = null;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.resetModules();
@@ -92,7 +62,6 @@ describe("flashCard", () => {
   it("copies a buy with TP/SL into the desk, sized in USD", async () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
-    fakeWallet(null);
     const { card, open: openPanel } = await mounted();
     openPanel();
     q<HTMLButtonElement>(card, ".exits-toggle").click();
@@ -109,7 +78,7 @@ describe("flashCard", () => {
     expect(submit.textContent).toBe("Buy ETH · $25.00");
     submit.click();
     await vi.waitFor(() => expect(open).toHaveBeenCalled());
-    expect(card.textContent).toContain("No browser wallet here");
+    expect(card.textContent).toContain("Opened in Kall Markets: your Kall wallet signs it there.");
     const url = new URL(open.mock.calls[0]?.[0] as string);
     expect(url.origin + url.pathname).toBe("https://kallr.test/app");
     expect(url.searchParams.get("order")).toBe("copy $25 of ETH tp 10% sl 5%");
@@ -134,7 +103,6 @@ describe("flashCard", () => {
   it("starts on Sell for a bearish call and sells a USD value", async () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
-    fakeWallet(null);
     const { card, open: openPanel } = await mounted(answer("down"));
     openPanel();
     expect(buttons(card, ".seg button").find((b) => b.getAttribute("aria-pressed") === "true")?.textContent).toBe("Sell");
@@ -215,18 +183,13 @@ describe("any Base token", () => {
     expect(q(made.card, ".untradable").hidden).toBe(true);
   });
 
-  it("picks any token from search and orders it by contract address", async () => {
+  it("picks any token from search and opens it in Kall Markets by contract address", async () => {
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
     const sendMessage = worker([DEGEN, FAKE]);
-    const calls = fakeWallet({
-      eth_requestAccounts: () => ["0x00000000000000000000000000000000000000a1"],
-      eth_chainId: () => "0x2105",
-      eth_signTypedData_v4: () => "0xa1",
-    });
     sendMessage.mockImplementation(async (m: { type: string }): Promise<unknown> => {
       if (m.type === "prices") return { prices: [{ asset: "ETH", price: "2500", source: "chainlink-base" }] };
       if (m.type === "token-search") return { tokens: [DEGEN, FAKE] };
-      if (m.type === "flash-quote") return { quote: { quoteId: "q", from: { amount: "1" }, to: { amount: "1124" }, evm: { approveTx: null, permitTypedData: "", orderTypedData: "{}" } } };
-      if (m.type === "flash-order") return { orderId: "11111111-2222-3333-4444-555555555555" };
       return null;
     });
     const { flashCard } = await import("./flash-card");
@@ -249,10 +212,11 @@ describe("any Base token", () => {
     amount.dispatchEvent(new Event("input"));
     await vi.waitFor(() => expect(q<HTMLButtonElement>(made.card, ".swap-submit").disabled).toBe(false));
     q<HTMLButtonElement>(made.card, ".swap-submit").click();
-    await vi.waitFor(() => expect(made.card.textContent).toContain("Bought DEGEN with $1.00"));
-    const quoted = sendMessage.mock.calls.find(([m]) => m.type === "flash-quote")?.[0] as unknown as { order: Record<string, unknown> };
-    expect(quoted.order.asset).toBe(DEGEN.address);
-    expect(calls.map((c) => c.method)).toContain("eth_signTypedData_v4");
+    await vi.waitFor(() => expect(open).toHaveBeenCalled());
+    const url = new URL(open.mock.calls[0]?.[0] as string);
+    expect(url.searchParams.get("token")).toBe(DEGEN.address);
+    expect(url.searchParams.get("order")).toBe("copy $1");
+    expect(sendMessage.mock.calls.some(([m]) => m.type === "flash-quote" || m.type === "flash-order")).toBe(false);
   });
 });
 
@@ -309,134 +273,10 @@ describe("decorate", () => {
   });
 });
 
-describe("sign on X with a browser wallet", () => {
-  const typed = (name: string) => JSON.stringify({ primaryType: name, domain: { chainId: "8453" }, types: {}, message: {} });
-  const quote = {
-    quoteId: "q1",
-    from: { amount: "25" },
-    to: { amount: "0.0099" },
-    evm: { approveTx: { to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", data: "0x095ea7b3" }, permitTypedData: "", orderTypedData: typed("FlashOrder") },
-    attachedBracket: {
-      evm: { approveTx: null, permitTypedData: null, orderTypedData: typed("Bracket") },
-      salt: "0x1",
-      deadline: "281474976710655",
-      signedMaxFromAmount: "0.0104",
-    },
-  };
-  const from = "0x00000000000000000000000000000000000000a1";
-
-  async function place(wallet: WalletImpl) {
-    const calls = fakeWallet(wallet);
-    const worker = stubWorker();
-    worker.mockImplementation(async (m: { type: string }): Promise<unknown> => {
-      if (m.type === "prices") return { prices: [{ asset: "ETH", price: "2500", source: "chainlink-base" }] };
-      if (m.type === "flash-quote") return { quote };
-      if (m.type === "flash-order") return { orderId: "887ccf13-aaaa-bbbb-cccc-000000000000", attachedBracket: { status: "pending_activation" } };
-      if (m.type === "flash-order-status")
-        return { status: "ORDER_STATUS_FILLED", fills: [{ transactionId: `0x${"ab".repeat(32)}`, venues: ["uniswap_v3"] }] };
-      return null;
-    });
-    const { flashCard } = await import("./flash-card");
-    const made = flashCard({ post, asset: "ETH", answer: answer() });
-    document.body.append(made.card);
-    await vi.waitFor(() => expect(made.card.querySelector(".swap-title b")?.textContent).toBe("$2,500"));
-    made.open();
-    q<HTMLButtonElement>(made.card, ".exits-toggle").click();
-    const amount = q<HTMLInputElement>(made.card, ".swap-amount");
-    amount.value = "25";
-    amount.dispatchEvent(new Event("input"));
-    q<HTMLButtonElement>(made.card, ".swap-submit").click();
-    return { card: made.card, calls, worker };
-  }
-
-  it("connects, switches to Base, approves, signs order and exits, then submits", async () => {
-    const open = vi.fn();
-    vi.stubGlobal("open", open);
-    let chain = "0x1";
-    const { card, calls, worker } = await place({
-      eth_requestAccounts: () => [from],
-      eth_chainId: () => chain,
-      wallet_switchEthereumChain: () => {
-        chain = "0x2105";
-        return null;
-      },
-      eth_sendTransaction: () => "0xhash",
-      eth_getTransactionReceipt: () => ({ status: "0x1" }),
-      eth_signTypedData_v4: (p) => (String(p[1]).includes("Bracket") ? "0xb2" : "0xa1"),
-    });
-    await vi.waitFor(() => expect(card.textContent).toContain("Bought ETH with $25.00"));
-    expect([...card.querySelectorAll(".steps .step")].map((s) => s.className)).toEqual(Array(6).fill("step done"));
-    expect(open).not.toHaveBeenCalled();
-    // The receipt asks Flash for the fill with the wallet that placed it (Flash needs the funder).
-    await vi.waitFor(() =>
-      expect(worker).toHaveBeenCalledWith(expect.objectContaining({ type: "flash-order-status", orderId: "887ccf13-aaaa-bbbb-cccc-000000000000", funder: from })),
-    );
-    expect(calls.map((c) => c.method)).toEqual([
-      "kallr_ping",
-      "eth_requestAccounts",
-      "eth_chainId",
-      "wallet_switchEthereumChain",
-      "eth_sendTransaction",
-      "eth_getTransactionReceipt",
-      "eth_signTypedData_v4",
-      "eth_signTypedData_v4",
-    ]);
-    const quoted = worker.mock.calls.find(([m]) => m.type === "flash-quote")?.[0] as unknown as { order: Record<string, unknown> };
-    expect(quoted.order).toEqual({
-      asset: "ETH",
-      side: "buy",
-      qty: "25",
-      orderType: "market",
-      funderAddress: from,
-      takeProfit: { notionalPrice: "2750" },
-      stopLoss: { notionalPrice: "2375" },
-      sourcePostId: "2",
-    });
-    const submitted = worker.mock.calls.find(([m]) => m.type === "flash-order")?.[0] as unknown as { signatures: Record<string, unknown> };
-    expect(submitted.signatures).toEqual({
-      quoteId: "q1",
-      userSignature: "0xa1",
-      evmOrderTypedData: quote.evm.orderTypedData,
-      bracket: { userSignature: "0xb2", salt: "0x1", deadline: "281474976710655", signedMaxFromAmount: "0.0104" },
-    });
-    expect(q(card, ".swap-wallet").textContent).toBe("0x0000…00a1");
-    expect(card.textContent).toContain("Arms on the first fill");
-    // Receipt: Base badge, Basescan links for the wallet, its approval and (once filled) the swap.
-    expect(q(card, ".network-badge").textContent).toBe("Base");
-    const links = [...card.querySelectorAll<HTMLAnchorElement>(".receipt a")].map((a) => a.href);
-    expect(links).toContain("https://basescan.org/tx/0xhash");
-    expect(links).toContain(`https://basescan.org/address/${from}`);
-    await vi.waitFor(() => expect(q(card, ".receipt").textContent).toContain("Uniswap V3 · via Definitive"));
-    expect([...card.querySelectorAll<HTMLAnchorElement>(".receipt a")].map((a) => a.href)).toContain(`https://basescan.org/tx/0x${"ab".repeat(32)}`);
-    // Success burst: check, amount, asset and the TP/SL pair, then the swap on Basescan.
-    const burst = q(card, ".sb");
-    expect(burst.getAttribute("role")).toBe("status");
-    expect(burst.querySelector(".sb-tick")).not.toBeNull();
-    expect(burst.querySelectorAll(".sb-piece").length).toBeGreaterThan(8);
-    expect(q(burst, ".sb-title").textContent).toBe("Order placed");
-    expect(q(burst, ".sb-amount").textContent).toBe("$25.00 · Bought ETH");
-    expect(q(burst, ".sb-tp").textContent).toBe("TP +10% · $2,750");
-    expect(q(burst, ".sb-sl").textContent).toBe("SL −5% · $2,375");
-    expect(q<HTMLAnchorElement>(burst, ".sb-link a").href).toBe(`https://basescan.org/tx/0x${"ab".repeat(32)}`);
-  });
-
-  it("stops cleanly when the user rejects in the wallet", async () => {
-    const { card, worker } = await place({
-      eth_requestAccounts: () => [from],
-      eth_chainId: () => "0x2105",
-      eth_sendTransaction: () => Promise.reject({ code: 4001, message: "User rejected the request." }),
-    });
-    await vi.waitFor(() => expect(card.textContent).toContain("Cancelled in your wallet. Nothing was sent."));
-    expect(worker.mock.calls.some(([m]) => m.type === "flash-order")).toBe(false);
-    expect(card.querySelector(".sb")).toBeNull();
-  });
-});
-
 describe("plain swap by default", () => {
   it("starts with TP/SL off, so the order is a plain swap with the fewest steps", async () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
-    fakeWallet(null);
     const { card, open: openPanel } = await mounted();
     openPanel();
     expect(q(card, ".exits").hidden).toBe(true);
@@ -445,18 +285,9 @@ describe("plain swap by default", () => {
     amount.value = "1";
     amount.dispatchEvent(new Event("input"));
     expect(q(card, ".review").textContent).toContain("ExitsNone · plain swap");
-    expect(q(card, ".review").textContent).toContain("StepsApprove once (first time), sign once");
+    expect(q(card, ".review").textContent).toContain("Signed byYour Kall wallet, in Kall Markets");
     q<HTMLButtonElement>(card, ".swap-submit").click();
     await vi.waitFor(() => expect(open).toHaveBeenCalled());
     expect(new URL(open.mock.calls[0]?.[0] as string).searchParams.get("order")).toBe("copy $1 of ETH");
-  });
-
-  it("explains a missing balance in plain words", async () => {
-    stubWorker();
-    const { friendlyError } = await import("./flash-card");
-    expect(friendlyError(new Error("REASON_INSUFFICIENT_FUNDER_BALANCE"), "USDC")).toBe(
-      "Not enough USDC in this wallet on Base. Add USDC (and a little ETH for gas), then try again.",
-    );
-    expect(friendlyError({ code: 4001, message: "User rejected the request." }, "USDC")).toBe("Cancelled in your wallet. Nothing was sent.");
   });
 });

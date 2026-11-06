@@ -14,17 +14,20 @@ export function Providers({ children }: { children: ReactNode }) {
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
-        loginMethods: ["twitter", "email", "wallet"],
+        // Sign in with X (or email). No browser wallets: every trade uses the embedded wallet Privy makes.
+        loginMethods: ["twitter", "email"],
         appearance: {
           theme: "dark",
           accentColor: "#C6F25A",
           logo: "/icons/icon-192.png",
           walletChainType: "ethereum-only",
           landingHeader: "Sign in to Kall Markets",
-          loginMessage: "Sign in with X to get your Kall Markets wallet on Base.",
+          loginMessage: "Sign in with X to get your Kall wallet on Base.",
         },
         embeddedWallets: {
-          ethereum: { createOnLogin: "users-without-wallets" },
+          ethereum: { createOnLogin: "all-users" },
+          // Kall shows the whole order before you place it; the wallet signs without its own pop-ups.
+          showWalletUIs: false,
         },
         defaultChain: base,
         supportedChains: [base],

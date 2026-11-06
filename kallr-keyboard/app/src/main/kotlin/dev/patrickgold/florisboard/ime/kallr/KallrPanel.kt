@@ -772,7 +772,7 @@ private fun WalletTab(wallet: String?) {
             Box(Modifier.weight(1f)) { PrimaryButton("Manage") { KallrWalletActivity.open(context) } }
         }
         Text(
-            "Fund it from MetaMask: send USDC and about \$1 of ETH on Base to this address.",
+            "To fund it, send USDC and about \$1 of ETH on Base to this address.",
             color = Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
         )
         FlashFooter()

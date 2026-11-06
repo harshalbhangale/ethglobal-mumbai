@@ -1,6 +1,6 @@
 import { parseOrder } from "@kallr/domain/order";
 import { describe, expect, it } from "vitest";
-import { copyOrderText, deskUrl, identityFromHref, mergeHistory, mightBeCall, PRESETS, timeLeft } from "./post";
+import { cardOrderText, copyOrderText, deskOrderUrl, deskUrl, identityFromHref, mergeHistory, mightBeCall, PRESETS, timeLeft } from "./post";
 
 describe("identityFromHref", () => {
   it("reads handle and post ID from a timestamp link", () => {
@@ -29,6 +29,17 @@ describe("copy links", () => {
     expect(url.searchParams.get("order")).toBe("copy $20 of ETH tp 10% sl 5%");
     expect(url.searchParams.get("post")).toBe("42");
     expect(url.searchParams.get("caller")).toBe("kol");
+  });
+  it("a token by contract: the link carries it and the order names no coin", () => {
+    const token = "0x4ed4e862860bed51a9570b96d89af5e1b0efefed";
+    const text = cardOrderText({ side: "buy", asset: null, usd: "5", tpPct: 10, slPct: 5 });
+    expect(text).toBe("copy $5 tp 10% sl 5%");
+    const parsed = parseOrder(text!);
+    expect(parsed.ok && parsed.order).toMatchObject({ amountUsd: 5, takeProfitPct: 0.1, stopLossPct: 0.05, copy: true });
+    const url = new URL(deskOrderUrl("https://app.example", text!, { handle: "kol", postId: "42" }, token));
+    expect(url.searchParams.get("token")).toBe(token);
+    expect(url.searchParams.get("order")).toBe(text);
+    expect(new URL(deskOrderUrl("https://app.example", "copy $5 of ETH", { handle: "kol", postId: "42" })).searchParams.has("token")).toBe(false);
   });
 });
 

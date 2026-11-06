@@ -1,22 +1,19 @@
 import type { Answer, PostRef } from "./call-view";
 import { appOrigin } from "./config";
 import { el, openDesk, safeLink } from "./dom";
-import { BASESCAN, placeOnX, type QuoteFacts, type Step, waitForFill } from "./flash-direct";
 import { followButton } from "./follows";
 import { definitiveLogo, tokenIcon } from "./logos";
 import { cardOrderText, COPYABLE, DECIMAL, deskOrderUrl } from "./post";
-import { type SuccessSummary, successBurst } from "./success-burst";
 import { ALIASES, formatPrice, type LivePrice, livePrice } from "./ticker-price";
 import { type Choice, choiceIcon, plainPrice, searchTokens, tokenPicker } from "./token-picker";
-import { hasBrowserWallet, rejected } from "./wallet";
 
 export { tokenIcon } from "./logos";
 
 /**
  * The post card: live price header, the caller strip (call + Follow), then
  * the trade flow. Trades on Base through Definitive Flash with take-profit / stop-loss attached as
- * one bracket. With MetaMask / Rabby on the page every step is signed right here, with a step
- * tracker; otherwise the Kall Markets desk opens to sign with the Privy wallet.
+ * one bracket. The trade opens in Kall Markets, where your Kall wallet (Privy's embedded wallet) signs
+ * it and shows the receipt.
  */
 
 const NAMES: Record<string, string> = { ETH: "Ethereum", BTC: "Bitcoin" };
@@ -35,77 +32,6 @@ export const MIN_LIQUIDITY_USD = 50_000;
 
 const money = (value: number) =>
   Number.isFinite(value) ? `$${value.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}` : "";
-
-/** Every step placeOnX can report, in order. Approvals and the TP/SL signature appear only when they happen. */
-const TRACK: Array<{ step: Step; label: string; optional?: boolean }> = [
-  { step: "connecting", label: "Connect wallet · Base" },
-  { step: "quoting", label: "Get a Flash quote" },
-  { step: "wrapping", label: "Wrap ETH to WETH", optional: true },
-  { step: "approving", label: "Approve USDC (sized to this order)", optional: true },
-  { step: "approving-exits", label: "Approve the TP/SL exit", optional: true },
-  { step: "signing", label: "Sign the order" },
-  { step: "signing-exits", label: "Sign the TP/SL", optional: true },
-  { step: "submitting", label: "Place on Base" },
-];
-
-/** The live step list: done ✓, current ●, upcoming ○; optional steps show only once reached. */
-export function stepTracker() {
-  const list = el("ol", { class: "steps", "aria-live": "polite" });
-  const reached = new Set<Step>();
-  let current: Step | null = null;
-  let failed = false;
-  let failMessage = "";
-  const render = () => {
-    const order = TRACK.filter((t) => !t.optional || reached.has(t.step));
-    const at = current ? order.findIndex((t) => t.step === current) : -1;
-    list.replaceChildren(
-      ...order.map((t, i) => {
-        const state = i < at ? "done" : i === at ? (failed ? "failed" : "active") : "todo";
-        return el(
-          "li",
-          { class: `step ${state}` },
-          el("span", { class: "step-dot", "aria-hidden": "true" }, state === "done" ? "✓" : state === "failed" ? "!" : ""),
-          el("span", {}, t.label, state === "failed" && failMessage ? el("small", { class: "step-error" }, failMessage) : null),
-        );
-      }),
-    );
-  };
-  render();
-  return {
-    root: list,
-    to(step: Step) {
-      reached.add(step);
-      current = step;
-      failed = false;
-      render();
-    },
-    /** Marks the current step failed and says why, right under it. */
-    fail(message = "") {
-      failed = true;
-      failMessage = message;
-      render();
-    },
-    finish() {
-      current = null;
-      list.replaceChildren(
-        ...TRACK.filter((t) => !t.optional || reached.has(t.step)).map((t) =>
-          el("li", { class: "step done" }, el("span", { class: "step-dot", "aria-hidden": "true" }, "✓"), el("span", {}, t.label)),
-        ),
-      );
-    },
-  };
-}
-
-/** Turns wallet and Flash errors into one plain sentence the user can act on. */
-export function friendlyError(error: unknown, spending: string) {
-  if (rejected(error)) return "Cancelled in your wallet. Nothing was sent.";
-  const msg = (error as Error)?.message ?? String(error);
-  if (/insufficient|balance|exceeds balance|not enough/i.test(msg))
-    return `Not enough ${spending} in this wallet on Base. Add ${spending} (and a little ETH for gas), then try again.`;
-  if (/too small|fees would exceed|minimum notional/i.test(msg)) return "Too small for Flash: fees would eat it. Try $0.50 or more.";
-  if (/gas|intrinsic|funds for/i.test(msg)) return "Not enough ETH on Base for gas. Add about $0.10 of ETH.";
-  return msg || "The order didn't go through.";
-}
 
 export type FlashCard = { card: HTMLElement; open: () => void };
 
@@ -132,11 +58,6 @@ export function flashCard(input: {
   let sl: number | null = null;
   let advanced = false;
   let live: LivePrice | null = null;
-  let walletOnPage: boolean | null = null;
-  void hasBrowserWallet().then((v) => {
-    walletOnPage = v;
-    if (!panel.hidden) update();
-  });
 
   const card = el("section", {
     class: `inline-card swap-card${input.attached ? " inline-attached" : ""}`,
@@ -190,10 +111,8 @@ export function flashCard(input: {
     el("div", { class: "exit-row" }, el("span", {}, "Stop-loss ", slText), slChips),
   );
   const review = el("dl", { class: "review" });
-  const walletChip = el("span", { class: "swap-wallet", hidden: "" });
   const status = el("p", { class: "inline-note", role: "status", "aria-live": "polite" });
   const submit = el("button", { type: "button", class: "inline-submit swap-submit", disabled: "" }, `Buy ${sym()}`);
-  const progress = el("div", { class: "progress", hidden: "" });
 
   const pill = (symbol: string) => el("span", { class: "swap-pill" }, tokenIcon(symbol, 22), symbol);
   /** The traded token's pill is a button: it opens the token picker. */
@@ -312,10 +231,9 @@ export function flashCard(input: {
         : side === "buy"
           ? row("Exits", "None · plain swap")
           : []),
-      ...row("Steps", withExits ? "Approve twice, sign twice (first time)" : "Approve once (first time), sign once"),
       ...row("Route", "Best route by Definitive · MEV-protected"),
       ...row("Network", "Base mainnet · real funds"),
-      ...row("Sign in", walletOnPage === false ? "Kall Markets desk (Privy wallet)" : "Your browser wallet"),
+      ...row("Signed by", "Your Kall wallet, in Kall Markets"),
     );
 
     const pairBroken = side === "buy" && (tp === null) !== (sl === null);
@@ -358,93 +276,23 @@ export function flashCard(input: {
 
   amount.addEventListener("input", update);
 
-  let busy = false;
-  /** With MetaMask / Rabby on the page: quote, approve, sign and submit right here on X. */
-  async function placeHere() {
-    busy = true;
-    submit.setAttribute("disabled", "");
-    const tracker = stepTracker();
-    progress.replaceChildren(tracker.root);
-    progress.hidden = false;
-    review.hidden = true;
-    status.textContent = "";
-    const spent = side === "buy" ? money(Number(amount.value)) : `${amount.value} ${tokenSym()}`;
-    try {
-      const result = await placeOnX(
-        {
-          asset: choice?.kind === "token" ? choice.token.address : (sym() as "ETH" | "BTC"),
-          decimals: choice?.kind === "token" ? choice.token.decimals : undefined,
-          side,
-          amount: amount.value,
-          tpPct: side === "buy" ? tp : null,
-          slPct: side === "buy" ? sl : null,
-          price: price(),
-          postId: post.postId,
-          caller: post.handle,
-          // Selling ETH spends the wallet's native ETH: most wallets hold ETH, not WETH.
-          native: side === "sell" && choice?.kind === "known" && choice.key === "ETH",
-        },
-        (step) => tracker.to(step),
-        (facts) => progress.prepend(quoteSummary(facts, side === "buy" ? tokenSym() : "USDC")),
-      );
-      tracker.finish();
-      walletChip.textContent = `${result.from.slice(0, 6)}…${result.from.slice(-4)}`;
-      walletChip.hidden = false;
-      // Flash returned an order ID: only now does the success moment play.
-      const at = price();
-      progress.append(
-        receipt({
-          title: `${side === "buy" ? "Bought" : "Sold"} ${sym()} with ${spent}`,
-          summary: {
-            title: `${side === "buy" ? "Bought" : "Sold"} ${sym()}`,
-            spent,
-            exits:
-              side === "buy" && tp !== null && sl !== null
-                ? { tpPct: tp, slPct: sl, tpPrice: formatPrice(String(at * (1 + tp / 100))), slPrice: formatPrice(String(at * (1 - sl / 100))) }
-                : null,
-          },
-          exits: result.exits,
-          orderId: result.orderId,
-          from: result.from,
-          txs: result.txs,
-        }),
-      );
-      amount.value = "";
-    } catch (error) {
-      const message = friendlyError(error, side === "buy" ? "USDC" : choice?.kind === "known" && choice.key === "ETH" ? "ETH" : tokenSym());
-      tracker.fail(message);
-      status.textContent = message;
-    } finally {
-      busy = false;
-      review.hidden = false;
-      const keep = [...status.childNodes];
-      update();
-      // update() rewrites the hint; keep the result line the user needs to see.
-      if (keep.length) status.replaceChildren(...keep);
-    }
-  }
-
-  submit.addEventListener("click", async () => {
-    if (busy) return;
+  /** Opens the order in Kall Markets, filled in: the Kall wallet signs it there with no pop-ups. */
+  submit.addEventListener("click", () => {
     const usd = usdValue();
     if (usd === null || !Number.isFinite(usd)) return;
-    if (await hasBrowserWallet()) return placeHere();
-    if (choice?.kind === "token") {
-      // The desk's typed orders only know ETH and BTC; other tokens trade with a wallet on the page.
-      status.textContent = `Trading ${sym()} needs MetaMask or Rabby in this browser.`;
-      return;
-    }
+    const token = choice?.kind === "token" ? choice.token.address : null;
     const text = cardOrderText({
       side,
-      asset: sym(),
+      // Any other token goes by its contract; the order text then names no coin.
+      asset: token ? null : sym(),
       usd: side === "buy" ? amount.value : usd.toFixed(2),
       tpPct: side === "buy" ? tp : null,
       slPct: side === "buy" ? sl : null,
     });
     if (!text) return;
-    const url = deskOrderUrl(appOrigin, text, post);
+    const url = deskOrderUrl(appOrigin, text, post, token);
     openDesk(url);
-    status.replaceChildren("No browser wallet here: review the quote and sign in the Kall Markets desk. ", safeLink(url, "Open desk ↗"));
+    status.replaceChildren("Opened in Kall Markets: your Kall wallet signs it there. ", safeLink(url, "Open again ↗"));
   });
 
   // --- token picker, shown over the trade panel ---
@@ -476,7 +324,7 @@ export function flashCard(input: {
       "div",
       { class: "swap-row" },
       sides,
-      el("span", { class: "swap-row-end" }, walletChip, el("span", { class: "swap-chain-pill" }, el("span", { class: "swap-chain", "aria-hidden": "true" }), "Base")),
+      el("span", { class: "swap-row-end" }, el("span", { class: "swap-chain-pill" }, el("span", { class: "swap-chain", "aria-hidden": "true" }), "Base")),
     ),
     el(
       "label",
@@ -496,7 +344,6 @@ export function flashCard(input: {
     exitsToggle,
     exits,
     review,
-    progress,
     status,
     submit,
   );
@@ -601,76 +448,4 @@ export function flashCard(input: {
     });
   }
   return { card, open: () => tradable && toggle(true) };
-}
-
-const pct = (f: number) => `${(f * 100).toFixed(f >= 0.1 ? 1 : 2)}%`;
-
-/** Flash's own numbers for this fill, shown the moment the quote lands (before any wallet prompt). */
-export function quoteSummary(f: QuoteFacts, symbol: string) {
-  const row = (k: string, v: Node | string, hint?: string) => [el("dt", hint ? { title: hint } : {}, k), el("dd", {}, v)];
-  const amount = Number(f.received);
-  const got = Number.isFinite(amount) ? amount.toLocaleString("en-US", { maximumFractionDigits: amount >= 1 ? 4 : 8 }) : f.received;
-  const tone = f.impact === null ? "" : f.impact >= 0.03 ? "down" : f.impact >= 0.01 ? "warn" : "up";
-  const facts = el(
-    "dl",
-    { class: "review quote-facts" },
-    ...row("You get", `${got} ${symbol}${f.receivedUsd !== null ? ` · ≈$${f.receivedUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}`),
-    ...(f.impact !== null ? row("Price impact", el("span", { class: tone }, pct(f.impact)), "How much this order moves the price") : []),
-    ...(f.slippage !== null ? row("Max slippage", pct(f.slippage), "Recommended by Definitive for this quote") : []),
-    ...(f.feeUsd !== null ? row("Flash fee", f.feeUsd === 0 ? "Free" : `$${f.feeUsd.toFixed(2)}`) : []),
-    ...row("Best price", el("span", { class: "up best-price-line" }, "✓ Definitive Flash · best route on Base"), "Definitive Flash routes this order across Base's venues"),
-  );
-  return facts;
-}
-
-const short = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;
-const venueName = (v: string) => v.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-
-/**
- * After a fill: the network, the wallet, every transaction the wallet sent, and the swap itself once
- * Definitive executes it, each linked to Basescan. The swap hash arrives a few seconds later.
- */
-export function receipt(r: {
-  title: string;
-  /** Plays the success burst above the receipt. */
-  summary?: SuccessSummary;
-  exits: string | null;
-  orderId: string;
-  from: string;
-  txs: Array<{ label: string; hash: string }>;
-}) {
-  const row = (k: string, v: Node | string) => [el("dt", {}, k), el("dd", {}, v)];
-  const burst = r.summary ? successBurst(r.summary) : null;
-  const swap = el("dd", { class: "swap-pending" }, "Waiting for Definitive to fill on Base…");
-  const venue = el("dd", {}, "Best route by Definitive");
-  const card = el(
-    "div",
-    { class: "done-card" },
-    burst?.root,
-    el("div", { class: "done-head" }, el("strong", {}, r.title), el("span", { class: "network-badge" }, el("i", { "aria-hidden": "true" }), "Base")),
-    el(
-      "dl",
-      { class: "review receipt" },
-      el("dt", {}, "Swap"),
-      swap,
-      el("dt", {}, "Route"),
-      venue,
-      ...r.txs.flatMap((t) => row(t.label, safeLink(`${BASESCAN}/tx/${t.hash}`, `${short(t.hash)} ↗`))),
-      ...row("Wallet", safeLink(`${BASESCAN}/address/${r.from}`, `${short(r.from)} ↗`)),
-      ...row("Order", safeLink(`${appOrigin}/app#orders`, `${r.orderId.slice(0, 8)}… ↗`)),
-      ...(r.exits ? row("TP/SL", r.exits === "pending_activation" ? "Arms on the first fill" : r.exits) : []),
-    ),
-  );
-  void waitForFill(r.orderId, r.from).then((fill) => {
-    if (!fill) {
-      swap.replaceChildren("Still filling: check the order page");
-      burst?.setLink(`${BASESCAN}/address/${r.from}`, "Your wallet on Basescan ↗");
-      return;
-    }
-    burst?.setLink(`${BASESCAN}/tx/${fill.hash}`, "View swap on Basescan ↗");
-    swap.classList.remove("swap-pending");
-    swap.replaceChildren(safeLink(`${BASESCAN}/tx/${fill.hash}`, `${short(fill.hash)} ↗`));
-    if (fill.venues.length) venue.replaceChildren(`${fill.venues.map(venueName).join(" + ")} · via Definitive`);
-  });
-  return card;
 }

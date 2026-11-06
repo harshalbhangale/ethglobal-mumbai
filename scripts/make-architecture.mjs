@@ -82,7 +82,7 @@ steps.forEach((st, i) => { s += chip(sx, 822, st, true); sx += st.length * 8.2 +
 s += lines(d.x + 28, 896, [
   "Best route across Base’s venues, MEV protected",
   "Price impact, slippage and fee shown before you sign",
-  "You sign in your own wallet: MetaMask or Privy",
+  "Your Kall wallet (Privy) signs, no pop-ups",
   "Fill returns the Basescan tx and the venues used",
 ], 15, 30, TEXT);
 
