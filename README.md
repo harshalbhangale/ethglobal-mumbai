@@ -35,6 +35,63 @@ conversations.
 
 Built at ETHGlobal Mumbai 2026. Not financial advice.
 
+## How it works
+
+<p align="center">
+  <img src="kallr-webapp/public/sponsors/definitive.svg" height="28" alt="Definitive" />&nbsp;&nbsp;&nbsp;
+  <img src="kallr-webapp/public/sponsors/arkiv.png" height="28" alt="Arkiv" />&nbsp;&nbsp;&nbsp;
+  <img src="kallr-webapp/public/sponsors/chainlink.svg" height="28" alt="Chainlink" />&nbsp;&nbsp;&nbsp;
+  <img src="kallr-webapp/public/sponsors/swarm.svg" height="28" alt="Swarm" />
+</p>
+
+```mermaid
+flowchart LR
+  subgraph Where["Where calls show up"]
+    X["X post"]
+    TG["Telegram · WhatsApp"]
+  end
+
+  subgraph Kall["Kall Markets"]
+    EXT["Kall Extension<br/>(Chrome, on X)"]
+    KB["Kall Keyboard<br/>(Android · iOS)"]
+    WEB["Kall Web App<br/>kallr.vercel.app"]
+    API["Kall API<br/>(Next.js on Vercel)"]
+    AI["AI call reader<br/>real call? long or short?"]
+    CHECK["Call check<br/>fake contract → blocked"]
+  end
+
+  subgraph Proof["Receipts"]
+    CL["Chainlink on Base<br/>price at post time"]
+    ARK["Arkiv<br/>calls · results · trades"]
+    SW["Swarm<br/>post snapshot"]
+  end
+
+  subgraph Trade["Trade"]
+    FL["Definitive Flash<br/>quote → sign → fill"]
+    UNI["Uniswap API<br/>price benchmark only"]
+    WAL["Your wallet<br/>MetaMask · Privy"]
+    BASE["Base mainnet<br/>Basescan receipt"]
+  end
+
+  X --> EXT
+  TG --> KB
+  EXT & KB & WEB --> API
+  API --> AI --> CL --> ARK
+  API --> SW
+  API --> CHECK
+  ARK -->|caller record| EXT & KB & WEB
+  API --> FL
+  API -.->|compare| UNI
+  FL --> WAL --> BASE
+  BASE -->|trade record| ARK
+```
+
+1. **Read.** A call is captured from X (extension) or a copied message (keyboard). The AI reader decides if it's a real call and its direction.
+2. **Check.** A coin named next to a contract that isn't that coin gets "Call check failed" and no trade.
+3. **Price and keep.** The entry price comes from Chainlink on Base; the call, its result later, and every trade go to Arkiv; the post is snapshotted to Swarm.
+4. **Trade.** Definitive Flash quotes, you sign in your own wallet, it fills on Base. Uniswap is asked for the same quote only to show Flash's edge.
+5. **Prove.** You get the Basescan receipt, and the caller's record updates for everyone.
+
 ## What's here
 
 Kall Markets is one product in three places. All three trade through Definitive Flash on Base and keep
