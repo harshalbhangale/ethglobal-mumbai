@@ -11,7 +11,7 @@ import { baseSepolia } from "viem/chains";
  */
 
 export const VERDICTS: Address | null = isAddress(process.env.KALL_VERDICTS_ADDRESS ?? "") ? getAddress(process.env.KALL_VERDICTS_ADDRESS as string) : null;
-const client = createPublicClient({ chain: baseSepolia, transport: http(process.env.BASE_SEPOLIA_RPC_URL || undefined) });
+const client = createPublicClient({ chain: baseSepolia, transport: http(process.env.BASE_SEPOLIA_RPC_URL || "https://base-sepolia-rpc.publicnode.com") });
 
 const abi = parseAbi([
   "struct CoinCheck { address token; string claimed; string symbol; address canonical; uint8 verdict; uint64 checkedAt; }",
@@ -43,11 +43,13 @@ export type CoinVerdict = {
   contract: Address;
 };
 
+/** The block KallVerdicts was deployed in; log searches start there. */
+const FROM_BLOCK = BigInt(process.env.KALL_VERDICTS_FROM_BLOCK ?? "55315000");
+
 const txOf = async (event: typeof coinChecked | typeof callScored, args: Record<string, unknown>) => {
   if (!VERDICTS) return null;
-  const head = await client.getBlockNumber();
   const logs = await client
-    .getLogs({ address: VERDICTS, event: event as typeof coinChecked, args, fromBlock: head > 400_000n ? head - 400_000n : 0n })
+    .getLogs({ address: VERDICTS, event: event as typeof coinChecked, args, fromBlock: FROM_BLOCK })
     .catch(() => []);
   return logs.at(-1)?.transactionHash ?? null;
 };
