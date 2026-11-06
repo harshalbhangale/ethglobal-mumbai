@@ -1,17 +1,17 @@
 import { z } from "zod";
 import { errorResponse } from "@/lib/server/flash";
-import { authorized, cancelFromKeyboardWallet, keyboardWalletAddress } from "@/lib/server/keyboard-wallet";
+import { keyboardWallet } from "@/lib/server/keyboard-auth";
 
 /**
- * Cancel an open order the Kall keyboard wallet placed (a limit or TWAP still working). The server
- * signs Flash's cancel message with the keyboard wallet; Flash rejects orders it didn't fund.
+ * Cancel an open order the keyboard placed (a limit or TWAP still working). The server signs Flash's
+ * cancel message with the same wallet that placed it; Flash rejects orders it didn't fund.
  */
 export async function POST(req: Request) {
-  if (!keyboardWalletAddress) return Response.json({ error: "The keyboard wallet isn't set up on this server." }, { status: 503 });
-  if (!authorized(req)) return Response.json({ error: "This build can't cancel orders." }, { status: 401 });
+  const wallet = keyboardWallet(req);
+  if ("error" in wallet) return Response.json({ error: wallet.error }, { status: wallet.status });
   try {
     const { orderId } = z.object({ orderId: z.string().uuid() }).parse(await req.json());
-    await cancelFromKeyboardWallet(orderId);
+    await wallet.cancel(orderId);
     return Response.json({ cancelled: orderId });
   } catch (err) {
     return errorResponse(err);

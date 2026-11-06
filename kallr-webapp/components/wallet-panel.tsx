@@ -7,12 +7,10 @@ import { type Session, useTradingWallet } from "@/components/auth";
 import { CoinIcon, Receive, Send } from "@/components/move-funds";
 import { shortAddress } from "@/lib/chain";
 import { clearXTrading, extensionInstalled, readXTrading, setXTrading } from "@/lib/extension";
+import { issueKallKey, SIGNER_ID } from "@/lib/kall-key";
 import { formatCoin, type Holding, type WalletView } from "@/lib/transfer";
 
 const BASESCAN = "https://basescan.org/address/";
-
-/** Kall's signer on Privy: lets the server sign trades from X with your Kall wallet once you allow it. */
-const SIGNER_ID = process.env.NEXT_PUBLIC_PRIVY_SIGNER_ID ?? "";
 
 /** Everything the wallet holds on Base, from /api/wallet, refreshed every 20s and after a send. */
 function useWalletView(address: Address) {
@@ -194,14 +192,8 @@ function TradeFromX({ kallAddress }: { kallAddress: Address }) {
     setState("busy");
     setError(null);
     try {
-      await addSigners({ address: kallAddress, signers: [{ signerId: SIGNER_ID }] }).catch((e: unknown) => {
-        // Already added on an earlier visit: carry on.
-        if (!/already/i.test(e instanceof Error ? e.message : "")) throw e;
-      });
-      const res = await fetch("/api/x/key", { method: "POST", headers: { authorization: `Bearer ${await getAccessToken()}` } });
-      const body = (await res.json().catch(() => ({}))) as { key?: string; address?: string; expires?: number; error?: string };
-      if (!res.ok || !body.key || !body.address || !body.expires) throw new Error(body.error ?? "Couldn't turn it on. Try again.");
-      await setXTrading(body.key, body.address, body.expires);
+      const k = await issueKallKey({ address: kallAddress, addSigners, getAccessToken });
+      await setXTrading(k.key, k.address, k.expires);
       setState("on");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't turn it on. Try again.");

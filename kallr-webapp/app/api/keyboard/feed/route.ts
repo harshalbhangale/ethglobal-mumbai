@@ -1,7 +1,7 @@
 import { arkivPublic, readOpenCalls, readResults, readTrackedCallers, readTrades } from "@kallr/integrations/arkiv";
 import { callerRows, snapshotExcerpt } from "@/lib/keyboard-feed";
 import { arkivWriterAddress } from "@/lib/server/arkiv";
-import { keyboardWalletAddress } from "@/lib/server/keyboard-wallet";
+import { keyboardWalletAddressFor } from "@/lib/server/keyboard-auth";
 import { tradeTokenByKey } from "@/lib/server/keyboard-tokens";
 import { swarmUrl } from "@/lib/server/swarm";
 
@@ -9,8 +9,8 @@ import { swarmUrl } from "@/lib/server/swarm";
  * What the Kall Keyboard on iPhone shows, read from Arkiv on the server (the keyboard can't run the
  * Arkiv SDK): every caller Kall Markets tracks or has priced, with their record; open calls and recent
  * results, each with the post's text from its Swarm snapshot and its Arkiv entity key (for an explorer
- * link); the keyboard wallet's trades; and live ETH and BTC prices. Which callers the user follows is
- * kept on the phone.
+ * link); the linked wallet's trades (the shared keyboard wallet's for builds not linked yet); and live
+ * ETH and BTC prices. Which callers the user follows is kept on the phone.
  */
 export const dynamic = "force-dynamic";
 
@@ -29,16 +29,17 @@ async function postText(ref: string | undefined): Promise<string | null> {
   return text;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   if (!arkivWriterAddress) return Response.json({ error: "Arkiv isn't configured on this server." }, { status: 503 });
   const client = arkivPublic(process.env.ARKIV_ACCESS_KEY ?? "");
   const now = Math.floor(Date.now() / 1000);
   const writer = arkivWriterAddress;
+  const tradesOf = keyboardWalletAddressFor(req);
   const [roster, calls, results, trades, eth, btc] = await Promise.all([
     readTrackedCallers(client, writer).catch(() => []),
     readOpenCalls(client, writer, now).catch(() => []),
     readResults(client, writer).catch(() => []),
-    keyboardWalletAddress ? readTrades(client, writer, keyboardWalletAddress).catch(() => []) : Promise.resolve([]),
+    tradesOf ? readTrades(client, writer, tradesOf).catch(() => []) : Promise.resolve([]),
     tradeTokenByKey("ETH").catch(() => null),
     tradeTokenByKey("BTC").catch(() => null),
   ]);
