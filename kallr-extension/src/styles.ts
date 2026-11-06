@@ -211,6 +211,18 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .review dt { color: var(--muted); }
 .quote-facts { margin-bottom: 8px; }
 .quote-facts .warn { color: #f5a524; }
+.quote-block { margin-bottom: 8px; }
+.best-price { display: grid; gap: 3px; margin-bottom: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid #2c3830; background: #0d110f; font: 400 12px/1.35 system-ui, sans-serif; color: #b8c2b7; }
+.best-price strong { font-size: 14px; font-weight: 700; color: #e6ebe3; }
+.best-price.win { border-color: #c6f25a66; background: linear-gradient(135deg, #c6f25a1f, #8ad97c0d); }
+.best-price.win strong { color: var(--lime); }
+.best-price.win strong::before { content: "✓ "; }
+.best-sub { color: #8b978d; }
+.vs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.vs { display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; background: #050605; font-variant-numeric: tabular-nums; color: #8b978d; }
+.vs b { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.vs.win { color: #e6ebe3; box-shadow: inset 0 0 0 1px #c6f25a55; }
+.vs.win b { color: var(--lime); }
 .review dd { margin: 0; text-align: right; font-weight: 600; color: var(--foreground); }
 
 /* Step tracker while placing */

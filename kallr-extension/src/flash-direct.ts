@@ -82,7 +82,13 @@ async function api<T>(type: "flash-quote" | "flash-order", payload: Record<strin
 
 /** What Flash's quote says about the fill, shown before any wallet prompt. Fractions: 0.01 = 1%. */
 /** Flash vs Uniswap for the same trade, from the server; edgePct > 0 means Flash gives more. */
-export type PriceEdge = { edgePct: number; winner: "flash" | "uniswap" | "tie" };
+export type PriceEdge = {
+  edgePct: number;
+  winner: "flash" | "uniswap" | "tie";
+  /** What each venue gives for this trade, in the output token (when the server sent them). */
+  flashOut?: number;
+  uniswapOut?: number;
+};
 
 export type QuoteFacts = {
   received: string;
@@ -94,10 +100,15 @@ export type QuoteFacts = {
 };
 
 function readEdge(v: unknown): PriceEdge | null {
-  const c = v as { edgePct?: unknown; winner?: unknown } | null;
+  const c = v as { edgePct?: unknown; winner?: unknown; flashOut?: unknown; uniswapOut?: unknown } | null;
   if (!c || typeof c.edgePct !== "number" || !Number.isFinite(c.edgePct)) return null;
   if (c.winner !== "flash" && c.winner !== "uniswap" && c.winner !== "tie") return null;
-  return { edgePct: c.edgePct, winner: c.winner };
+  const n = (x: unknown) => ((typeof x === "string" || typeof x === "number") && Number.isFinite(Number(x)) && Number(x) > 0 ? Number(x) : undefined);
+  const edge: PriceEdge = { edgePct: c.edgePct, winner: c.winner };
+  const flashOut = n(c.flashOut);
+  const uniswapOut = n(c.uniswapOut);
+  if (flashOut !== undefined && uniswapOut !== undefined) Object.assign(edge, { flashOut, uniswapOut });
+  return edge;
 }
 
 export function quoteFacts(q: FlashQuote, compare: unknown = null): QuoteFacts {
