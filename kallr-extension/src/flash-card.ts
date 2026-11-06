@@ -3,7 +3,7 @@ import { appOrigin } from "./config";
 import { el, openDesk, safeLink, send } from "./dom";
 import { BASESCAN, type CardOrder, placeOnX, type QuoteFacts, type Step, toFlashInput, waitForFill, waitForTradeRecord } from "./flash-direct";
 import { followButton } from "./follows";
-import { definitiveLogo, tokenIcon } from "./logos";
+import { baseLogo, definitiveLogo, tokenIcon } from "./logos";
 import { cardOrderText, COPYABLE, DECIMAL, deskOrderUrl } from "./post";
 import { type SuccessSummary, successBurst } from "./success-burst";
 import { ALIASES, formatPrice, type LivePrice, livePrice } from "./ticker-price";
@@ -175,7 +175,12 @@ export function flashCard(input: {
     return el(
       "div",
       { class: "caller-strip" },
-      el("div", { class: "caller-id" }, safeLink(`https://x.com/${post.handle}`, `@${post.handle}`, "caller-handle"), read, onArkiv),
+      el(
+        "div",
+        { class: "caller-id" },
+        safeLink(`https://x.com/${post.handle}`, `@${post.handle}`, "caller-handle"),
+        read || onArkiv ? el("span", { class: "caller-meta" }, read, read && onArkiv ? el("span", { class: "caller-dot", "aria-hidden": "true" }, "·") : null, onArkiv) : null,
+      ),
       follow,
     );
   })();
@@ -215,13 +220,13 @@ export function flashCard(input: {
   const submit = el("button", { type: "button", class: "inline-submit swap-submit", disabled: "" }, `Buy ${sym()}`);
   const progress = el("div", { class: "progress", hidden: "" });
 
-  const pill = (symbol: string) => el("span", { class: "swap-pill" }, tokenIcon(symbol, 22), symbol);
+  const pill = (symbol: string) => el("span", { class: "swap-pill" }, tokenIcon(symbol, 20), symbol);
   /** The traded token's pill is a button: it opens the token picker. */
   const pickPill = (label: string) => {
     const b = el(
       "button",
       { type: "button", class: "swap-pill pick-token", "aria-label": `Change token (now ${label})` },
-      choice ? choiceIcon(choice, 22) : tokenIcon(label, 22),
+      choice ? choiceIcon(choice, 20) : tokenIcon(label, 20),
       label,
       el("span", { class: "pick-caret", "aria-hidden": "true" }, "▾"),
     );
@@ -334,7 +339,6 @@ export function flashCard(input: {
           : []),
       ...(useMetaMask() ? row("Steps", withExits ? "Approve twice, sign twice (first time)" : "Approve once (first time), sign once") : []),
       ...row("Route", "Best route by Definitive · MEV-protected"),
-      ...row("Network", "Base mainnet · real funds"),
       ...row("Signed by", signedBy()),
     );
 
@@ -537,7 +541,7 @@ export function flashCard(input: {
       "div",
       { class: "swap-row" },
       sides,
-      el("span", { class: "swap-row-end" }, walletChip, el("span", { class: "swap-chain-pill" }, el("span", { class: "swap-chain", "aria-hidden": "true" }), "Base")),
+      el("span", { class: "swap-row-end" }, walletChip, el("span", { class: "swap-chain-pill", title: "Trades settle on Base mainnet with real funds" }, baseLogo(16), "Base mainnet")),
     ),
     el(
       "label",
@@ -600,7 +604,7 @@ export function flashCard(input: {
   const attachedIcon = el("span", { class: "head-icon" });
   /** Header follows the chosen token. */
   function renderHead() {
-    headIcon.replaceChildren(choice ? choiceIcon(choice, 40) : tokenIcon(sym(), 40));
+    headIcon.replaceChildren(choice ? choiceIcon(choice, 32) : tokenIcon(sym(), 32));
     attachedIcon.replaceChildren(choice ? choiceIcon(choice, 28) : tokenIcon(sym(), 28));
     headName.textContent = nameOf();
     headSym.textContent = `${sym()} `;
@@ -714,7 +718,7 @@ export function receipt(r: {
     "div",
     { class: "done-card" },
     burst?.root,
-    el("div", { class: "done-head" }, el("strong", {}, r.title), el("span", { class: "network-badge" }, el("i", { "aria-hidden": "true" }), "Base")),
+    el("div", { class: "done-head" }, el("strong", {}, r.title), el("span", { class: "network-badge" }, baseLogo(14), "Base mainnet")),
     el(
       "dl",
       { class: "review receipt" },

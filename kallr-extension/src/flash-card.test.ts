@@ -404,7 +404,7 @@ describe("sign on X in MetaMask, when picked", () => {
     expect(q(card, ".swap-wallet").textContent).toBe("0x0000…00a1");
     expect(card.textContent).toContain("Arms on the first fill");
     // Receipt: Base badge, Basescan links for the wallet, its approval and (once filled) the swap.
-    expect(q(card, ".network-badge").textContent).toBe("Base");
+    expect(q(card, ".network-badge").textContent).toBe("Base mainnet");
     const links = [...card.querySelectorAll<HTMLAnchorElement>(".receipt a")].map((a) => a.href);
     expect(links).toContain("https://basescan.org/tx/0xhash");
     expect(links).toContain(`https://basescan.org/address/${from}`);

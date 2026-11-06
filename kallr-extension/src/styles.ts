@@ -44,17 +44,17 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .inline-card.inline-attached { margin-top: 8px; }
 .swap-card { box-shadow: 0 0 0 1px rgba(214,245,138,.08), 0 10px 30px rgba(0,0,0,.35); border-color: var(--line-strong); }
 :host([data-theme="light"]) .swap-card { box-shadow: 0 6px 22px rgba(15,20,25,.12); }
-.swap-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.swap-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
 .swap-icon { display: inline-grid; place-items: center; flex: 0 0 auto; border-radius: 50%; color: #fff; font-weight: 700; line-height: 1; }
 .swap-title { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; }
-.swap-title strong { font-size: 17px; }
-.swap-title span { color: var(--muted); font-size: 14px; white-space: nowrap; }
+.swap-title strong { font-size: 15px; line-height: 1.25; }
+.swap-title span { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .swap-title b { color: var(--foreground); font-weight: 700; }
 .swap-title em { font-style: normal; font-weight: 600; }
 .swap-title em.up { color: var(--positive); } .swap-title em.down { color: var(--negative); }
 .swap-spark { flex: 1 1 auto; min-width: 40px; }
-.inline-buy, .inline-close { cursor: pointer; border-radius: 99px; padding: 8px 15px; border: 1px solid var(--line); white-space: nowrap;
-  font-size: 14px; font-weight: 700; line-height: 1.3; }
+.inline-buy, .inline-close { cursor: pointer; border-radius: 99px; padding: 6px 13px; border: 1px solid var(--line); white-space: nowrap;
+  font-size: 13px; font-weight: 700; line-height: 1.3; }
 .inline-buy { background: var(--foreground); color: var(--surface); }
 .inline-close { background: transparent; color: var(--foreground); }
 
@@ -80,35 +80,37 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .dir-up { color: var(--positive); } .dir-down { color: var(--negative); }
 
 /* Trade panel */
-.inline-panel { border-top: 1px solid var(--line); padding: 14px 16px 12px; display: grid; gap: 8px; }
+.inline-panel { border-top: 1px solid var(--line); padding: 12px 14px; display: grid; gap: 8px; }
 .swap-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .swap-row-end { display: inline-flex; align-items: center; gap: 8px; }
-.seg { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 99px; }
-.seg button { border: 0; background: transparent; color: var(--muted); font: 700 14px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 8px 16px; border-radius: 99px; cursor: pointer; }
+.seg { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 99px; }
+.seg button { border: 0; background: transparent; color: var(--muted); font: 700 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 6px 13px; border-radius: 99px; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--foreground); color: var(--surface); }
-.swap-chain-pill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 99px;
-  padding: 5px 12px 5px 6px; background: var(--raised); font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--foreground); }
-.swap-chain { width: 22px; height: 22px; border-radius: 6px; flex: 0 0 auto; background: #0052ff; display: inline-block; }
-.swap-wallet { border: 1px solid var(--line); border-radius: 99px; padding: 7px 12px; font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--foreground); }
-.swap-box { display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--raised); border: 1px solid transparent; }
-.swap-pay { border-color: #1d9bf0; background: transparent; }
-.swap-label, .swap-usd { color: var(--muted); font-size: 13px; }
+.swap-chain-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 99px;
+  padding: 4px 10px 4px 5px; font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--foreground); }
+.base-logo { flex: 0 0 auto; display: block; }
+.swap-wallet { border: 1px solid var(--line); border-radius: 99px; padding: 5px 10px; font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--foreground); }
+.swap-box { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--raised); border: 1px solid transparent; }
+.swap-pay { border-color: var(--line); background: transparent; transition: border-color .15s; }
+.swap-pay:focus-within { border-color: #1d9bf0; }
+.inline-card input.swap-amount:focus-visible { outline: none; }
+.swap-label, .swap-usd { color: var(--muted); font-size: 12px; }
 .swap-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.swap-amount { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--foreground); font: 700 28px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 0; }
-.swap-out { font-size: 28px; font-weight: 700; overflow-wrap: anywhere; }
-.swap-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px 5px 6px; border: 1px solid var(--line); border-radius: 99px; font-weight: 700; white-space: nowrap; }
-.swap-arrow { justify-self: center; margin: -16px 0; z-index: 1; width: 32px; height: 32px; display: grid; place-items: center;
+.swap-amount { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--foreground); font: 700 24px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 0; }
+.swap-out { font-size: 24px; line-height: 1.2; font-weight: 700; overflow-wrap: anywhere; }
+.swap-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border: 1px solid var(--line); border-radius: 99px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.swap-arrow { justify-self: center; margin: -15px 0; z-index: 1; width: 26px; height: 26px; font-size: 13px; display: grid; place-items: center;
   border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--foreground); }
 .swap-meta { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .inline-note { font-size: 12px; color: var(--muted); margin: 4px 0; }
 .inline-note:empty { display: none; }
 .link-button { all: unset; cursor: pointer; color: var(--accent, #1d9bf0); font-weight: 700; }
 .link-button:hover { text-decoration: underline; }
-.inline-submit { width: 100%; border: 0; border-radius: 99px; margin-top: 6px; padding: 14px; background: var(--foreground); color: var(--surface);
-  font-size: 16px; font-weight: 700; cursor: pointer; }
+.inline-submit { width: 100%; border: 0; border-radius: 99px; margin-top: 2px; padding: 11px; background: var(--foreground); color: var(--surface);
+  font-size: 15px; font-weight: 700; cursor: pointer; }
 .inline-submit:disabled { opacity: .4; cursor: not-allowed; }
 .swap-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; color: var(--muted);
-  font-size: 12px; padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--line); }
+  font-size: 12px; padding-top: 10px; margin-top: 2px; border-top: 1px solid var(--line); }
 .swap-powered { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; }
 .swap-powered-sep { width: 1px; height: 14px; background: var(--line); }
 .swap-venue { color: var(--foreground); font-weight: 800; letter-spacing: -0.01em; }
@@ -181,12 +183,15 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .chip.following { color: var(--lime); background: #c6f25a14; border-color: #c6f25a55; font-weight: 700; letter-spacing: .02em; }
 
 /* Caller strip under the price header: who called it, their record, and Follow. */
-.caller-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px 12px; }
-.caller-id { display: flex; flex-direction: column; min-width: 0; }
-.inline-card a.caller-handle { color: var(--foreground); font-weight: 700; font-size: 15px; text-decoration: none; }
+.caller-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px 12px; }
+.caller-id { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.caller-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
+.caller-dot { color: var(--muted); }
+.caller-strip .x-follow { min-width: 76px; height: 30px; padding: 0 14px; font-size: 13px; }
+.inline-card a.caller-handle { color: var(--foreground); font-weight: 700; font-size: 14px; text-decoration: none; }
 .inline-card a.caller-handle:hover { text-decoration: underline; }
 .caller-record { color: var(--muted); font-size: 13px; }
-.caller-arkiv { color: var(--muted); font-size: 12px; text-decoration: none; margin-left: 8px; }
+.inline-card a.caller-arkiv { color: #1d9bf0; font-size: 13px; text-decoration: none; }
 .caller-arkiv:hover { text-decoration: underline; }
 
 /* Follow pill, as X draws it: white "Follow", outlined "Following", red "Unfollow" on hover. */
@@ -208,8 +213,8 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .amount-presets button:hover, .amount-presets button[aria-pressed="true"] { color: var(--foreground); border-color: var(--foreground); }
 
 /* Review before any wallet prompt */
-.review { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 2px 0 0; padding: 12px 14px; border-radius: 14px;
-  border: 1px solid var(--line); font-size: 13px; }
+.review { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 0; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--line); font-size: 12px; }
 .review dt { color: var(--muted); }
 .quote-facts { margin-bottom: 8px; }
 .quote-facts .warn { color: #f5a524; }
@@ -232,8 +237,7 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .done-card { display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--positive); background: color-mix(in srgb, var(--positive) 10%, transparent); font-size: 14px; }
 .done-card strong { color: var(--foreground); }
 .done-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.network-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 99px; background: #0052ff; color: #fff; font: 700 11px/1 system-ui, sans-serif; }
-.network-badge i { width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+.network-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 4px; border-radius: 99px; border: 1px solid var(--line); color: var(--foreground); font: 600 11px/1 system-ui, sans-serif; }
 .receipt { margin: 6px 0 0; padding: 8px 0 0; background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; font-size: 12px; }
 .swap-pending { color: var(--muted); font-weight: 500; animation: kallr-pulse 1.4s ease-in-out infinite; }
 @keyframes kallr-pulse { 50% { opacity: .45; } }
@@ -286,7 +290,7 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 }
 
 .definitive-logo { display: block; color: var(--foreground); }
-.exits-toggle { justify-self: start; border: 0; background: none; padding: 4px 2px; color: #1d9bf0; font: 600 14px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; }
+.exits-toggle { justify-self: start; border: 0; background: none; padding: 2px 0; color: #1d9bf0; font: 600 13px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; }
 .exits-toggle:hover { text-decoration: underline; }
 .signer-switch { border: 0; background: none; padding: 0; margin-left: 4px; color: #1d9bf0; font: 600 12px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; }
 .signer-switch:hover { text-decoration: underline; }
