@@ -71,6 +71,7 @@ Environment (`kallr-webapp/.env.local`):
 | `OPENAI_API_KEY` | Keyboard AI: reading calls and plain-word orders | Keyboard falls back to links and cashtags only |
 | `ELEVENLABS_API_KEY` | Keyboard voice orders (Scribe) | OpenAI transcription, if set |
 | `SWARM_API_URL`, `SWARM_POSTAGE_BATCH_ID` | Your own Bee node and batch for snapshots | Swarm's public gateway |
+| `UNISWAP_API_KEY` | The "Best price" line: each Flash quote set beside Uniswap's | The line is hidden; trading is unchanged |
 
 Hosted on Vercel (project `kallr`, root `kallr-webapp`): <https://kallr.vercel.app>, deployed on every push to `main`.
 
@@ -83,7 +84,40 @@ The service worker only registers in production builds: `npm run build && npm st
 3. The user's Privy wallet approves if needed and signs the entry and the TP/SL pair.
 4. `/api/flash/order` submits; the TP/SL arms on the first fill. The API key stays on the server.
 
-TP/SL attach to buys only (a spot sell leaves you in USDC). Tradable today: ETH (as WETH) and BTC (as cbBTC) against USDC on Base.
+TP/SL attach to buys only (a spot sell leaves you in USDC). Tradable today: ETH (as WETH), BTC (as cbBTC) and any
+Base token from search, against USDC on Base.
+
+Where the Flash code lives:
+[`buildQuoteRequest`](packages/integrations/src/definitive.ts#L98) and
+[`buildSubmitRequest`](packages/integrations/src/definitive.ts#L182) shape every order;
+[`flashClient`](packages/integrations/src/definitive.ts#L348) wraps `/quote`, `/order`, `/orders/{id}` and `/search`;
+[`/api/flash/quote`](kallr-webapp/app/api/flash/quote/route.ts) and `/api/flash/order` keep the key server-side;
+the extension signs on X in [`placeOnX`](kallr-extension/src/flash-direct.ts) and shows the fill's Basescan
+transaction and route from `/orders/{id}`.
+
+## Uniswap: the price check on every Flash quote
+
+Kall Markets trades only through Definitive Flash. Uniswap is the benchmark: when Flash quotes a trade, the same
+swap (same tokens, same amount, same moment) is quoted through the
+[Uniswap Trading API](https://developers.uniswap.org/docs/api-reference/aggregator_quote) on Uniswap's v2, v3 and
+v4 pools, and one line under the quote says who gives more:
+
+> **Best price:** ✓ Definitive Flash · +0.42% vs Uniswap
+
+If Uniswap gives more, the line says so (“Uniswap +0.1% · Flash adds MEV protection”). If Uniswap is slow or the
+key is missing, the line is hidden and nothing else changes.
+
+- [`uniswapQuote`](packages/integrations/src/uniswap.ts#L37): `POST /v1/quote`, `EXACT_INPUT` on Base (8453),
+  `protocols: ["V2","V3","V4"]` for a like-for-like pool price, 2.5s timeout, never throws.
+- [`comparePrices`](packages/integrations/src/uniswap.ts#L92): Flash's output against Uniswap's in the output
+  token's decimals, as a signed percentage.
+- [`uniswapFor`](kallr-webapp/lib/server/uniswap.ts#L39): maps the order to Uniswap's tokenIn/tokenOut (USDC in on
+  a buy, the asset in on a sell; native ETH as WETH) and reads a searched token's decimals from Base.
+- [`/api/flash/quote`](kallr-webapp/app/api/flash/quote/route.ts#L15): starts the Uniswap quote alongside the Flash
+  quote, so the benchmark adds no wait, and returns it as `compare`.
+- Shown in the Kall Extension ([`bestPrice`](kallr-extension/src/flash-card.ts#L626)) and the Kall Web App's
+  ticket ([`trade-ticket.tsx`](kallr-webapp/components/trade-ticket.tsx#L471)).
+- Feedback for the Uniswap team: [FEEDBACK.md](FEEDBACK.md).
 
 ## Kall Keyboard on iPhone
 
@@ -275,7 +309,7 @@ docs/PLAN.md        what we are building next, and what is parked
 - Kall Keyboard: a real trade from a phone (sign-in works on the emulator); release build
 - Swarm dashboard: the public gateway serves the snapshots, but the HTML page waits for Swarm's approval or an ENS name
 
-Parked, not planned for the demo: live X bot, Telegram, agents/MCP, Postgres, Chainlink CRE. See [docs/PLAN.md](docs/PLAN.md).
+Parked, not planned for the demo: live X bot, Telegram, agents/MCP, Postgres. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Built at ETHGlobal Mumbai: what's new and what we reused
 
@@ -298,7 +332,7 @@ row and `/api/keyboard`, the Arkiv data layer and the `/trades` dashboard.
 ## Sponsor feedback
 
 Short, specific notes from building on their stacks: [Definitive](feedback/definitive.md),
-[Arkiv](arkiv/friction.md) and [Swarm](arkiv/swarm.md#what-got-in-our-way).
+[Arkiv](arkiv/friction.md), [Swarm](arkiv/swarm.md#what-got-in-our-way) and [Uniswap](FEEDBACK.md).
 
 ## How we used AI
 

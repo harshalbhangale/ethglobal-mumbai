@@ -95,7 +95,7 @@ your wallet. They're matched when a new call is written to Arkiv. Notifications 
 | X bot (`kallr-xbot`) | Code works in dry run; a live run costs X API credits and isn't needed for the demo |
 | Telegram bot, MCP, agents, x402 | Replaced by the Terminal's rules + notifications, which keep the user signing |
 | Postgres / AWS (`packages/database`) | Arkiv is the store |
-| Chainlink CRE, PostArchive contract, Envio | Not needed to show the product working |
+| PostArchive contract, Envio | Not needed to show the product working |
 | World ID | Not one of our three sponsors |
 | Cancel from the desk, orders WebSocket | Nice to have; polling works |
 | Android Share target in the PWA | The keyboard already covers Android |

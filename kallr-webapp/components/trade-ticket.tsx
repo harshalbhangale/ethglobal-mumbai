@@ -4,7 +4,7 @@ import { type ExitPrices, type ParsedOrder, exitPrices, parseOrder } from "@kall
 import type { FlashOrderInput } from "@kallr/integrations/definitive";
 import type { ConnectedWallet } from "@privy-io/react-auth";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type OrderContext, type PlaceStep, placeFlashOrder } from "@/lib/flash-client";
+import { type OrderContext, type PlaceStep, type PriceEdge, placeFlashOrder } from "@/lib/flash-client";
 import { toDecimal, toFlashOrder } from "@/lib/flash-order";
 import { useUsdPrices } from "./order-desk";
 
@@ -124,6 +124,8 @@ export function TradeTicket({
   const [source, setSource] = useState<{ postId: string; caller: string | null } | null>(null);
   const [via, setVia] = useState<OrderContext["source"]>("desk");
   const [run, setRun] = useState<Run>({ kind: "idle" });
+  // Flash vs Uniswap for the trade being placed: the benchmark line under the steps.
+  const [edge, setEdge] = useState<PriceEdge | null>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
 
   /** Fill the form from a typed order or a link. Returns an error, or null when applied. */
@@ -217,6 +219,7 @@ export function TradeTicket({
     if (!flash?.ok || !wallet || busy || !order) return;
     const seen: PlaceStep[] = [];
     let at: PlaceStep | null = null;
+    setEdge(null);
     const summary =
       kind === "limit" && limitPrice
         ? `Limit ${side} placed: ${usd(amountUsd)} of ${symbol} at ${usd(limitPrice)}`
@@ -231,6 +234,7 @@ export function TradeTicket({
           setRun({ kind: "working", step, seen: [...seen] });
         },
         { source: via, caller: source?.caller ?? null },
+        setEdge,
       );
       setRun({ kind: "done", orderId: res.orderId, seen: [...seen], summary, exits: res.bracketStatus });
       onPlaced();
@@ -460,6 +464,19 @@ export function TradeTicket({
                 );
               })}
             </ol>
+          )}
+
+          {run.kind !== "idle" && edge && (
+            <p className="flex items-center justify-between gap-3 rounded-xl border border-rule px-4 py-2.5 text-sm" title="This trade quoted on Uniswap's pools at the same moment">
+              <span className="text-slate">Best price</span>
+              {edge.winner === "flash" ? (
+                <span className="font-semibold text-up">✓ Definitive Flash · +{Math.abs(edge.edgePct).toFixed(2)}% vs Uniswap</span>
+              ) : edge.winner === "uniswap" ? (
+                <span className="font-semibold">Uniswap +{Math.abs(edge.edgePct).toFixed(2)}% · Flash adds MEV protection</span>
+              ) : (
+                <span className="font-semibold">Same as Uniswap</span>
+              )}
+            </p>
           )}
 
           {run.kind === "done" && (

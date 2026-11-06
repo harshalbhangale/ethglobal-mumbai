@@ -618,7 +618,16 @@ export function quoteSummary(f: QuoteFacts, symbol: string) {
     ...(f.impact !== null ? row("Price impact", el("span", { class: tone }, pct(f.impact)), "How much this order moves the price") : []),
     ...(f.slippage !== null ? row("Max slippage", pct(f.slippage), "Recommended by Definitive for this quote") : []),
     ...(f.feeUsd !== null ? row("Flash fee", f.feeUsd === 0 ? "Free" : `$${f.feeUsd.toFixed(2)}`) : []),
+    ...(f.vsUniswap ? row("Best price", bestPrice(f.vsUniswap), "This trade quoted on Uniswap's pools at the same moment") : []),
   );
+}
+
+/** One line: who gives more for this exact trade, Definitive Flash or Uniswap. */
+export function bestPrice(e: { edgePct: number; winner: "flash" | "uniswap" | "tie" }) {
+  const by = `${Math.abs(e.edgePct).toFixed(2)}%`;
+  if (e.winner === "flash") return el("span", { class: "up best-price" }, `✓ Definitive Flash · +${by} vs Uniswap`);
+  if (e.winner === "uniswap") return el("span", { class: "best-price" }, `Uniswap +${by} · Flash adds MEV protection`);
+  return el("span", { class: "best-price" }, "Same as Uniswap");
 }
 
 const short = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;

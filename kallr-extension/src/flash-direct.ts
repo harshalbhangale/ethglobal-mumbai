@@ -81,9 +81,26 @@ async function api<T>(type: "flash-quote" | "flash-order", payload: Record<strin
 }
 
 /** What Flash's quote says about the fill, shown before any wallet prompt. Fractions: 0.01 = 1%. */
-export type QuoteFacts = { received: string; receivedUsd: number | null; impact: number | null; slippage: number | null; feeUsd: number | null };
+/** Flash vs Uniswap for the same trade, from the server; edgePct > 0 means Flash gives more. */
+export type PriceEdge = { edgePct: number; winner: "flash" | "uniswap" | "tie" };
 
-export function quoteFacts(q: FlashQuote): QuoteFacts {
+export type QuoteFacts = {
+  received: string;
+  receivedUsd: number | null;
+  impact: number | null;
+  slippage: number | null;
+  feeUsd: number | null;
+  vsUniswap: PriceEdge | null;
+};
+
+function readEdge(v: unknown): PriceEdge | null {
+  const c = v as { edgePct?: unknown; winner?: unknown } | null;
+  if (!c || typeof c.edgePct !== "number" || !Number.isFinite(c.edgePct)) return null;
+  if (c.winner !== "flash" && c.winner !== "uniswap" && c.winner !== "tie") return null;
+  return { edgePct: c.edgePct, winner: c.winner };
+}
+
+export function quoteFacts(q: FlashQuote, compare: unknown = null): QuoteFacts {
   const num = (v: string | null | undefined) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
   const impact = num(q.estimatedPriceImpact);
   return {
@@ -92,6 +109,7 @@ export function quoteFacts(q: FlashQuote): QuoteFacts {
     impact: impact === null ? null : Math.abs(impact),
     slippage: num(q.recommendedSlippage),
     feeUsd: num(q.fees?.estimatedFeeNotional),
+    vsUniswap: readEdge(compare),
   };
 }
 
@@ -126,11 +144,11 @@ export async function placeOnX(o: CardOrder, onStep: (step: Step) => void, onQuo
   const order = built.input;
 
   onStep("quoting");
-  const raw = await api<{ quote: unknown }>("flash-quote", { order });
+  const raw = await api<{ quote: unknown; compare?: unknown }>("flash-quote", { order });
   const parsed = flashQuoteSchema.safeParse(raw.quote);
   if (!parsed.success) throw new Error("Flash returned a quote we couldn't read. Try again.");
   const quote: FlashQuote = parsed.data;
-  onQuote?.(quoteFacts(quote));
+  onQuote?.(quoteFacts(quote, raw.compare ?? null));
   /** Transactions the wallet sent itself (wrap, approvals), for Basescan links. */
   const txs: Array<{ label: string; hash: string }> = [];
 
