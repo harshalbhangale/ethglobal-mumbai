@@ -18,6 +18,8 @@ final class KeyboardModel: ObservableObject {
         let postId: String; let caller: String; let asset: String; let short: Bool
         let postedAt: Double?; let deadline: Double?; let entry: Double?; let text: String?
         let status: String?; let returnBps: Int?
+        /** Kall's own demo call (ETH → USDC), pinned on top so the swap can be tried from a post. */
+        var demo = false
         var id: String { postId }
     }
     /** Idle → quoting → review (a fresh quote, nothing sent) → placing → done or failed. */
@@ -44,6 +46,16 @@ final class KeyboardModel: ObservableObject {
     @Published var scope = Scope.following
     @Published var filter = Filter.active
     @Published var selectedCaller: String?
+    /** The post opened in full from Following. */
+    @Published var opened: Item?
+    private let demoPostedAt = Date().timeIntervalSince1970 - 25 * 60
+    /** A clearly labelled demo call from Kall itself: rotate ETH into USDC. */
+    var demoItem: Item {
+        Item(postId: "kall-demo-eth-usdc", caller: "kallmarkets", asset: "ETH", short: true,
+             postedAt: demoPostedAt, deadline: demoPostedAt + 86_400, entry: nil,
+             text: "Demo call from Kall Markets: taking profit on $ETH here. Swapping ETH to USDC on Base and waiting for a better entry. Tap Swap to try it from the keyboard. Not financial advice.",
+             status: nil, returnBps: nil, demo: true)
+    }
     @Published var follows: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "kall.follows") ?? [])
     @Published var favorites: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "kall.favorites") ?? [])
     @Published var refreshing = false
@@ -73,6 +85,7 @@ final class KeyboardModel: ObservableObject {
     func togglePay() {
         Haptics.layer()
         payAsset = payingETH ? "USDC" : "ETH"
+        if source?.postId == demoItem.postId { source = nil }
         placing = .idle
         if payingETH { kind = .market; advancedOpen = false }
     }
@@ -189,6 +202,16 @@ final class KeyboardModel: ObservableObject {
 
     // MARK: The fill on Base
 
+    /** Drops the trade and its BaseScan link into the chat you're typing in. */
+    func shareReceipt() {
+        guard let tx = fillTx, let placed = lastPlaced else { return }
+        tap(.medium)
+        let got = placed.preview.get.replacingOccurrences(of: "about ", with: "")
+        controller?.textDocumentProxy.insertText("\(placed.preview.title), got \(got) on Definitive Flash: https://basescan.org/tx/\(tx)")
+        placing = .idle
+        mode = .typing
+    }
+
     /** The swap's transaction once Flash fills it, for the done card's BaseScan link. */
     @Published var fillTx: String?
 
@@ -230,6 +253,25 @@ final class KeyboardModel: ObservableObject {
         }
     }
     var exitsSummary: String { exitsOn ? "TP +\(Kallr.fmt(tpPct))% · SL −\(Kallr.fmt(slPct))%" : "Add TP / SL" }
+    /** Options, folded: "Market · TP +10% SL −5%". */
+    var optionsSummary: String {
+        [kind == .market ? nil : kind.rawValue, exitsOn ? "+\(Kallr.fmt(tpPct))% / −\(Kallr.fmt(slPct))%" : "Options"]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+    /** Under the amount: about what it gets, and what you can spend. */
+    var amountSubline: String {
+        let spend = payingETH
+            ? swappableUsd.map { String(format: "can swap $%.2f", $0) }
+            : wallet?.usdcValue.map { String(format: "balance $%.2f", $0) }
+        let gets: String? = payingETH
+            ? Double(usd).map { String(format: "≈ %.2f USDC", $0 * 0.97) }
+            : estimate.map { "≈ " + Self.coinAmount($0) + " " + symbol }
+        return [gets, spend].compactMap { $0 }.joined(separator: " · ")
+    }
+    static func coinAmount(_ v: Double) -> String {
+        if v >= 1000 { return v.formatted(.number.precision(.fractionLength(0)).locale(Locale(identifier: "en_US"))) }
+        return String(format: v >= 1 ? "%.4f" : "%.6f", v)
+    }
     var exitsPriceLine: String? {
         guard exitsOn, let e = entryPrice else { return nil }
         return "Sells at $\(Self.money(e * (1 + tpPct / 100))) up, or $\(Self.money(e * (1 - slPct / 100))) down"
@@ -458,14 +500,14 @@ final class KeyboardModel: ObservableObject {
     }
     func count(_ f: Filter) -> Int {
         switch f {
-        case .active: return mine(openItems).count
+        case .active: return mine(openItems).count + 1  // the demo call
         case .settled: return mine(settledItems).count
         case .favorites: return (openItems + settledItems).filter { favorites.contains($0.postId) }.count
         }
     }
     var visibleItems: [Item] {
         switch filter {
-        case .active: return mine(openItems)
+        case .active: return [demoItem] + mine(openItems)
         case .settled: return mine(settledItems)
         case .favorites: return (openItems + settledItems).filter { favorites.contains($0.postId) }
         }
@@ -487,6 +529,19 @@ final class KeyboardModel: ObservableObject {
     /** Trade a call from the list: fills the Trade tab with its coin and the post it came from. */
     func trade(_ item: Item) {
         tap(.medium)
+        opened = nil
+        if item.demo {
+            // The demo call is a swap: pay with the wallet's ETH, get USDC.
+            payAsset = "ETH"
+            kind = .market
+            advancedOpen = false
+            if let most = swappableUsd, most >= 1 { usd = String(format: "%.2f", min(most, 5)) }
+            source = (item.caller, item.postId, "@\(item.caller) · SWAP ETH → USDC")
+            placing = .idle
+            tab = .trade
+            return
+        }
+        payAsset = "USDC"
         asset = item.asset
         source = (item.caller, item.postId, "@\(item.caller) · \(item.short ? "SHORT" : "LONG") $\(item.asset)")
         placing = .idle
@@ -666,45 +721,52 @@ struct KeyboardView: View {
 private struct TopBar: View {
     @ObservedObject var model: KeyboardModel
 
+    private func title(_ t: KeyboardModel.Tab) -> String {
+        switch t {
+        case .following: return "Following"
+        case .trade: return "Trade"
+        case .orders: return "Orders"
+        case .wallet: return "Wallet"
+        }
+    }
+
     var body: some View {
-        HStack(spacing: 6) {
-            Button { Haptics.layer(); model.closePicker(); model.mode = .typing } label: {
-                Text("ABC").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.bone)
-                    .frame(width: 44, height: 38).background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
+        HStack(spacing: 0) {
+            Button { Haptics.layer(); model.closePicker(); model.opened = nil; model.mode = .typing } label: {
+                Text("ABC").font(.system(size: 14, weight: .heavy)).foregroundStyle(Kallr.bone)
+                    .frame(width: 52, height: 36).background(Kallr.keyDark, in: Capsule())
             }
             .buttonStyle(Press())
             .accessibilityLabel("Back to typing")
-            HStack(spacing: 2) {
-                ForEach(KeyboardModel.Tab.allCases, id: \.self) { t in
-                    Button {
-                        model.tap()
-                        withAnimation(.easeOut(duration: 0.15)) { model.tab = t }
-                        if t == .orders { model.startPolling() }
-                        if t == .wallet || t == .following { Task { await model.load() } }
-                    } label: {
-                        Text(t.rawValue)
-                            .font(.system(size: 11, weight: .heavy)).tracking(0.6)
-                            .foregroundStyle(model.tab == t ? Kallr.black : Kallr.bone)
-                            .frame(maxWidth: .infinity, minHeight: 32)
-                            .background(model.tab == t ? Kallr.lime : .clear, in: RoundedRectangle(cornerRadius: 7))
+            ForEach(KeyboardModel.Tab.allCases, id: \.self) { t in
+                Button {
+                    model.tap()
+                    withAnimation(.easeOut(duration: 0.15)) { model.tab = t }
+                    if t == .orders { model.startPolling() }
+                    if t == .wallet || t == .following { Task { await model.load() } }
+                } label: {
+                    VStack(spacing: 5) {
+                        Text(title(t)).font(.system(size: 14, weight: .heavy))
+                            .foregroundStyle(model.tab == t ? Kallr.bone : Kallr.muted)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                        Capsule().fill(model.tab == t ? Kallr.lime : .clear).frame(width: 18, height: 3)
                     }
-                    .buttonStyle(Press())
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(Press())
             }
-            .padding(3)
-            .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
             if model.showsGlobe {
                 Button { model.tap(); model.controller?.nextKeyboard() } label: {
-                    Image(systemName: "globe").font(.system(size: 17, weight: .medium)).foregroundStyle(Kallr.bone)
-                        .frame(width: 40, height: 38).background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
+                    Image(systemName: "globe").font(.system(size: 17, weight: .medium)).foregroundStyle(Kallr.muted)
+                        .frame(width: 40, height: 44)
                 }
                 .buttonStyle(Press())
                 .accessibilityLabel("Next keyboard")
             }
         }
-        .padding(.horizontal, 6)
-        .padding(.top, 6)
-        .padding(.bottom, 4)
+        .padding(.horizontal, 8)
+        .padding(.top, 4)
     }
 }
 
@@ -714,31 +776,103 @@ private struct FollowingTab: View {
     @ObservedObject var model: KeyboardModel
 
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 6) {
-                HStack(spacing: 2) {
+        if let item = model.opened {
+            PostView(item: item, model: model)
+        } else {
+            VStack(spacing: 4) {
+                HStack(spacing: 16) {
                     ForEach(KeyboardModel.Scope.allCases, id: \.self) { sc in
                         Button { model.tap(); model.scope = sc } label: {
-                            Text(sc == .following ? "FOLLOWING \(model.follows.count)" : "EXPLORE")
-                                .font(.system(size: 10, weight: .heavy)).tracking(0.5)
-                                .foregroundStyle(model.scope == sc ? Kallr.black : Kallr.bone)
-                                .frame(maxWidth: .infinity, minHeight: 28)
-                                .background(model.scope == sc ? Kallr.bone : .clear, in: RoundedRectangle(cornerRadius: 6))
+                            Text(sc == .following ? "Following \(model.follows.count)" : "Explore")
+                                .font(.system(size: 14, weight: .heavy))
+                                .foregroundStyle(model.scope == sc ? Kallr.bone : Kallr.muted)
+                                .frame(minHeight: 36)
                         }
                         .buttonStyle(Press())
                     }
+                    Spacer(minLength: 0)
+                    IconButton(symbol: "doc.on.clipboard", label: "Check what you copied") { model.controller?.checkCopied() }
+                    IconButton(symbol: model.refreshing ? "hourglass" : "arrow.clockwise", label: "Refresh") { Task { await model.refresh() } }
                 }
-                .padding(2)
-                .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
-                IconButton(symbol: "doc.on.clipboard", label: "Check what you copied") { model.controller?.checkCopied() }
-                IconButton(symbol: model.refreshing ? "hourglass" : "arrow.clockwise", label: "Refresh") { Task { await model.refresh() } }
+                .padding(.horizontal, 14)
+
+                if model.checking || model.note != nil || model.copied?.headline(typed: nil) != nil { CopiedBanner(model: model) }
+
+                if model.scope == .explore { ExploreList(model: model) } else { FollowingList(model: model) }
             }
-            .padding(.horizontal, 6)
-
-            if model.checking || model.note != nil || model.copied?.headline(typed: nil) != nil { CopiedBanner(model: model) }
-
-            if model.scope == .explore { ExploreList(model: model) } else { FollowingList(model: model) }
         }
+    }
+}
+
+/** One post in full: who called it, which way, the whole text, how it's going, and one button to trade it. */
+private struct PostView: View {
+    let item: KeyboardModel.Item
+    @ObservedObject var model: KeyboardModel
+
+    private var record: String? {
+        guard let c = model.feed?.callers?.first(where: { $0.handle.lowercased() == item.caller.lowercased() }), c.settled > 0 else { return nil }
+        return "\(c.hits) of \(c.settled) right"
+    }
+    private var direction: String { item.demo ? "SWAP ETH → USDC" : "\(item.short ? "SHORT" : "LONG") $\(item.asset)" }
+    private var tradable: Bool { item.demo || (item.status == nil && !item.short && ["ETH", "BTC"].contains(item.asset)) }
+    private var buttonTitle: String {
+        if item.demo { return "Swap ETH → USDC" }
+        if tradable { return "Trade $\(item.asset)" }
+        if item.status != nil { return "Settled: \(item.status ?? "")" }
+        return item.short ? "Can't copy shorts" : "Not tradable on Base"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Button { model.tap(); model.opened = nil } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 15, weight: .bold)).foregroundStyle(Kallr.bone)
+                        .frame(width: 40, height: 40).background(Kallr.keyDark, in: Circle())
+                }
+                .buttonStyle(Press())
+                .accessibilityLabel("Back")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("@\(item.caller)").font(.system(size: 14, weight: .heavy)).foregroundStyle(Kallr.bone)
+                    Text([direction, Kallr.ago(item.postedAt), record].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(item.short && !item.demo ? Kallr.danger : Kallr.lime).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if !item.demo {
+                    Button { model.toggleFavorite(item.postId) } label: {
+                        Image(systemName: model.favorites.contains(item.postId) ? "star.fill" : "star")
+                            .font(.system(size: 16)).foregroundStyle(model.favorites.contains(item.postId) ? Kallr.lime : Kallr.muted)
+                            .frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(Press())
+                    .accessibilityLabel("Favorite")
+                }
+            }
+            .padding(.horizontal, 14)
+            ScrollView(.vertical, showsIndicators: false) {
+                Text(item.text ?? "Kall Markets didn't keep this post's text.")
+                    .font(.system(size: 17)).foregroundStyle(Kallr.bone)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+            }
+            .modifier(NoEdgeBlur())
+            if let move = model.move(item), !item.demo {
+                Text(String(format: "%+.2f%% since the post · %@", move, Kallr.left(item.deadline)))
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(move >= 0 ? Kallr.up : Kallr.danger)
+                    .padding(.horizontal, 14).padding(.bottom, 6)
+            }
+            Button { if tradable { model.trade(item) } } label: {
+                Text(buttonTitle).font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(tradable ? Kallr.black : Kallr.muted)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(tradable ? Kallr.lime : Kallr.keyDark, in: RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(Press())
+            .disabled(!tradable)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
+        }
+        .padding(.top, 4)
     }
 }
 
@@ -748,8 +882,8 @@ private struct IconButton: View {
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(Kallr.bone)
-                .frame(width: 36, height: 32).background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
+            Image(systemName: symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(Kallr.muted)
+                .frame(width: 40, height: 40)
         }
         .buttonStyle(Press())
         .accessibilityLabel(label)
@@ -791,25 +925,19 @@ private struct FollowingList: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 16)
         } else {
-            VStack(spacing: 6) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        Chip(label: "All", on: model.selectedCaller == nil) { model.tap(); model.selectedCaller = nil }
-                        ForEach(model.followedCallers, id: \.handle) { c in
-                            Chip(label: "@\(c.handle)\(c.hitRate.map { " · \(Int(($0 * 100).rounded()))%" } ?? "")", on: model.selectedCaller == c.handle) {
-                                model.tap(); model.selectedCaller = model.selectedCaller == c.handle ? nil : c.handle
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 6)
-                }
-                HStack(spacing: 6) {
+            VStack(spacing: 2) {
+                HStack(spacing: 16) {
                     ForEach(KeyboardModel.Filter.allCases, id: \.self) { f in
-                        Chip(label: f.label(count: model.count(f)), on: model.filter == f) { model.tap(); model.filter = f }
+                        Button { model.tap(); model.filter = f } label: {
+                            Text(f.label(count: model.count(f))).font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(model.filter == f ? Kallr.lime : Kallr.muted)
+                                .frame(minHeight: 32)
+                        }
+                        .buttonStyle(Press())
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 14)
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         let items = model.visibleItems
@@ -817,7 +945,7 @@ private struct FollowingList: View {
                         else if items.isEmpty { Empty(text: model.filter == .favorites ? "Star a call to keep it here." : model.filter == .active ? "No open calls from who you follow." : "Nothing settled yet.") }
                         ForEach(items) { item in CallCard(item: item, model: model) }
                     }
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, 14)
                 }
                 .refreshable { await model.refresh() }
             }
@@ -865,51 +993,41 @@ private struct ExploreList: View {
     }
 }
 
-/** One call: who, which way, the post itself, how it's going, a star, and Trade. */
+/** One call in three quiet lines: who and which way, the post, how it's going. Tap opens the whole post. */
 private struct CallCard: View {
     let item: KeyboardModel.Item
     @ObservedObject var model: KeyboardModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
-                Text("@\(item.caller)").font(.system(size: 13, weight: .bold)).foregroundStyle(Kallr.bone)
-                Text("\(item.short ? "SHORT" : "LONG") $\(item.asset)").font(.system(size: 10, weight: .heavy))
-                    .foregroundStyle(item.short ? Kallr.danger : Kallr.lime)
-                Text(Kallr.ago(item.postedAt)).font(.system(size: 10)).foregroundStyle(Kallr.muted)
+                Text("@\(item.caller)").font(.system(size: 14, weight: .heavy)).foregroundStyle(Kallr.bone).lineLimit(1)
+                Text(item.demo ? "SWAP ETH → USDC" : "\(item.short ? "SHORT" : "LONG") $\(item.asset)").font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(item.short && !item.demo ? Kallr.danger : Kallr.lime).lineLimit(1)
                 Spacer(minLength: 0)
-                Button { model.toggleFavorite(item.postId) } label: {
-                    Image(systemName: model.favorites.contains(item.postId) ? "star.fill" : "star")
-                        .font(.system(size: 13)).foregroundStyle(model.favorites.contains(item.postId) ? Kallr.lime : Kallr.muted)
-                        .frame(width: 28, height: 24)
-                }
-                .buttonStyle(Press())
-                .accessibilityLabel("Favorite")
+                Text(item.demo ? "DEMO" : Kallr.ago(item.postedAt)).font(.system(size: 14, weight: .semibold)).foregroundStyle(Kallr.muted)
             }
             if let text = item.text {
-                Text(text).font(.system(size: 12)).foregroundStyle(Kallr.bone.opacity(0.82)).lineLimit(2)
+                Text(text).font(.system(size: 14)).foregroundStyle(Kallr.bone.opacity(0.75)).lineLimit(1)
             }
             HStack(spacing: 6) {
                 if let status = item.status {
-                    Text(status.uppercased()).font(.system(size: 10, weight: .heavy))
+                    Text(status.capitalized + (item.returnBps.map { String(format: " · %+.2f%%", Double($0) / 100) } ?? ""))
                         .foregroundStyle(status == "hit" ? Kallr.up : status == "miss" ? Kallr.danger : Kallr.muted)
-                    if let bps = item.returnBps { Text(String(format: "%+.2f%% called move", Double(bps) / 100)).font(.system(size: 11)).foregroundStyle(Kallr.muted) }
+                } else if let move = model.move(item) {
+                    Text(String(format: "%+.2f%% · %@", move, Kallr.left(item.deadline))).foregroundStyle(move >= 0 ? Kallr.up : Kallr.danger)
                 } else {
-                    if let move = model.move(item) {
-                        Text(String(format: "%+.2f%% since post", move)).font(.system(size: 11, weight: .semibold)).foregroundStyle(move >= 0 ? Kallr.up : Kallr.danger)
-                    }
-                    Text(Kallr.left(item.deadline)).font(.system(size: 11)).foregroundStyle(Kallr.muted)
+                    Text(item.demo ? "Tap to read, then swap" : Kallr.left(item.deadline)).foregroundStyle(Kallr.muted)
                 }
                 Spacer(minLength: 0)
-                if item.status == nil, !item.short, ["ETH", "BTC"].contains(item.asset) {
-                    SmallButton(label: "TRADE ↗") { model.trade(item) }
-                } else if item.status == nil {
-                    Text(item.short ? "CAN'T COPY SHORTS" : "NOT ON BASE").font(.system(size: 9, weight: .bold)).foregroundStyle(Kallr.muted)
-                }
+                Text("Read ›").foregroundStyle(Kallr.muted)
             }
+            .font(.system(size: 14, weight: .semibold))
         }
-        .padding(.vertical, 8)
-        .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline).frame(height: 1) }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .onTapGesture { model.tap(); model.opened = item }
+        .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline.opacity(0.6)).frame(height: 1) }
     }
 }
 
@@ -941,6 +1059,14 @@ private struct Empty: View {
 
 // MARK: - Trade
 
+/** Two sizes on every Trade screen: the big number, and everything else. */
+private enum TradeFont {
+    static let big = Font.system(size: 40, weight: .black).monospacedDigit()
+    static let mid = Font.system(size: 26, weight: .black).monospacedDigit()
+    static let body = Font.system(size: 14, weight: .semibold)
+    static let bold = Font.system(size: 14, weight: .heavy)
+}
+
 private struct TradeTab: View {
     @ObservedObject var model: KeyboardModel
 
@@ -966,173 +1092,445 @@ private struct TradeTab: View {
         .onChange(of: model.tickerKey) { _, _ in model.startLive() }
     }
 
-    /** Like a swap: what you pay in dollars, what you get, the order type, and Advanced folded away. */
+    /** One decision: the call, how much, and one button. Order type and exits fold into Options. */
     private var form: some View {
-        VStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 6) {
-                    LiveTicker(model: model)
-                    ZStack {
-                        VStack(spacing: 4) {
-                            PayBox(model: model, editing: false)
-                            GetBox(model: model)
+                if model.advancedOpen, !model.payingETH {
+                    options
+                } else {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let call = callLine {
+                            Text(call).font(TradeFont.body).foregroundStyle(Kallr.bone).lineLimit(1)
                         }
-                        Image(systemName: "arrow.down")
-                            .font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.bone)
-                            .frame(width: 28, height: 28)
-                            .background(Kallr.keyDark, in: RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Kallr.black, lineWidth: 3))
-                            .offset(y: (PayBox.height - GetBox.height) / 2)
-                            .allowsHitTesting(false)
+                        LiveTicker(model: model)
                     }
-                    if !model.payingETH { OrderTypeRow(model: model) }
-                    if model.advancedOpen, !model.payingETH {
-                        AdvancedPanel(model: model).transition(.opacity.combined(with: .move(edge: .top)))
-                    }
+                    AmountLine(model: model, editing: false)
+                    pair
                 }
-                .padding(.horizontal, 8)
-                .padding(.top, 2)
+                .padding(.horizontal, 14)
+                .padding(.top, 6)
+                .padding(.bottom, 6)
+                }
             }
             .modifier(NoEdgeBlur())
-            VStack(alignment: .leading, spacing: 5) {
-                // The post this trade copies, just above the footer.
-                if let source = model.source {
-                    Label(source.line, systemImage: "quote.bubble.fill")
-                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
-                        .labelStyle(PostLabel())
-                } else if let copied = model.copied, copied.trade != nil, copied.warning == nil, let line = copied.headline(typed: nil) {
-                    Label(line, systemImage: "doc.on.clipboard.fill")
-                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
-                        .labelStyle(PostLabel())
-                }
-                status
-                Button { model.review() } label: {
-                    Text(model.busy ? "GETTING A QUOTE…" : model.blocked ?? reviewTitle)
-                        .font(.system(size: 15, weight: .heavy)).tracking(0.5).lineLimit(1).minimumScaleFactor(0.75)
-                        .foregroundStyle(model.blocked == nil ? Kallr.black : Kallr.muted)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(model.blocked == nil ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 12))
+            if case .failed(let message) = model.placing {
+                Text(message).font(TradeFont.body).foregroundStyle(Kallr.danger).lineLimit(2)
+                    .padding(.horizontal, 14).padding(.bottom, 6)
+            }
+            Button { model.review() } label: {
+                Text(model.busy ? "Getting a quote…" : model.blocked ?? reviewTitle)
+                    .font(TradeFont.bold).lineLimit(1).minimumScaleFactor(0.8)
+                    .foregroundStyle(model.blocked == nil ? Kallr.black : Kallr.muted)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(model.blocked == nil ? Kallr.lime : Kallr.keyDark, in: RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(Press())
+            .disabled(model.blocked != nil || model.busy)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
+        }
+    }
+
+    /** Options on their own screen: order type, take-profit and stop-loss, then Done. */
+    private var options: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Options").font(TradeFont.bold).foregroundStyle(Kallr.bone)
+                Spacer()
+                Button { Haptics.modifier(); withAnimation(.easeOut(duration: 0.18)) { model.advancedOpen = false } } label: {
+                    Text("Done").font(TradeFont.bold).foregroundStyle(Kallr.lime).frame(minWidth: 44, minHeight: 36)
                 }
                 .buttonStyle(Press())
-                .disabled(model.blocked != nil || model.busy)
             }
-            .padding(.horizontal, 8)
+            AdvancedPanel(model: model)
         }
-        .padding(.bottom, 6)
+        .padding(.horizontal, 14)
+        .padding(.top, 2)
+    }
+
+    /** "@altcoinsherpa · LONG ETH · 3 of 9 right": the call this trade copies, in one line. */
+    private var callLine: String? {
+        if let source = model.source {
+            let record = model.feed?.callers?.first { $0.handle.lowercased() == source.handle.lowercased() }
+            let right = record.flatMap { $0.settled > 0 ? "\($0.hits) of \($0.settled) right" : nil }
+            return [source.line, right].compactMap { $0 }.joined(separator: " · ")
+        }
+        if let copied = model.copied, copied.trade != nil, copied.warning == nil { return copied.headline(typed: nil) }
+        return nil
+    }
+
+    /** You pay → you get, as two coins; then Options, folded. */
+    private var pair: some View {
+        HStack(spacing: 8) {
+            Button { model.togglePay() } label: { TokenBadge(symbol: model.payAsset, chevron: true) }
+                .buttonStyle(Press())
+                .accessibilityLabel("Pay with \(model.payingETH ? "USDC" : "ETH")")
+            Image(systemName: "arrow.right").font(TradeFont.bold).foregroundStyle(Kallr.muted)
+            if model.payingETH {
+                TokenBadge(symbol: "USDC")
+            } else {
+                Button { Haptics.modifier(); model.openPicker() } label: {
+                    TokenBadge(symbol: model.symbol, logo: model.isAddress ? model.assetLogo : nil, chevron: true)
+                }
+                .buttonStyle(Press())
+                .accessibilityLabel("Pick a token")
+            }
+            Spacer(minLength: 6)
+            if model.payingETH {
+                Text("Swap").font(TradeFont.body).foregroundStyle(Kallr.muted)
+            } else {
+                Button {
+                    Haptics.modifier()
+                    withAnimation(.easeOut(duration: 0.18)) { model.advancedOpen.toggle() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(model.optionsSummary).font(TradeFont.body).lineLimit(1)
+                        Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold))
+                            .rotationEffect(.degrees(model.advancedOpen ? 180 : 0))
+                    }
+                    .foregroundStyle(model.advancedOpen ? Kallr.lime : Kallr.muted)
+                    .frame(minHeight: 40)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(Press())
+                .accessibilityLabel("Options: order type, take profit and stop loss")
+            }
+        }
     }
 
     private var reviewTitle: String {
-        if model.payingETH { return "REVIEW · SWAP $\(model.usd) OF ETH TO USDC  ↗" }
-        let what = model.kind == .market ? "BUY" : model.kind == .limit ? "LIMIT BUY" : "TWAP BUY"
-        return "REVIEW · \(what) $\(model.usd) OF \(model.symbol)  ↗"
-    }
-
-    @ViewBuilder private var status: some View {
-        switch model.placing {
-        case .done(let line):
-            Label(line, systemImage: "checkmark.circle.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.lime).lineLimit(2)
-        case .failed(let message):
-            Text(message).font(.system(size: 12)).foregroundStyle(Kallr.danger).lineLimit(2)
-        default:
-            PoweredByDefinitive(height: 9, suffix: "Flash · review first · up to $\(Kallr.fmt(model.wallet?.maxUsd ?? 25))")
+        if model.payingETH { return "Review swap" }
+        switch model.kind {
+        case .market: return "Review buy"
+        case .limit: return "Review limit buy"
+        case .twap: return "Review TWAP buy"
         }
     }
 }
 
-/** You pay: dollars of USDC from the Kall wallet. Tap to type; MAX fills what it can spend. */
-private struct PayBox: View {
-    static let height: CGFloat = 66
+/** The amount, big; what it gets and the balance under it. Tap to type; MAX fills what you can spend. */
+private struct AmountLine: View {
     @ObservedObject var model: KeyboardModel
     let editing: Bool
     @State private var blink = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("YOU PAY").font(.system(size: 9, weight: .heavy)).tracking(0.6).foregroundStyle(Kallr.muted)
-                HStack(spacing: 2) {
-                    Text("$").font(.system(size: 22, weight: .black)).foregroundStyle(Kallr.muted)
-                    Text(model.usd.isEmpty ? "0" : model.usd)
-                        .font(.system(size: 28, weight: .black).monospacedDigit())
-                        .foregroundStyle(model.usd.isEmpty ? Kallr.muted : Kallr.bone)
-                        .lineLimit(1).minimumScaleFactor(0.6)
-                        .padding(.horizontal, editing && model.freshEntry ? 3 : 0)
-                        .background(editing && model.freshEntry ? Kallr.lime.opacity(0.25) : .clear, in: RoundedRectangle(cornerRadius: 4))
-                    if editing {
-                        Rectangle().fill(Kallr.lime).frame(width: 2, height: 26).opacity(blink ? 1 : 0)
-                            .onAppear { withAnimation(.easeInOut(duration: 0.5).repeatForever()) { blink = true } }
-                    }
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text("$" + (model.usd.isEmpty ? "0" : model.usd))
+                    .font(TradeFont.big)
+                    .foregroundStyle(model.usd.isEmpty ? Kallr.muted : Kallr.bone)
+                    .lineLimit(1).minimumScaleFactor(0.5)
+                    .background(editing && model.freshEntry ? Kallr.lime.opacity(0.22) : .clear, in: RoundedRectangle(cornerRadius: 6))
+                if editing {
+                    Rectangle().fill(Kallr.lime).frame(width: 3, height: 34).opacity(blink ? 1 : 0)
+                        .onAppear { withAnimation(.easeInOut(duration: 0.5).repeatForever()) { blink = true } }
                 }
-            }
-            Spacer(minLength: 4)
-            VStack(alignment: .trailing, spacing: 5) {
-                Button { model.togglePay() } label: { TokenBadge(symbol: model.payAsset, chevron: true) }
+                Spacer(minLength: 8)
+                if !editing {
+                    Button { Haptics.modifier(); model.useMax() } label: {
+                        Text("Max").font(TradeFont.bold).foregroundStyle(Kallr.lime)
+                            .frame(minWidth: 44, minHeight: 40)
+                            .contentShape(Rectangle())
+                    }
                     .buttonStyle(Press())
-                    .accessibilityLabel("Pay with \(model.payingETH ? "USDC" : "ETH")")
-                HStack(spacing: 5) {
-                    Text(model.payingETH
-                         ? (model.swappableUsd.map { String(format: "Can swap $%.2f", $0) } ?? "Bal …")
-                         : (model.wallet?.usdcValue.map { String(format: "Bal $%.2f", $0) } ?? "Bal …"))
-                        .font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted)
-                    // While typing, MAX sits with the quick amounts under the box.
-                    if !editing {
-                        Button { Haptics.modifier(); model.useMax() } label: {
-                            Text("MAX").font(.system(size: 9, weight: .heavy)).foregroundStyle(Kallr.lime)
-                                .padding(.horizontal, 5).frame(height: 16)
-                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Kallr.lime.opacity(0.6)))
-                        }
-                        .buttonStyle(Press())
-                    }
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture { if !editing { model.startTyping() } }
+            Text(model.amountSubline).font(TradeFont.body).foregroundStyle(Kallr.muted).lineLimit(1)
         }
-        .padding(.horizontal, 12)
-        .frame(height: Self.height)
-        .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(editing ? Kallr.lime : Kallr.hairline, lineWidth: editing ? 1.5 : 1))
-        .contentShape(Rectangle())
-        .onTapGesture { if !editing { model.startTyping() } }
     }
 }
 
-/** You get: ETH or BTC, about how much, and the price it buys at. */
-private struct GetBox: View {
-    static let height: CGFloat = 58
+/** Advanced, folded under Options: the order type, then take-profit and stop-loss. */
+private struct AdvancedPanel: View {
     @ObservedObject var model: KeyboardModel
 
     var body: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("YOU GET").font(.system(size: 9, weight: .heavy)).tracking(0.6).foregroundStyle(Kallr.muted)
-                Text(model.payingETH ? (Double(model.usd).map { String(format: "≈ %.2f", $0 * 0.97) } ?? "—")
-                     : (model.estimate.map { "≈ " + Self.amount($0) } ?? "—"))
-                    .font(.system(size: 22, weight: .black).monospacedDigit()).foregroundStyle(Kallr.bone)
-                    .lineLimit(1).minimumScaleFactor(0.6)
-            }
-            Spacer(minLength: 4)
-            VStack(alignment: .trailing, spacing: 5) {
-                if model.payingETH {
-                    TokenBadge(symbol: "USDC")
-                } else {
-                    Button { Haptics.modifier(); model.openPicker() } label: {
-                        TokenBadge(symbol: model.symbol, logo: model.isAddress ? model.assetLogo : nil, chevron: true)
+        VStack(alignment: .leading, spacing: 10) {
+            row("Order") {
+                ForEach(KeyboardModel.Kind.allCases, id: \.self) { k in
+                    MiniChip(label: k.rawValue, on: model.kind == k) {
+                        withAnimation(.easeOut(duration: 0.18)) { model.kind = k }
                     }
-                    .buttonStyle(Press())
-                    .accessibilityLabel("Pick a token")
                 }
-                Text(model.payingETH ? "Swap on Flash · ~$1 of ETH stays for gas" : model.priceLine)
-                    .font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted).lineLimit(1)
+            }
+            if model.kind == .limit {
+                row("Buy at") {
+                    ForEach([-1.0, -3, -5, -10], id: \.self) { p in
+                        MiniChip(label: "−\(Kallr.fmt(-p))%", on: model.limitPct == p) { model.limitPct = p }
+                    }
+                }
+            }
+            if model.kind == .twap {
+                row("Over") {
+                    ForEach([(10, "10m"), (60, "1h"), (240, "4h"), (720, "12h")], id: \.0) { m in
+                        MiniChip(label: m.1, on: model.twapMinutes == m.0) { model.twapMinutes = m.0 }
+                    }
+                }
+            }
+            row("Profit") {
+                MiniChip(label: "Off", on: !model.exitsOn) { model.exitsOn = false }
+                ForEach([5.0, 10, 20, 50], id: \.self) { p in
+                    MiniChip(label: "+\(Kallr.fmt(p))%", on: model.exitsOn && model.tpPct == p) { model.exitsOn = true; model.tpPct = p }
+                }
+                if model.exitsOn, ![5.0, 10, 20, 50].contains(model.tpPct) {
+                    MiniChip(label: "+\(Kallr.fmt(model.tpPct))%", on: true) {}
+                }
+            }
+            if model.exitsOn {
+                row("Stop") {
+                    ForEach([3.0, 5, 10, 20], id: \.self) { p in
+                        MiniChip(label: "−\(Kallr.fmt(p))%", on: model.slPct == p, danger: true) { model.slPct = p }
+                    }
+                    if ![3.0, 5, 10, 20].contains(model.slPct) {
+                        MiniChip(label: "−\(Kallr.fmt(model.slPct))%", on: true, danger: true) {}
+                    }
+                }
+                if let line = model.exitsPriceLine {
+                    Text(line).font(TradeFont.body).foregroundStyle(Kallr.muted).lineLimit(1).minimumScaleFactor(0.8)
+                }
             }
         }
-        .padding(.horizontal, 12)
-        .frame(height: Self.height)
-        .background(Kallr.graphite.opacity(0.55), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Kallr.hairline))
     }
 
-    static func amount(_ v: Double) -> String {
-        if v >= 1000 { return v.formatted(.number.precision(.fractionLength(0)).locale(Locale(identifier: "en_US"))) }
-        return String(format: v >= 1 ? "%.4f" : "%.6f", v)
+    private func row<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: 6) {
+            Text(label).font(TradeFont.body).foregroundStyle(Kallr.muted).frame(width: 54, alignment: .leading)
+            ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 6) { content() } }
+                .modifier(NoEdgeBlur())
+        }
+    }
+}
+
+private struct MiniChip: View {
+    let label: String
+    let on: Bool
+    var danger = false
+    var wide = false
+    let action: () -> Void
+
+    var body: some View {
+        Button { Haptics.letter(); action() } label: {
+            Text(label).font(TradeFont.body.monospacedDigit())
+                .foregroundStyle(on ? Kallr.black : Kallr.bone)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: wide ? .infinity : nil, minHeight: 34)
+                .background(on ? (danger ? Kallr.danger : Kallr.lime) : Kallr.keyDark, in: Capsule())
+        }
+        .buttonStyle(Press())
+    }
+}
+
+/**
+ * The review, as a swap: you pay → you get, one line from Definitive, then Confirm. The estimates and
+ * the steps on Base fold under Details. While it places, the button says so.
+ */
+private struct ReviewCard: View {
+    @ObservedObject var model: KeyboardModel
+    let quote: Kallr.Placed?
+    @State private var details = false
+    @State private var sweep: CGFloat = 0
+
+    private var paySymbol: String { model.payingETH ? "ETH" : "USDC" }
+    private var getSymbol: String { model.payingETH ? "USDC" : model.symbol }
+    private var getLogo: URL? { model.payingETH || !model.isAddress ? nil : model.assetLogo }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(quote == nil ? "Placing on Base" : "Review").font(TradeFont.bold).foregroundStyle(Kallr.muted)
+                Spacer()
+                if quote != nil {
+                    Button { Haptics.modifier(); withAnimation(.easeOut(duration: 0.18)) { details.toggle() } } label: {
+                        HStack(spacing: 4) {
+                            Text("Details").font(TradeFont.body)
+                            Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)).rotationEffect(.degrees(details ? 180 : 0))
+                        }
+                        .foregroundStyle(details ? Kallr.lime : Kallr.muted)
+                        .frame(minHeight: 32)
+                    }
+                    .buttonStyle(Press())
+                }
+            }
+            .padding(.horizontal, 14)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 12) {
+                    leg("You pay", symbol: paySymbol, logo: nil, amount: quote.map { ReviewCard.clean($0.preview.pay) } ?? "$\(model.usd)")
+                    leg("You get", symbol: getSymbol, logo: getLogo, amount: quote.map { ReviewCard.clean($0.preview.get) } ?? "…")
+                    if details, let quote { detailLines(quote) }
+                    Label("Definitive Flash · best price", systemImage: "checkmark.seal.fill")
+                        .font(TradeFont.body).foregroundStyle(Kallr.lime)
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+            }
+            .modifier(NoEdgeBlur())
+            if quote == nil { progress }
+            buttons
+        }
+        .padding(.top, 6)
+    }
+
+    private func leg(_ label: String, symbol: String, logo: URL?, amount: String) -> some View {
+        HStack(spacing: 12) {
+            TokenIcon(symbol: symbol, logo: logo, size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(TradeFont.body).foregroundStyle(Kallr.muted)
+                Text(amount).font(TradeFont.mid).foregroundStyle(Kallr.bone).lineLimit(1).minimumScaleFactor(0.5)
+            }
+        }
+    }
+
+    @ViewBuilder private func detailLines(_ q: Kallr.Placed) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let impact = q.details?.impactPct { line("Price impact", String(format: "%.2f%%", abs(impact))) }
+            if let fee = q.details?.feeUsd { line("Fee", fee < 0.005 ? "None" : String(format: "$%.2f", fee)) }
+            line("On Base", ReviewCard.steps(q.preview.approval))
+            if q.preview.exits != "None", !q.preview.exits.isEmpty { line("Exits", q.preview.exits) }
+        }
+    }
+
+    private func line(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).foregroundStyle(Kallr.muted)
+            Spacer()
+            Text(value).foregroundStyle(Kallr.bone).lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .font(TradeFont.body.monospacedDigit())
+    }
+
+    /** A thin lime sweep while Flash places the order. */
+    private var progress: some View {
+        GeometryReader { g in
+            Capsule().fill(Kallr.lime).frame(width: g.size.width * 0.3, height: 3)
+                .offset(x: sweep * g.size.width * 0.7)
+                .onAppear { withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { sweep = 1 } }
+        }
+        .frame(height: 3)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 8)
+    }
+
+    private var buttons: some View {
+        HStack(spacing: 8) {
+            Button { model.tap(); model.placing = .idle } label: {
+                Image(systemName: "chevron.left").font(.system(size: 18, weight: .bold)).foregroundStyle(Kallr.bone)
+                    .frame(width: 56, height: 52)
+                    .background(Kallr.keyDark, in: RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(Press())
+            .disabled(quote == nil)
+            .accessibilityLabel("Back")
+            Button { model.confirm() } label: {
+                HStack(spacing: 8) {
+                    if quote == nil { ProgressView().tint(Kallr.black) }
+                    Text(quote == nil ? "Placing on Flash…" : model.payingETH ? "Confirm swap" : "Confirm buy")
+                        .font(TradeFont.bold)
+                }
+                .foregroundStyle(Kallr.black)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(Press())
+            .disabled(quote == nil)
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 8)
+    }
+
+    static func clean(_ s: String) -> String {
+        s.replacingOccurrences(of: "up to about ", with: "≤ ").replacingOccurrences(of: "about ", with: "≈ ")
+    }
+    /** What runs on Base before the order: a wrap, an approval, or nothing. */
+    static func steps(_ approval: String) -> String {
+        if approval.hasPrefix("Wrap") { return "Wrap + approve" }
+        if approval == "Not needed" { return "Ready" }
+        return "Approve " + (approval.contains("WETH") ? "WETH" : "USDC")
+    }
+}
+
+/** Placed: what you got, on Definitive Flash, and its BaseScan link to drop into the chat. */
+private struct DoneCard: View {
+    @ObservedObject var model: KeyboardModel
+    let placed: Kallr.Placed
+    @State private var pop = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            ZStack {
+                Circle().fill(Kallr.lime).frame(width: 52, height: 52).scaleEffect(pop ? 1 : 0.6)
+                Image(systemName: "checkmark").font(.system(size: 22, weight: .black)).foregroundStyle(Kallr.black)
+            }
+            .onAppear { withAnimation(.spring(response: 0.35, dampingFraction: 0.55)) { pop = true } }
+            .padding(.bottom, 14)
+            Text(ReviewCard.clean(placed.preview.get)).font(TradeFont.mid).foregroundStyle(Kallr.bone)
+                .lineLimit(1).minimumScaleFactor(0.6)
+            Text(model.fillTx.map { "Filled on Base · \($0.prefix(6))…\($0.suffix(4))" } ?? "\(placed.preview.title) · Definitive Flash")
+                .font(TradeFont.body).foregroundStyle(Kallr.muted).lineLimit(1).minimumScaleFactor(0.8)
+                .padding(.top, 4)
+            Spacer(minLength: 0)
+            HStack(spacing: 8) {
+                Button { model.shareReceipt() } label: {
+                    Text(model.fillTx == nil ? "Finding it on Base…" : "Share BaseScan link")
+                        .font(TradeFont.bold).foregroundStyle(model.fillTx == nil ? Kallr.muted : Kallr.black)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(model.fillTx == nil ? Kallr.keyDark : Kallr.lime, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(Press())
+                .disabled(model.fillTx == nil)
+                Button { model.tap(); model.placing = .idle } label: {
+                    Text("New trade").font(TradeFont.bold).foregroundStyle(Kallr.bone)
+                        .frame(width: 112, height: 52)
+                        .background(Kallr.keyDark, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(Press())
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
+        }
+    }
+}
+
+/** The coin's live price every 4 seconds: it flashes as it ticks, with the 24h move and a sparkline. */
+private struct LiveTicker: View {
+    @ObservedObject var model: KeyboardModel
+    @State private var flash = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle().fill(model.live == nil ? Kallr.muted : Kallr.up).frame(width: 6, height: 6).opacity(flash ? 0.3 : 1)
+            if let live = model.live {
+                Text("\(model.payingETH ? "ETH" : model.symbol) $\(Self.tick(live.price))")
+                    .font(TradeFont.body.monospacedDigit())
+                    .foregroundStyle(flash ? (model.tickMove >= 0 ? Kallr.up : Kallr.danger) : Kallr.bone)
+                    .contentTransition(.numericText(value: live.price))
+                    .lineLimit(1)
+                if let c = live.change24h {
+                    Text(String(format: "%@%.2f%%", c >= 0 ? "+" : "−", abs(c)))
+                        .font(TradeFont.body.monospacedDigit())
+                        .foregroundStyle(c >= 0 ? Kallr.up : Kallr.danger).lineLimit(1)
+                }
+            } else {
+                Text("\(model.payingETH ? "ETH" : model.symbol) · live price…").font(TradeFont.body).foregroundStyle(Kallr.muted)
+            }
+            Spacer(minLength: 4)
+            Sparkline(values: model.ticks).frame(width: 64, height: 16)
+        }
+        .onChange(of: model.live?.price) { _, _ in
+            withAnimation(.easeOut(duration: 0.15)) { flash = true }
+            withAnimation(.easeIn(duration: 0.6).delay(0.25)) { flash = false }
+        }
+    }
+
+    /** Cents on a ticker so a move shows: 2,225.43 · 90.52 · 0.000123. */
+    static func tick(_ v: Double) -> String {
+        guard v >= 1 else { return KeyboardModel.money(v) }
+        return v.formatted(.number.precision(.fractionLength(2)).locale(Locale(identifier: "en_US")))
     }
 }
 
@@ -1180,14 +1578,13 @@ private struct TokenBadge: View {
     var chevron = false
 
     var body: some View {
-        HStack(spacing: 5) {
-            TokenIcon(symbol: symbol, logo: logo)
-            Text(symbol).font(.system(size: 12, weight: .heavy)).foregroundStyle(selected ? Kallr.bone : Kallr.muted).lineLimit(1)
-            if chevron { Image(systemName: "chevron.down").font(.system(size: 9, weight: .heavy)).foregroundStyle(Kallr.muted) }
+        HStack(spacing: 6) {
+            TokenIcon(symbol: symbol, logo: logo, size: 24)
+            Text(symbol).font(.system(size: 14, weight: .heavy)).foregroundStyle(selected ? Kallr.bone : Kallr.muted).lineLimit(1)
+            if chevron { Image(systemName: "chevron.down").font(.system(size: 11, weight: .heavy)).foregroundStyle(Kallr.muted) }
         }
-        .padding(.leading, 4).padding(.trailing, 8).frame(height: 26)
+        .padding(.leading, 6).padding(.trailing, 12).frame(height: 40)
         .background(selected ? Kallr.keyDark : .clear, in: Capsule())
-        .overlay(Capsule().stroke(selected && symbol != "USDC" ? Kallr.lime.opacity(0.7) : Kallr.hairline))
         .opacity(selected ? 1 : 0.65)
     }
 }
@@ -1307,413 +1704,6 @@ private struct TokenRow: View {
     }
 }
 
-/** Market, Limit or TWAP, small; and the fold for take-profit and stop-loss. */
-private struct OrderTypeRow: View {
-    @ObservedObject var model: KeyboardModel
-
-    var body: some View {
-        HStack(spacing: 6) {
-            HStack(spacing: 2) {
-                ForEach(KeyboardModel.Kind.allCases, id: \.self) { k in
-                    Button {
-                        Haptics.layer()
-                        withAnimation(.easeOut(duration: 0.18)) {
-                            model.kind = k
-                            if k != .market { model.advancedOpen = true }
-                        }
-                    } label: {
-                        Text(k.rawValue).font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(model.kind == k ? Kallr.black : Kallr.bone)
-                            .padding(.horizontal, 10).frame(height: 24)
-                            .background(model.kind == k ? Kallr.bone : .clear, in: RoundedRectangle(cornerRadius: 6))
-                    }
-                    .buttonStyle(Press())
-                }
-            }
-            .padding(2)
-            .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
-            Spacer(minLength: 4)
-            Button {
-                Haptics.modifier()
-                withAnimation(.easeOut(duration: 0.18)) { model.advancedOpen.toggle() }
-            } label: {
-                HStack(spacing: 5) {
-                    Text(model.exitsSummary).font(.system(size: 11, weight: .semibold)).lineLimit(1)
-                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
-                        .rotationEffect(.degrees(model.advancedOpen ? 180 : 0))
-                }
-                .foregroundStyle(model.advancedOpen ? Kallr.lime : Kallr.bone)
-                .padding(.horizontal, 10).frame(height: 28)
-                .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(Press())
-            .accessibilityLabel("Advanced: take profit and stop loss")
-        }
-    }
-}
-
-/** Advanced, folded by default: the limit or TWAP setting, take-profit and stop-loss, and where they sell. */
-private struct AdvancedPanel: View {
-    @ObservedObject var model: KeyboardModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if model.kind == .limit {
-                row("BUY AT") {
-                    ForEach([-1.0, -3, -5, -10], id: \.self) { p in
-                        MiniChip(label: "−\(Kallr.fmt(-p))%", on: model.limitPct == p) { model.limitPct = p }
-                    }
-                }
-            }
-            if model.kind == .twap {
-                row("SPREAD OVER") {
-                    ForEach([(10, "10m"), (60, "1h"), (240, "4h"), (720, "12h")], id: \.0) { m in
-                        MiniChip(label: m.1, on: model.twapMinutes == m.0) { model.twapMinutes = m.0 }
-                    }
-                }
-            }
-            row("TAKE PROFIT") {
-                MiniChip(label: "Off", on: !model.exitsOn) { model.exitsOn = false }
-                ForEach([5.0, 10, 20, 50], id: \.self) { p in
-                    MiniChip(label: "+\(Kallr.fmt(p))%", on: model.exitsOn && model.tpPct == p) { model.exitsOn = true; model.tpPct = p }
-                }
-                if model.exitsOn, ![5.0, 10, 20, 50].contains(model.tpPct) {
-                    MiniChip(label: "+\(Kallr.fmt(model.tpPct))%", on: true) {}
-                }
-            }
-            if model.exitsOn {
-                row("STOP LOSS") {
-                    ForEach([3.0, 5, 10, 20], id: \.self) { p in
-                        MiniChip(label: "−\(Kallr.fmt(p))%", on: model.slPct == p, danger: true) { model.slPct = p }
-                    }
-                    if ![3.0, 5, 10, 20].contains(model.slPct) {
-                        MiniChip(label: "−\(Kallr.fmt(model.slPct))%", on: true, danger: true) {}
-                    }
-                }
-                if let line = model.exitsPriceLine {
-                    Text(line).font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted).lineLimit(1)
-                }
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Kallr.graphite.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Kallr.hairline))
-    }
-
-    private func row<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
-        HStack(spacing: 5) {
-            Text(label).font(.system(size: 9, weight: .heavy)).tracking(0.5).foregroundStyle(Kallr.muted)
-                .frame(width: 76, alignment: .leading)
-            content()
-            Spacer(minLength: 0)
-        }
-    }
-}
-
-private struct MiniChip: View {
-    let label: String
-    let on: Bool
-    var danger = false
-    var wide = false
-    let action: () -> Void
-
-    var body: some View {
-        Button { Haptics.letter(); action() } label: {
-            Text(label).font(.system(size: 11, weight: .bold).monospacedDigit())
-                .foregroundStyle(on ? Kallr.black : Kallr.bone)
-                .padding(.horizontal, 8)
-                .frame(maxWidth: wide ? .infinity : nil, minHeight: 26)
-                .background(on ? (danger ? Kallr.danger : Kallr.lime) : Kallr.keyDark, in: RoundedRectangle(cornerRadius: 6))
-        }
-        .buttonStyle(Press())
-    }
-}
-
-/**
- * The review, like a swap's: what you pay and what you get with their coins, Flash's estimates, the
- * exits and the steps on Base, then one tap to place. While it places, the steps it runs.
- */
-private struct ReviewCard: View {
-    @ObservedObject var model: KeyboardModel
-    let quote: Kallr.Placed?
-    @State private var sweep: CGFloat = 0
-
-    private var paySymbol: String { model.payingETH ? "ETH" : "USDC" }
-    private var getSymbol: String { model.payingETH ? "USDC" : model.symbol }
-    private var getLogo: URL? { model.payingETH || !model.isAddress ? nil : model.assetLogo }
-    private var badge: String {
-        if model.payingETH { return "SWAP" }
-        switch model.kind {
-        case .market: return "MARKET BUY"
-        case .limit: return "LIMIT BUY"
-        case .twap: return "TWAP BUY"
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text(badge).font(.system(size: 9, weight: .heavy)).tracking(0.6).foregroundStyle(Kallr.black)
-                    .padding(.horizontal, 6).frame(height: 17)
-                    .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 4))
-                Text(quote == nil ? "Placing on Base…" : "Fresh quote · Base")
-                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(Kallr.muted).lineLimit(1)
-                Spacer(minLength: 4)
-                PoweredByDefinitive(height: 8, suffix: "Flash")
-            }
-            legs
-            if let quote { details(quote) } else { working }
-            Spacer(minLength: 0)
-            buttons
-        }
-        .padding(.horizontal, 8)
-        .padding(.top, 2)
-        .padding(.bottom, 6)
-    }
-
-    // You pay → You get
-
-    private var legs: some View {
-        VStack(spacing: 0) {
-            leg("YOU PAY", symbol: paySymbol, logo: nil, amount: quote.map { Self.clean($0.preview.pay) } ?? "$\(model.usd)", side: "$\(model.usd)")
-            ZStack {
-                Rectangle().fill(Kallr.hairline).frame(height: 1)
-                Image(systemName: "arrow.down").font(.system(size: 10, weight: .heavy)).foregroundStyle(Kallr.bone)
-                    .frame(width: 22, height: 22)
-                    .background(Kallr.keyDark, in: Circle())
-                    .overlay(Circle().stroke(Kallr.black, lineWidth: 2))
-            }
-            .frame(height: 22)
-            leg("YOU GET", symbol: getSymbol, logo: getLogo, amount: quote.map { Self.clean($0.preview.get) } ?? "…",
-                side: quote.map { Self.shortKind($0.preview.kind) } ?? "")
-        }
-        .padding(.horizontal, 12)
-        .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Kallr.hairline))
-    }
-
-    private func leg(_ label: String, symbol: String, logo: URL?, amount: String, side: String) -> some View {
-        HStack(spacing: 10) {
-            TokenIcon(symbol: symbol, logo: logo, size: 28)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(label).font(.system(size: 8, weight: .heavy)).tracking(0.6).foregroundStyle(Kallr.muted)
-                Text(amount).font(.system(size: 19, weight: .black).monospacedDigit()).foregroundStyle(Kallr.bone)
-                    .lineLimit(1).minimumScaleFactor(0.6)
-            }
-            Spacer(minLength: 4)
-            Text(side).font(.system(size: 11, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted)
-                .lineLimit(1).minimumScaleFactor(0.8)
-        }
-        .frame(height: 42)
-    }
-
-    // Flash's estimates, the exits and the steps
-
-    private func details(_ q: Kallr.Placed) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
-                cell("PRICE IMPACT", q.details?.impactPct.map { String(format: "%.2f%%", abs($0)) } ?? "—")
-                cell("FEE", q.details?.feeUsd.map { $0 < 0.005 ? "None" : String(format: "$%.2f", $0) } ?? "—")
-                cell("ON BASE", Self.steps(q.preview.approval))
-            }
-            if q.preview.exits != "None" {
-                note("arrow.up.right.and.arrow.down.right", "Exits  " + q.preview.exits.replacingOccurrences(of: ".00", with: ""), tint: Kallr.bone)
-            }
-            note("checkmark.seal.fill", "Definitive Flash · best route on Base", tint: Kallr.lime)
-        }
-    }
-
-    private func cell(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 8, weight: .heavy)).tracking(0.5).foregroundStyle(Kallr.muted)
-            Text(value).font(.system(size: 13, weight: .bold).monospacedDigit()).foregroundStyle(Kallr.bone)
-                .lineLimit(1).minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    private func note(_ symbol: String, _ text: String, tint: Color) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(tint)
-            Text(text).font(.system(size: 11, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.bone).lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .padding(.horizontal, 4)
-    }
-
-    // While it places
-
-    private var working: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            ForEach(Array(workSteps.enumerated()), id: \.offset) { i, step in
-                HStack(spacing: 8) {
-                    Text("0\(i + 1)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Kallr.lime)
-                    Text(step).font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.bone)
-                }
-            }
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Kallr.keyDark)
-                    Capsule().fill(Kallr.lime).frame(width: g.size.width * 0.28).offset(x: sweep * g.size.width * 0.72)
-                }
-            }
-            .frame(height: 4)
-            .onAppear { withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { sweep = 1 } }
-            Text("About 10–30 seconds on Base. Keep the keyboard open.").font(.system(size: 11)).foregroundStyle(Kallr.muted)
-        }
-        .padding(.horizontal, 4)
-    }
-
-    private var workSteps: [String] {
-        model.payingETH
-            ? ["A fresh quote from Definitive Flash", "Wrap the ETH, then approve exactly that", "Sign and submit the swap"]
-            : ["A fresh quote from Definitive Flash", "Approve exactly $\(model.usd) of USDC", "Sign the order" + (model.exitsOn ? " and its exits" : "") + ", then submit"]
-    }
-
-    // Back / Confirm
-
-    private var buttons: some View {
-        HStack(spacing: 8) {
-            Button { model.tap(); model.placing = .idle } label: {
-                Image(systemName: "chevron.left").font(.system(size: 16, weight: .heavy)).foregroundStyle(Kallr.bone)
-                    .frame(width: 56, height: 52).background(Kallr.keyDark, in: RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(Press())
-            .disabled(quote == nil)
-            .accessibilityLabel("Back")
-            Button { model.confirm() } label: {
-                HStack(spacing: 8) {
-                    if quote == nil { ProgressView().tint(Kallr.black).scaleEffect(0.8) }
-                    Text(quote == nil ? "PLACING ON FLASH…" : model.payingETH ? "CONFIRM SWAP" : "CONFIRM & PLACE")
-                        .font(.system(size: 15, weight: .heavy)).tracking(0.5)
-                    if quote != nil { Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .heavy)) }
-                }
-                .foregroundStyle(Kallr.black)
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(Press())
-            .disabled(quote == nil)
-        }
-    }
-
-    /** "about 1.05 USDC" → "≈ 1.05 USDC". */
-    static func clean(_ s: String) -> String {
-        s.replacingOccurrences(of: "up to about ", with: "≤ ").replacingOccurrences(of: "about ", with: "≈ ")
-    }
-    /** "Market swap on Base through Flash" → "Market swap". */
-    static func shortKind(_ s: String) -> String { s.replacingOccurrences(of: " on Base through Flash", with: "") }
-    /** What runs on Base before the order: a wrap, an approval, or nothing. */
-    static func steps(_ approval: String) -> String {
-        if approval.hasPrefix("Wrap") { return "Wrap + approve" }
-        if approval == "Not needed" { return "Ready" }
-        return "Approve " + (approval.contains("WETH") ? "WETH" : "USDC")
-    }
-}
-
-/** Placed: a tick that pops, what went through, and where to follow it. */
-private struct DoneCard: View {
-    @ObservedObject var model: KeyboardModel
-    let placed: Kallr.Placed
-    @State private var pop = false
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Spacer(minLength: 0)
-            ZStack {
-                Circle().fill(Kallr.lime.opacity(0.16)).frame(width: 66, height: 66).scaleEffect(pop ? 1 : 0.5)
-                Circle().fill(Kallr.lime).frame(width: 44, height: 44).scaleEffect(pop ? 1 : 0.7)
-                Image(systemName: "checkmark").font(.system(size: 20, weight: .black)).foregroundStyle(Kallr.black)
-            }
-            .onAppear { withAnimation(.spring(response: 0.35, dampingFraction: 0.55)) { pop = true } }
-            Text(placed.preview.title).font(.system(size: 18, weight: .black)).foregroundStyle(Kallr.bone)
-            Text(ReviewCard.clean(placed.preview.get) + " · placed on Definitive Flash")
-                .font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.muted)
-            if let id = placed.orderId {
-                Text("ORDER \(id.prefix(8).uppercased())").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
-            }
-            PoweredByDefinitive(height: 9, suffix: "Flash on Base")
-            Spacer(minLength: 0)
-            HStack(spacing: 8) {
-                Button {
-                    model.tap()
-                    model.placing = .idle
-                    model.tab = .orders
-                    model.startPolling()
-                } label: {
-                    Text("VIEW ORDERS").font(.system(size: 14, weight: .heavy)).tracking(0.5).foregroundStyle(Kallr.bone)
-                        .frame(maxWidth: .infinity, minHeight: 50)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Kallr.hairline))
-                }
-                .buttonStyle(Press())
-                Button { model.tap(); model.placing = .idle } label: {
-                    Text("NEW TRADE").font(.system(size: 14, weight: .heavy)).tracking(0.5).foregroundStyle(Kallr.black)
-                        .frame(maxWidth: .infinity, minHeight: 50)
-                        .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 12))
-                }
-                .buttonStyle(Press())
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.bottom, 6)
-    }
-}
-
-/**
- * The coin's live price, every 4 seconds: the price (flashing up or down as it ticks), its 24h move,
- * and a sparkline of the prices seen since Trade opened.
- */
-private struct LiveTicker: View {
-    @ObservedObject var model: KeyboardModel
-    @State private var flash = false
-
-    var body: some View {
-        let symbol = model.payingETH ? "ETH" : model.symbol
-        HStack(spacing: 6) {
-            HStack(spacing: 3) {
-                Circle().fill(model.live == nil ? Kallr.muted : Kallr.up).frame(width: 5, height: 5)
-                    .opacity(flash ? 0.35 : 1)
-                Text("LIVE").font(.system(size: 8, weight: .heavy)).tracking(0.6).foregroundStyle(Kallr.muted)
-            }
-            Text(symbol).font(.system(size: 11, weight: .heavy)).foregroundStyle(Kallr.bone).lineLimit(1)
-            if let live = model.live {
-                Text("$" + Self.tick(live.price))
-                    .font(.system(size: 13, weight: .black).monospacedDigit())
-                    .foregroundStyle(flash ? (model.tickMove >= 0 ? Kallr.up : Kallr.danger) : Kallr.bone)
-                    .contentTransition(.numericText(value: live.price))
-                    .lineLimit(1)
-                if let c = live.change24h {
-                    Text(String(format: "%@%.2f%% 24h", c >= 0 ? "▲" : "▼", abs(c)))
-                        .font(.system(size: 10, weight: .bold).monospacedDigit())
-                        .foregroundStyle(c >= 0 ? Kallr.up : Kallr.danger).lineLimit(1)
-                }
-            } else {
-                Text("Reading the price…").font(.system(size: 10, weight: .semibold)).foregroundStyle(Kallr.muted)
-            }
-            Spacer(minLength: 4)
-            Sparkline(values: model.ticks).frame(width: 64, height: 14)
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 24)
-        .background(Kallr.graphite.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
-        .onChange(of: model.live?.price) { _, _ in
-            withAnimation(.easeOut(duration: 0.15)) { flash = true }
-            withAnimation(.easeIn(duration: 0.6).delay(0.25)) { flash = false }
-        }
-    }
-}
-
-extension LiveTicker {
-    /** Cents on a ticker so a move shows: 2,225.43 · 90.52 · 0.000123. */
-    static func tick(_ v: Double) -> String {
-        guard v >= 1 else { return KeyboardModel.money(v) }
-        return v.formatted(.number.precision(.fractionLength(2)).locale(Locale(identifier: "en_US")))
-    }
-}
-
 /** The prices seen so far as a small line, green if it ended up, red if down. */
 private struct Sparkline: View {
     let values: [Double]
@@ -1769,35 +1759,36 @@ private struct AmountPad: View {
     private let keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "⌫"]
 
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 6) {
-                PayBox(model: model, editing: true)
+        VStack(spacing: 8) {
+            HStack(alignment: .top) {
+                AmountLine(model: model, editing: true)
                 Button { model.tap(.medium); model.freshEntry = false; model.editingAmount = false } label: {
-                    Text("DONE").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.black)
-                        .frame(width: 64, height: PayBox.height).background(Kallr.lime, in: RoundedRectangle(cornerRadius: 14))
+                    Text("Done").font(.system(size: 14, weight: .heavy)).foregroundStyle(Kallr.black)
+                        .frame(width: 72, height: 44).background(Kallr.lime, in: RoundedRectangle(cornerRadius: 12))
                 }
                 .buttonStyle(Press())
             }
             HStack(spacing: 6) {
-                ForEach(["1", "5", "10", "25"], id: \.self) { a in
+                ForEach(["5", "10", "25"], id: \.self) { a in
                     MiniChip(label: "$\(a)", on: model.usd == a, wide: true) { model.usd = a; model.freshEntry = false }
                 }
-                MiniChip(label: "MAX", on: false, wide: true) { model.useMax() }
+                MiniChip(label: "Max", on: false, wide: true) { model.useMax() }
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
                 ForEach(keys, id: \.self) { k in
                     Button { model.keypad(k) } label: {
                         Group { if k == "⌫" { Image(systemName: "delete.left") } else { Text(k) } }
                             .font(.system(size: 22, weight: .medium)).foregroundStyle(Kallr.bone)
-                            .frame(maxWidth: .infinity, minHeight: 38)
-                            .background(k == "⌫" || k == "." ? Kallr.keyDark : Kallr.graphite, in: RoundedRectangle(cornerRadius: 7))
+                            .frame(maxWidth: .infinity, minHeight: 36)
+                            .background(Kallr.keyDark.opacity(k == "⌫" || k == "." ? 0.6 : 1), in: RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(Press())
                 }
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.bottom, 6)
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
     }
 }
 
