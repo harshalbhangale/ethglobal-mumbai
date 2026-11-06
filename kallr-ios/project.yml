@@ -1,0 +1,58 @@
+# Kallr for iPhone: a small app plus the Kallr keyboard extension.
+# Generate the Xcode project with `xcodegen generate` in this folder (see README.md).
+name: Kallr
+options:
+  bundleIdPrefix: com.buddyharshal
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: R3D54PSMD2
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+targets:
+  Kallr:
+    type: application
+    platform: iOS
+    sources: [Kallr, Shared]
+    info:
+      path: Kallr/Info.plist
+      properties:
+        CFBundleDisplayName: Kallr
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIUserInterfaceStyle: Dark
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.buddyharshal.kallr
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - target: KallrKeyboard
+        embed: true
+  KallrKeyboard:
+    type: app-extension
+    platform: iOS
+    sources: [KallrKeyboard, Shared]
+    info:
+      path: KallrKeyboard/Info.plist
+      properties:
+        CFBundleDisplayName: Kallr
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: en-US
+            # Full Access lets the keyboard reach Kallr's server and read what you copy.
+            RequestsOpenAccess: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.buddyharshal.kallr.keyboard
+        APPLICATION_EXTENSION_API_ONLY: "YES"
