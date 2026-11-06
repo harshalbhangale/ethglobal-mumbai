@@ -1,4 +1,4 @@
-/** Draws docs/flow.svg: one call and one trade, start to finish, as lanes. Black and lime, logos embedded. */
+/** Draws docs/flow.svg: three apps feed one pipeline, from a caller's post to a scored record. */
 import { readFile, writeFile } from "node:fs/promises";
 
 const R = new URL("..", import.meta.url).pathname;
@@ -7,109 +7,85 @@ const DEF = await b64("kallr-webapp/public/sponsors/definitive.svg", "image/svg+
 const ARK = await b64("kallr-webapp/public/sponsors/arkiv.png", "image/png");
 const MARK = await b64("kallr-webapp/public/brand/mark.png", "image/png");
 
-const INK = "#0b0d0c", CARD = "#141816", RULE = "#26302b", TEXT = "#e6ebe3", MUTE = "#8a968f", LIME = "#c6f25a";
+const W = 1600, H = 900;
+const INK = "#0b0d0c", CARD = "#131715", RULE = "#242c28", TEXT = "#e9eee6", MUTE = "#7f8b84", LIME = "#c6f25a";
 const F = `font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif"`;
-const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-const t = (x, y, s, size = 15, fill = TEXT, w = 400, a = "start") =>
-  `<text x="${x}" y="${y}" ${F} font-size="${size}" font-weight="${w}" fill="${fill}" text-anchor="${a}">${esc(s)}</text>`;
-const rect = (x, y, w, h, { fill = CARD, stroke = RULE, r = 12, sw = 1.5 } = {}) =>
-  `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
-
-// Lanes
-const L0 = 60, LW = 246, GAP = 8;
-const lanes = [
-  { n: "Caller", sub: "X · Telegram" },
-  { n: "You", sub: "Kall app + wallet" },
-  { n: "Kall server", sub: "one API on Vercel" },
-  { n: "Definitive", sub: "Flash", logo: DEF, lw: 150, lh: 17 },
-  { n: "Arkiv", sub: "the receipts", logo: ARK, lw: 92, lh: 23 },
-  { n: "Base", sub: "where trades settle" },
-];
-const cx = (i) => L0 + i * (LW + GAP) + LW / 2;
-const W = L0 * 2 + lanes.length * LW + (lanes.length - 1) * GAP;
-
-// Steps: [phase] or { from, to, n, label, note, hot }
-const S = [
-  ["A · THE CALL IS POSTED"],
-  { from: 0, to: 1, label: "“Long $ETH, 1 week”", note: "Extension sees it on X, or you copy it into the keyboard" },
-  { from: 1, to: 2, label: "read this post" },
-  { from: 2, to: 2, label: "AI: real call · Long · ETH · 1 week", note: "Call check: the coin and contract match, or it’s blocked" },
-  { from: 2, to: 5, label: "Chainlink ETH price at the post’s minute", note: "the entry price" },
-  { from: 2, to: 4, label: "write the call", note: "kallr.calls" },
-  { from: 4, to: 1, label: "caller’s record: hits, misses, returns", note: "shown on the card before you trade" },
-  ["B · YOU TRADE IT"],
-  { from: 1, to: 2, label: "Trade $50 of ETH", hot: true },
-  { from: 2, to: 3, label: "quote", hot: true },
-  { from: 3, to: 1, label: "you get · impact · fee · ✓ best price", hot: true },
-  { from: 1, to: 1, label: "approve + sign (EIP-712) in your wallet", note: "MetaMask or Privy: your keys, always", hot: true },
-  { from: 2, to: 3, label: "place the signed order", hot: true },
-  { from: 3, to: 5, label: "best route across Base venues → filled", hot: true },
-  { from: 3, to: 2, label: "fill: tx hash + venues", hot: true },
-  { from: 2, to: 4, label: "write the trade", note: "kallr.trades" },
-  { from: 5, to: 1, label: "receipt + new balance", note: "read privately over Nym; Basescan link" },
-  ["C · THE CALL IS SCORED"],
-  { from: 2, to: 5, label: "when the week ends: Chainlink price again" },
-  { from: 2, to: 2, label: "hit or miss, with its real return" },
-  { from: 2, to: 4, label: "write the result", note: "kallr.call-results · can’t be edited or deleted" },
-  { from: 4, to: 1, label: "the caller’s record updates for everyone" },
-];
-
-const TOP = 200, ROW = 58, PH = 46;
-let y = TOP + 30, n = 0, body = "";
-for (const st of S) {
-  if (Array.isArray(st)) {
-    y += 12;
-    body += `<rect x="${L0}" y="${y - 22}" width="${W - 2 * L0}" height="32" rx="8" fill="#151b12"/>` + t(L0 + 16, y, st[0], 13, LIME, 700);
-    y += PH - 12;
-    continue;
-  }
-  n++;
-  const c = st.hot ? LIME : "#9fb2a6";
-  const num = (x) => `<circle cx="${x}" cy="${y}" r="12" fill="${st.hot ? LIME : "#26302b"}"/>` + t(x, y + 5, String(n), 12, st.hot ? INK : TEXT, 700, "middle");
-  if (st.from === st.to) {
-    const x = cx(st.from), w = Math.max(st.label.length * 7.4 + 60, 200);
-    body += rect(x - w / 2, y - 18, w, 36, { fill: st.hot ? "#1d2614" : "#171c19", stroke: st.hot ? LIME : RULE, r: 18 });
-    body += num(x - w / 2 + 18) + t(x + 10, y + 5, st.label, 14, st.hot ? LIME : TEXT, 600, "middle");
-    if (st.note) body += t(x + w / 2 + 12, y + 5, st.note, 13, MUTE);
-  } else {
-    const x1 = cx(st.from), x2 = cx(st.to), dir = Math.sign(x2 - x1);
-    body += `<line x1="${x1 + dir * 6}" y1="${y}" x2="${x2 - dir * 8}" y2="${y}" stroke="${c}" stroke-width="${st.hot ? 2.5 : 1.8}" marker-end="url(#${st.hot ? "h" : "m"})"/>`;
-    body += `<circle cx="${x1}" cy="${y}" r="4" fill="${c}"/>`;
-    const mid = (x1 + x2) / 2, lw = st.label.length * 7.3 + 52;
-    body += rect(mid - lw / 2, y - 15, lw, 30, { fill: INK, stroke: st.hot ? LIME : RULE, r: 15 });
-    body += num(mid - lw / 2 + 16) + t(mid + 12, y + 5, st.label, 13.5, st.hot ? LIME : TEXT, 600, "middle");
-    if (st.note) {
-      const right = Math.max(x1, x2);
-      const nx = right + 14, fits = nx + st.note.length * 6.6 < W - 20;
-      body += fits ? t(nx, y + 5, st.note, 12.5, MUTE) : t(Math.min(x1, x2) - 14, y + 5, st.note, 12.5, MUTE, 400, "end");
-    }
-  }
-  y += ROW;
-}
-const H = y + 90;
+const t = (x, y, s, size = 15, fill = TEXT, w = 400, a = "start", ls = 0) =>
+  `<text x="${x}" y="${y}" ${F} font-size="${size}" font-weight="${w}" fill="${fill}" text-anchor="${a}" letter-spacing="${ls}">${s}</text>`;
 
 let s = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
 <defs>
-  <marker id="m" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#9fb2a6"/></marker>
-  <marker id="h" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="${LIME}"/></marker>
-  <radialGradient id="g" cx="50%" cy="0%" r="60%"><stop offset="0" stop-color="${LIME}" stop-opacity=".09"/><stop offset="1" stop-color="${LIME}" stop-opacity="0"/></radialGradient>
+  <radialGradient id="g" cx="72%" cy="42%" r="55%"><stop offset="0" stop-color="${LIME}" stop-opacity=".10"/><stop offset="1" stop-color="${LIME}" stop-opacity="0"/></radialGradient>
+  <linearGradient id="track" gradientUnits="userSpaceOnUse" x1="520" x2="1520" y1="0" y2="0"><stop offset="0" stop-color="${LIME}" stop-opacity=".25"/><stop offset=".5" stop-color="${LIME}"/><stop offset="1" stop-color="${LIME}" stop-opacity=".25"/></linearGradient>
+  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter>
+  <marker id="m" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="${LIME}"/></marker>
 </defs>
 <rect width="${W}" height="${H}" fill="${INK}"/><rect width="${W}" height="${H}" fill="url(#g)"/>
-<image href="${MARK}" x="${L0}" y="40" width="40" height="40"/>
-${t(L0 + 54, 70, "One call, one trade: start to finish", 28, TEXT, 700)}
-${t(W - L0, 70, "Lime = the trade, through Definitive Flash", 15, LIME, 600, "end")}
+<image href="${MARK}" x="70" y="62" width="40" height="40"/>
+${t(124, 92, "How Kall works", 30, TEXT, 700)}
+${t(W - 70, 92, "From a caller’s post to a record nobody can edit", 17, MUTE, 400, "end")}
 `;
-lanes.forEach((l, i) => {
-  const x = L0 + i * (LW + GAP);
-  s += `<rect x="${x}" y="${TOP - 80}" width="${LW}" height="${H - TOP + 30}" rx="16" fill="#101412" stroke="${RULE}"/>`;
-  s += `<line x1="${cx(i)}" y1="${TOP}" x2="${cx(i)}" y2="${H - 60}" stroke="#222a26" stroke-dasharray="4 6"/>`;
-  if (l.logo) s += `<image href="${l.logo}" x="${cx(i) - l.lw / 2}" y="${TOP - 62}" width="${l.lw}" height="${l.lh}"/>`;
-  else s += t(cx(i), TOP - 44, l.n, 19, TEXT, 700, "middle");
-  s += t(cx(i), TOP - 20, l.sub, 13, l.n === "Definitive" ? LIME : MUTE, 500, "middle");
+
+// Left: three ways in
+const apps = [
+  ["Kall Extension", "A card under the call on X"],
+  ["Kall Keyboard", "Copy a call in any chat"],
+  ["Kall Web App", "The callers you follow"],
+];
+const AX = 70, AW = 300, AH = 92, AY = [250, 380, 510];
+s += t(AX, 220, "THREE WAYS IN", 12, LIME, 700, "start", 2);
+apps.forEach(([n, d], i) => {
+  s += `<rect x="${AX}" y="${AY[i]}" width="${AW}" height="${AH}" rx="20" fill="${CARD}" stroke="${RULE}" stroke-width="1.5"/>`;
+  s += t(AX + 26, AY[i] + 40, n, 20, TEXT, 700) + t(AX + 26, AY[i] + 66, d, 15, MUTE);
 });
-s += body;
-s += t(L0, H - 24, "Kall never holds your keys or funds: you sign every trade in your own wallet. Records on Arkiv are read-only.", 14, MUTE);
-s += t(W - L0, H - 24, "Made with Claude", 13, MUTE, 500, "end");
+
+// Merge into the server
+const MX = 470, MY = 425;
+AY.forEach((y) => {
+  const y0 = y + AH / 2;
+  s += `<path d="M${AX + AW} ${y0} C${AX + AW + 60} ${y0} ${MX - 70} ${MY} ${MX - 6} ${MY}" fill="none" stroke="${LIME}" stroke-opacity=".55" stroke-width="2"/>`;
+});
+s += `<circle cx="${MX + 22}" cy="${MY}" r="30" fill="${LIME}" opacity=".35" filter="url(#glow)"/>`;
+s += `<circle cx="${MX + 22}" cy="${MY}" r="22" fill="${INK}" stroke="${LIME}" stroke-width="2.5"/><circle cx="${MX + 22}" cy="${MY}" r="7" fill="${LIME}"/>`;
+s += t(MX + 22, MY - 44, "Kall server", 14, TEXT, 700, "middle");
+
+// The track
+const stages = [
+  { n: "Read", d: ["AI: is it a real call?", "Long or short, which coin"] },
+  { n: "Check", d: ["Fake contract?", "Then no trade"] },
+  { n: "Price", d: ["Chainlink on Base", "price at the post"] },
+  { n: "Trade", d: ["Quote → you sign →", "best route → filled"], logo: DEF, hot: true },
+  { n: "Record", d: ["Call and trade,", "read-only forever"], logo: ARK },
+  { n: "Score", d: ["Time’s up: hit or miss,", "the real return"] },
+];
+const TX0 = MX + 52, TX1 = W - 150, STEP = (TX1 - TX0 - 60) / (stages.length - 1);
+s += `<line x1="${TX0}" y1="${MY}" x2="${TX1}" y2="${MY}" stroke="url(#track)" stroke-width="3"/>`;
+stages.forEach((st, i) => {
+  const x = TX0 + 60 + i * STEP;
+  if (st.hot) {
+    s += `<rect x="${x - 112}" y="${MY - 175}" width="224" height="370" rx="26" fill="${LIME}" fill-opacity=".06" stroke="${LIME}" stroke-opacity=".7" stroke-width="1.5"/>`;
+    s += `<circle cx="${x}" cy="${MY}" r="34" fill="${LIME}" opacity=".45" filter="url(#glow)"/>`;
+  }
+  s += `<circle cx="${x}" cy="${MY}" r="${st.hot ? 26 : 20}" fill="${st.hot ? LIME : INK}" stroke="${LIME}" stroke-width="2"/>`;
+  s += t(x, MY + 6, String(i + 1), st.hot ? 18 : 15, st.hot ? INK : LIME, 800, "middle");
+  s += t(x, MY - 62, st.n, st.hot ? 26 : 22, st.hot ? LIME : TEXT, 700, "middle");
+  if (st.logo) s += st.logo === DEF
+    ? `<image href="${DEF}" x="${x - 75}" y="${MY - 140}" width="150" height="17"/>`
+    : `<image href="${ARK}" x="${x - 40}" y="${MY - 146}" width="80" height="20"/>`;
+  st.d.forEach((l, k) => { s += t(x, MY + 66 + k * 24, l, 14.5, st.hot ? TEXT : MUTE, st.hot ? 500 : 400, "middle"); });
+});
+
+// Loop back: the record shows on every card
+const lx = TX0 + 60 + 5 * STEP;
+const px = 800;
+s += `<path d="M${lx} ${MY + 128} C${lx} ${760} ${AX + AW / 2 + 40} ${760} ${AX + AW / 2} ${AY[2] + AH + 14}" fill="none" stroke="${LIME}" stroke-width="2" stroke-dasharray="2 8" stroke-linecap="round" marker-end="url(#m)"/>`;
+s += `<rect x="${px - 215}" y="${712}" width="430" height="36" rx="18" fill="${INK}" stroke="${LIME}" stroke-opacity=".5"/>`;
+s += t(px, 736, "The caller’s record shows up in all three apps", 14.5, TEXT, 500, "middle");
+
+// Footer: privacy + settlement
+s += `<line x1="70" y1="832" x2="${W - 70}" y2="832" stroke="${RULE}"/>`;
+s += `<circle cx="80" cy="862" r="6" fill="${LIME}"/>` + t(96, 867, "You sign every trade in your own wallet (MetaMask or Privy). Kall never holds your keys.", 14, MUTE);
+s += `<circle cx="${W - 560}" cy="862" r="6" fill="none" stroke="${LIME}" stroke-width="2"/>` + t(W - 544, 867, "Your balances and receipts are read privately via Anon-RPC (Nym)", 14, MUTE);
 s += "</svg>\n";
 await writeFile(R + "docs/flow.svg", s);
-console.log(`docs/flow.svg ${W}x${H}`);
+console.log("docs/flow.svg");
