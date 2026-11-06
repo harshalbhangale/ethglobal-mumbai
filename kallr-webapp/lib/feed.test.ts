@@ -24,7 +24,7 @@ describe("copyCall", () => {
   it("opens the real desk prefilled with $1 and exits, linked to the post", () => {
     const r = copyCall(call);
     expect("href" in r).toBe(true);
-    const url = new URL(("href" in r ? r.href : ""), "https://kall-markets.vercel.app");
+    const url = new URL(("href" in r ? r.href : ""), "https://kallmarkets.vercel.app");
     expect(url.pathname).toBe("/app");
     expect(url.searchParams.get("order")).toBe("copy $1 of ETH tp 10% sl 5%");
     expect(url.searchParams.get("post")).toBe(call.postId);

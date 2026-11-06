@@ -79,7 +79,7 @@ echo "sdk.dir=$HOME/Library/Android/sdk" | tee local.properties vendor/jetpref/l
   -PprivyAppId=<NEXT_PUBLIC_PRIVY_APP_ID> -PprivyClientId=<client-…>
 ```
 
-`gradle.properties` sets the defaults: `kallrOrigin=https://kall-markets.vercel.app` and the Kall Markets Privy app and
+`gradle.properties` sets the defaults: `kallrOrigin=https://kallmarkets.vercel.app` and the Kall Markets Privy app and
 Android client IDs (both public), so a plain `./gradlew assembleDebug` builds a working APK. Otherwise
 `kallrOrigin` falls back to `http://localhost:3000`; use `http://10.0.2.2:3000` for the emulator or
 the laptop's Wi-Fi address for a phone on the same network.

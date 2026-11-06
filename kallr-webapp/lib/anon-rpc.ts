@@ -198,7 +198,7 @@ export async function anonFetch(input: RequestInfo | URL, init?: RequestInit): P
 export function arkivRelayUrl(): string | undefined {
   if (typeof window === "undefined" || !ENABLED) return undefined;
   const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
-  const origin = local ? (process.env.NEXT_PUBLIC_RELAY_ORIGIN ?? "https://kall-markets.vercel.app") : window.location.origin;
+  const origin = local ? (process.env.NEXT_PUBLIC_RELAY_ORIGIN ?? "https://kallmarkets.vercel.app") : window.location.origin;
   return `${origin}/api/arkiv/rpc`;
 }
 

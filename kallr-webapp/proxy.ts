@@ -1,12 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 /**
- * One address: kall-markets.vercel.app. The project's older names still answer, so pages opened on them
+ * One address: kallmarkets.vercel.app. The project's older names still answer, so pages opened on them
  * move to the real one (sign-in with X only works there). API routes aren't redirected: Android builds and
  * older extensions still call the old origin and must keep working.
  */
-export const CANONICAL_HOST = "kall-markets.vercel.app";
-const OLD_HOSTS = new Set(["kallr.vercel.app", "kallr-app.vercel.app", "aftermarkets.vercel.app"]);
+export const CANONICAL_HOST = "kallmarkets.vercel.app";
+const OLD_HOSTS = new Set(["kall-markets.vercel.app", "kallr.vercel.app", "kallr-app.vercel.app", "aftermarkets.vercel.app"]);
 
 export function proxy(req: NextRequest) {
   const host = req.headers.get("host")?.toLowerCase() ?? "";

@@ -41,7 +41,7 @@ ${t(W - 60, 76, "Don’t trust. Check the caller. Trade it.", 18, LIME, 600, "en
 const surf = [
   ["Kall Extension", "Chrome, on X", ["Card under every call", "Caller record + trade in place"]],
   ["Kall Keyboard", "Android · iOS", ["Copy a call in any chat", "Trade without leaving it"]],
-  ["Kall Web App", "kall-markets.vercel.app", ["Callers, real posts, verdicts", "Orders, wallet, every proof"]],
+  ["Kall Web App", "kallmarkets.vercel.app", ["Callers, real posts, verdicts", "Orders, wallet, every proof"]],
 ];
 t; s += t(60, 150, "1 · WHERE CALLS SHOW UP", 13, MUTE, 600);
 surf.forEach(([n, sub, l], i) => {

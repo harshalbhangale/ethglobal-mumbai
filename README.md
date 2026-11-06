@@ -4,7 +4,7 @@
 
 **Don't trust. Check the caller. Trade it.**
 
-**[kall-markets.vercel.app](https://kall-markets.vercel.app)** · [Android app (APK)](https://kall-markets-downloads-308324916322.s3.ap-south-1.amazonaws.com/apps/kall-keyboard.apk) · Built at ETHGlobal Mumbai 2026 · Not financial advice
+**[kallmarkets.vercel.app](https://kallmarkets.vercel.app)** · [Android app (APK)](https://kall-markets-downloads-308324916322.s3.ap-south-1.amazonaws.com/apps/kall-keyboard.apk) · Built at ETHGlobal Mumbai 2026 · Not financial advice
 
 ## Why we built it
 
@@ -27,7 +27,7 @@ there, through [Definitive Flash](https://definitive.fi) on Base, signed in your
 
 | | Where | What you do |
 | --- | --- | --- |
-| **Kall Web App** | [kall-markets.vercel.app/app](https://kall-markets.vercel.app/app) | The feed of real calls with their verdicts, the callers you follow, the trade ticket, your orders and wallet |
+| **Kall Web App** | [kallmarkets.vercel.app/app](https://kallmarkets.vercel.app/app) | The feed of real calls with their verdicts, the callers you follow, the trade ticket, your orders and wallet |
 | **Kall Extension** | Chrome, on X | A card under every call: the caller's record, a fake-contract check, and a trade you sign without leaving the post |
 | **Kall Keyboard** | Android and iPhone, in any chat | Copy a call in Telegram, WhatsApp or X; the keyboard reads it, checks the caller, and trades it in the chat |
 
