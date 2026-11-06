@@ -44,6 +44,11 @@ enum Kallr {
      * encodings), so a call copied anywhere reads the same.
      */
     static func copiedText() -> String? {
+        #if DEBUG
+        // The simulator's clipboard doesn't reach keyboard extensions: debug builds can stand one in.
+        // xcrun simctl spawn booted defaults write com.buddyharshal.kallr.keyboard kall.debugClipboard "…"
+        if let stand = UserDefaults.standard.string(forKey: "kall.debugClipboard"), !stand.isEmpty { return stand }
+        #endif
         let pasteboard = UIPasteboard.general
         if let s = pasteboard.string, !s.isEmpty { return s }
         if let s = pasteboard.strings?.first(where: { !$0.isEmpty }) { return s }
@@ -121,6 +126,52 @@ enum Kallr {
     private struct Request: Codable { let text: String?; let typed: String?; let history: [Post] }
 
     /** Ask Kallr about a copied call or an order being typed. Nil when there's nothing to say or no network. */
+    // MARK: Chainlink CRE
+
+    /** Chainlink CRE's signed verdict on a coin a post names: is that contract really the coin? */
+    struct CreVerdict: Codable {
+        let checked: Bool
+        let verdict: String?
+        let reason: String?
+        let symbol: String?
+        let claimed: String?
+        let canonical: String?
+        let txHash: String?
+        let canRun: Bool?
+        var isFake: Bool { checked && verdict == "fake" }
+        var isReal: Bool { checked && verdict == "real" }
+        /** The signed verdict on Base Sepolia. */
+        var proof: String? { txHash.map { "https://sepolia.basescan.org/tx/\($0)" } }
+    }
+
+    /** The coin a message names and the contract it gives: "$TOSHI … 0x8544…" → (0x8544…, TOSHI). */
+    static func creTarget(in text: String) -> (token: String, claimed: String)? {
+        guard let tag = first(cashtag, in: text), let address = first(evmAddress, in: text) else { return nil }
+        return (address, String(tag.dropFirst()).uppercased())
+    }
+
+    /** From a looked-up post: the contract it gives and the ticker it names. */
+    static func creTarget(_ r: Result) -> (token: String, claimed: String)? {
+        guard let token = r.token?.address, let claimed = r.fake?.claimed ?? r.call?.asset ?? r.ai?.symbol else { return nil }
+        return (token, claimed.replacingOccurrences(of: "$", with: "").uppercased())
+    }
+
+    /** What CRE already decided for this contract and ticker, if it has looked. */
+    static func creVerdict(token: String, claimed: String) async -> CreVerdict? {
+        await get("api/cre/coin?token=\(token)&claimed=\(claimed)")
+    }
+
+    /** Asks CRE to check it now (about 10 seconds), where the server can run it. */
+    static func runCre(token: String, claimed: String) async -> CreVerdict? {
+        var request = URLRequest(url: origin.appendingPathComponent("api/cre/coin"), timeoutInterval: 120)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["token": token, "claimed": claimed])
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+        return try? JSONDecoder().decode(CreVerdict.self, from: data)
+    }
+
     static func lookup(text: String?, typed: String?) async -> Result? {
         guard text != nil || typed != nil else { return nil }
         var request = URLRequest(url: origin.appendingPathComponent("api/keyboard"), timeoutInterval: 15)
