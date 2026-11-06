@@ -26,7 +26,7 @@ is placed.
 | --- | --- | --- |
 | **Kall Extension** | Chrome, on X | Every call gets the caller's record under it. Follow callers. Copy a call into a Flash order with exits and sign it in your own wallet, without leaving X. |
 | **Kall Keyboard** | iPhone and Android, in any app: X, Telegram, Reddit, WhatsApp | A trading keyboard. Copy a call or paste a contract (fake contracts are flagged), open the trading panel, review a fresh Flash quote and confirm, without switching to an exchange. On iPhone it also shows calls from the callers you follow. |
-| **Kall Web App** | [kallr.vercel.app](https://kallr.vercel.app) | The callers you follow and their posts with Kall Markets' verdict, the trade ticket, your orders and your wallet. |
+| **Kall Web App** | [kall-markets.vercel.app](https://kall-markets.vercel.app) | The callers you follow and their posts with Kall Markets' verdict, the trade ticket, your orders and your wallet. |
 
 Kall Markets only shows its own feed and what you choose to copy. It never reads other apps' screens or
 conversations.
@@ -40,7 +40,7 @@ their records on Arkiv; you sign with MetaMask or the Privy wallet you get when 
 
 | Product | What it does | Status |
 | --- | --- | --- |
-| **Kall Web App** ([kallr.vercel.app/app](https://kallr.vercel.app/app), PWA) | One screen: the callers you follow, their real posts from X with Kall Markets' verdict (entry, hit or miss, return) from Arkiv, Following / Explore / Favorites, and the trade ticket always beside them; Copy call fills it. Orders (open, closed, history with Arkiv proofs) and Wallet (MetaMask or the embedded wallet, balances on Base) | Live; reads Arkiv and quotes Flash on mainnet |
+| **Kall Web App** ([kall-markets.vercel.app/app](https://kall-markets.vercel.app/app), PWA) | One screen: the callers you follow, their real posts from X with Kall Markets' verdict (entry, hit or miss, return) from Arkiv, Following / Explore / Favorites, and the trade ticket always beside them; Copy call fills it. Orders (open, closed, history with Arkiv proofs) and Wallet (MetaMask or the embedded wallet, balances on Base) | Live; reads Arkiv and quotes Flash on mainnet |
 | **Kall Extension** (Chrome, X only for now) | On x.com: a trade card under call posts with live prices, the caller's record and the Call receipt; Flash's price impact, slippage and fee before you sign; a Basescan receipt with the route after; signed on X with MetaMask or Rabby | Built; loads unpacked |
 | **Kall Keyboard** (Android, built on [FlorisBoard](https://github.com/florisboard/florisboard)) | Works wherever calls are posted (Telegram, X, WhatsApp): reads a call from a copied or shared message, shows the caller's record, and trades it in the keyboard's panel with the Privy wallet | Built; debug APK, talks to the web app's `/api/keyboard` |
 | **Kall Keyboard** (iPhone, `kallr-ios`) | A typing keyboard for any app with a Kall key that opens the trading panel: Following (calls from the callers you follow, with the post text, live move and record; Following / Explore; Active, Settled, Favorites), Trade (Market, Limit or TWAP, any amount, exits, a review with a fresh Flash quote, then one tap to place), Orders (live Flash status, Cancel) and Wallet. Orders are placed from a capped Kall wallet the server holds | Built; installed from Xcode; see [kallr-ios/README.md](kallr-ios/README.md) |
@@ -73,7 +73,7 @@ Environment (`kallr-webapp/.env.local`):
 | `SWARM_API_URL`, `SWARM_POSTAGE_BATCH_ID` | Your own Bee node and batch for snapshots | Swarm's public gateway |
 | `UNISWAP_API_KEY` | The "Best price" line: each Flash quote set beside Uniswap's | The line is hidden; trading is unchanged |
 
-Hosted on Vercel (project `kallr`, root `kallr-webapp`): <https://kallr.vercel.app>, deployed on every push to `main`.
+Hosted on Vercel (project `kallr`, root `kallr-webapp`): <https://kall-markets.vercel.app> (kallr.vercel.app still answers, for builds made before the rename), deployed on every push to `main`.
 
 The service worker only registers in production builds: `npm run build && npm start` to test install.
 

@@ -10,7 +10,7 @@ enum Kallr {
         // Debug builds can point at a local server: defaults write <bundle id> kall.origin http://localhost:3004
         if let local = UserDefaults.standard.string(forKey: "kall.origin"), let url = URL(string: local) { return url }
         #endif
-        return URL(string: "https://kallr.vercel.app")!
+        return URL(string: "https://kall-markets.vercel.app")!
     }()
 
     // MARK: Look: Kallr black, bone and lime.

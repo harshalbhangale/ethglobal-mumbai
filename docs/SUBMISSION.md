@@ -50,4 +50,4 @@ Kall Markets is one product in three places, wherever calls actually show up:
 Definitive Flash (every order) · Arkiv (calls, results, trades) · Uniswap Trading API (price benchmark) ·
 Chainlink price feeds on Base · Swarm (post snapshots) · Privy (sign in with X, embedded wallet).
 
-Live: [kallr.vercel.app](https://kallr.vercel.app)
+Live: [kall-markets.vercel.app](https://kall-markets.vercel.app)

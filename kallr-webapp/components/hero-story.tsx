@@ -101,7 +101,7 @@ function SceneWeb() {
         <i className="size-2 rounded-full bg-rule-strong" />
         <i className="size-2 rounded-full bg-rule-strong" />
         <i className="size-2 rounded-full bg-rule-strong" />
-        <span className="ml-3 flex-1 rounded bg-[#0a0d0b] px-2 py-0.5 text-[10px] text-slate">kallr.vercel.app/app</span>
+        <span className="ml-3 flex-1 rounded bg-[#0a0d0b] px-2 py-0.5 text-[10px] text-slate">kall-markets.vercel.app/app</span>
       </div>
       <div className="grid grid-cols-[120px_1fr] text-[11.5px]">
         <aside className="border-r border-rule bg-card p-3">
