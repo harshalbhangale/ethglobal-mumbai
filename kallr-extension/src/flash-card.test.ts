@@ -73,7 +73,7 @@ const q = <T extends Element = HTMLElement>(root: ParentNode, sel: string) => ro
 const buttons = (root: ParentNode, sel: string) => [...root.querySelectorAll<HTMLButtonElement>(sel)];
 
 describe("flashCard", () => {
-  it("has the card layout: price header, Call check strip, Copy button, Powered by footer", async () => {
+  it("has the card layout: price header, Call receipt strip, Copy button, Powered by footer", async () => {
     const { card } = await mounted();
     expect(q(card, ".swap-title strong").textContent).toBe("Ethereum");
     // Logos are inlined, so they survive extension reloads.
@@ -83,8 +83,8 @@ describe("flashCard", () => {
     expect(q(card, ".caller-strip .x-follow").textContent).toBe("Follow");
     expect(buttons(card, ".call-insights summary .ci-chip").map((c) => c.textContent)).toEqual([
       "Bullish ETH",
-      "Creator record",
-      "After market",
+      "Caller record",
+      "Since the call",
     ]);
     expect(q(card, ".inline-buy").textContent).toBe("⇄ Copy");
     expect(q(card, ".inline-panel").hidden).toBe(true);
@@ -92,7 +92,7 @@ describe("flashCard", () => {
     expect(q(card, ".swap-powered .definitive-logo").getAttribute("aria-label")).toBe("Definitive");
   });
 
-  it("opens the Call check with the post as text, this call and the record", async () => {
+  it("opens the Call receipt with the post as text, this call and the record", async () => {
     const { card } = await mounted({ ...answer(), call: { ...answer().call!, horizonStated: true } });
     const details = q<HTMLDetailsElement>(card, ".call-insights");
     details.open = true;

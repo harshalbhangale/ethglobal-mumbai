@@ -20,8 +20,8 @@ export function Providers({ children }: { children: ReactNode }) {
           accentColor: "#C6F25A",
           logo: "/icons/icon-192.png",
           walletChainType: "ethereum-only",
-          landingHeader: "Sign in to Kallr",
-          loginMessage: "Sign in with X to get your Kallr wallet on Base.",
+          landingHeader: "Sign in to Kall Markets",
+          loginMessage: "Sign in with X to get your Kall Markets wallet on Base.",
         },
         embeddedWallets: {
           ethereum: { createOnLogin: "users-without-wallets" },

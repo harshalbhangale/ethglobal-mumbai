@@ -45,6 +45,6 @@ export async function addFollowBadge(article: HTMLElement, handle: string) {
   const { host, root } = shadowHost(CLASS);
   host.dataset.handle = handle;
   Object.assign(host.style, { display: "inline-flex", margin: "0 0 0 4px", verticalAlign: "middle" });
-  root.append(el("span", { class: "chip following", title: "You follow this caller on Kallr" }, "Following"));
+  root.append(el("span", { class: "chip following", title: "You follow this caller on Kall Markets" }, "Following"));
   insertAfterName(name, host);
 }

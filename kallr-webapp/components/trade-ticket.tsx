@@ -480,7 +480,7 @@ export function TradeTicket({
           )}
         </section>
         <p className="mt-3 px-2 text-xs leading-relaxed text-slate">
-          You sign every step in your own wallet. Kallr never holds your keys or funds.
+          You sign every step in your own wallet. Kall Markets never holds your keys or funds.
         </p>
       </div>
     </div>

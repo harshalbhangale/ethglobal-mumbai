@@ -50,7 +50,7 @@ export async function tradeTokenByKey(key: string): Promise<TradeToken> {
   }
   const found = (await flashSearch(key))?.find((t) => t.address.toLowerCase() === key.toLowerCase());
   if (found) {
-    if (found.riskFlagged) throw new Error(`Definitive flags ${found.symbol} as risky, so Kallr won't trade it.`);
+    if (found.riskFlagged) throw new Error(`Definitive flags ${found.symbol} as risky, so Kall Markets won't trade it.`);
     if (Number(found.price) > 0) return { token: found.address as `0x${string}`, symbol: found.symbol, price: Number(found.price), logo: found.imageUrl ?? null };
   }
   // Flash search unavailable: Dexscreener for price and liquidity, GoPlus for honeypots and owner powers.
@@ -61,7 +61,7 @@ export async function tradeTokenByKey(key: string): Promise<TradeToken> {
   if (!pair || !(Number(pair.priceUsd) > 0)) throw new Error("No live price for that token on Base.");
   if ((pair.liquidity?.usd ?? 0) < MIN_LIQUIDITY_USD) throw new Error(`${pair.baseToken.symbol} has under $50K of liquidity on Base.`);
   const danger = check?.flags.find((f) => f.severity === "danger");
-  if (danger) throw new Error(`${pair.baseToken.symbol}: ${danger.text}. Kallr won't trade it.`);
+  if (danger) throw new Error(`${pair.baseToken.symbol}: ${danger.text}. Kall Markets won't trade it.`);
   return { token: pair.baseToken.address as `0x${string}`, symbol: pair.baseToken.symbol, price: Number(pair.priceUsd), logo: pair.info?.imageUrl ?? null };
 }
 

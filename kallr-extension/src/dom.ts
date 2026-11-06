@@ -50,7 +50,7 @@ export function brandMark(size = 16) {
 
 /** The Kallr lockup: mark + name. */
 export function wordmark(size = 16) {
-  return el("span", { class: "wordmark" }, brandMark(size), el("span", {}, "Kallr"));
+  return el("span", { class: "wordmark" }, brandMark(size), el("span", {}, "Kall Markets"));
 }
 
 /** "Powered by Kallr" line under brand surfaces. */
@@ -129,7 +129,7 @@ function showReloadNotice() {
     "padding:10px 12px 10px 16px;border-radius:999px;background:#14213d;color:#fff;font:500 14px/1.3 system-ui,sans-serif;" +
     "box-shadow:0 12px 32px rgba(20,33,61,.35)";
   const text = document.createElement("span");
-  text.textContent = "Kallr was updated. Reload this tab to keep using it.";
+  text.textContent = "Kall Markets was updated. Reload this tab to keep using it.";
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = "Reload";

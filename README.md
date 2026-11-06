@@ -1,10 +1,10 @@
-<p align="center"><img src="kallr-webapp/public/icons/icon-512.png" width="96" height="96" alt="Kallr logo" /></p>
+<p align="center"><img src="kallr-webapp/public/icons/icon-512.png" width="96" height="96" alt="Kall Markets logo" /></p>
 
-# Kallr
+# Kall Markets
 
 Every call on X has an after market.
 
-Crypto Twitter runs on calls, and nobody keeps score. Kallr prices every call at the minute it was posted, scores it when its timeframe ends, and lets you copy it with one tap: a real order on Base through Definitive Flash with take-profit and stop-loss attached. You sign in your own wallet; nothing trades without you.
+Crypto Twitter runs on calls, and nobody keeps score. Kall Markets prices every call at the minute it was posted, scores it when its timeframe ends, and lets you copy it with one tap: a real order on Base through Definitive Flash with take-profit and stop-loss attached. You sign in your own wallet; nothing trades without you.
 
 Built at ETHGlobal Mumbai 2026.
 
@@ -14,7 +14,7 @@ Built at ETHGlobal Mumbai 2026.
 | --- | --- | --- |
 | **Web app** (`/app`, PWA) | Sign in with X (Privy), wallet on Base, type an order like `copy $5 of ETH tp 10% sl 5%`, sign, and it's placed on Flash with TP/SL. Open orders come back from Flash. | Works against live Flash quotes; first funded mainnet order not run yet |
 | **Chrome extension** | On x.com: a trade card under call posts and a Buy button in X's ticker cards, with live prices; the caller's record and a call-check drawer; profile cards, Follow and Following chips; token safety checks on posts that share a contract; orders signed on X with MetaMask/Rabby, or in the desk | Built; loads unpacked |
-| **Android keyboard** (built on [FlorisBoard](https://github.com/florisboard/florisboard)) | A Kallr row above the keyboard in any app: copy an X post link and see the call's after market and the caller's record; type `copy $5 tp 10% sl 5%` and get a desk link to sign | Built; debug APK, talks to the web app's `/api/keyboard` |
+| **Android keyboard** (built on [FlorisBoard](https://github.com/florisboard/florisboard)) | A Kall Markets row above the keyboard in any app: copy an X post link and see the call's after market and the caller's record; type `copy $5 tp 10% sl 5%` and get a desk link to sign | Built; debug APK, talks to the web app's `/api/keyboard` |
 | **Trades dashboard** (`/trades`) | Every order placed from the desk, the extension or the keyboard, and caller records, read in the browser straight from Arkiv | Built; reads live from Arkiv's Rabdi testnet |
 | **Terminal** (`/terminal`, planned) | Live calls and your trades in one view, plus a chat box for standing rules: "if @caller calls BTC, ask me to copy $10", "ignore contract posts". Approvals arrive as a notification that opens the desk to sign | Not started; see [docs/PLAN.md](docs/PLAN.md) |
 | **Safety checks** | Token: honeypot, owner powers, taxes, liquidity, age. Caller: did their wallet sell what they called? | Token checks live (no key); wallet check needs a free Etherscan key |
@@ -65,17 +65,17 @@ Phones can't run extensions, but every app has a keyboard. `kallr-keyboard` is a
 FlorisBoard Contributors), which does all the typing. What we added:
 
 - **Trade button** (blue, right end of the toolbar). Like the emoji button, it swaps the keys for the
-  Kallr panel; **ABC** goes back. Tabs: **Swap** (token, Swap / Limit / TWAP, amount, TP/SL),
+  Kall Markets panel; **ABC** goes back. Tabs: **Swap** (token, Swap / Limit / TWAP, amount, TP/SL),
   **Positions** (your Flash orders and balances) and **Wallet**.
 - **Your wallet:** the Privy embedded wallet you get on the desk (sign in with X). Buy opens a
   confirm sheet; "Confirm and sign" places a Flash order on Base. Keys stay with Privy.
-- **Check this call:** copy or **Share → Check with Kallr** a post or a Telegram message. The AI reads
+- **Check this call:** copy or **Share → Check with Kall Markets** a post or a Telegram message. The AI reads
   coin, direction and timeframe; the caller's record and a token check come from our tools.
 - **Fake contracts:** a contract that claims `$PEPE` but isn't the main PEPE on Base is shown as fake
   with the real address, and gets no Buy.
 - **Plain words and voice:** type `buy 20 bucks of degen if it dips 10%`, or hold the mic and say it.
 
-It sends Kallr only a post link, a coin message, a contract or the order phrase (nothing else you
+It sends Kall Markets only a post link, a coin message, a contract or the order phrase (nothing else you
 type) and stays quiet in password fields. Build, install and what changed:
 [kallr-keyboard/KALLR.md](kallr-keyboard/KALLR.md).
 
@@ -94,7 +94,7 @@ browser, so anyone can check them without asking us.
 
 - **Writer wallet:** `0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53`. Reads only trust entities it created.
 - **One query you can run:** `arkiv.schema = str('kallr.trades') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)`
-- **Callers Kallr follows** (read by `/kol` and the home sidebar): `arkiv.schema = str('kallr.tracked-callers') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)`
+- **Callers Kall Markets follows** (read by `/kol` and the home sidebar): `arkiv.schema = str('kallr.tracked-callers') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)`
 
 **On-chain writes so far** (Arkiv Rabdi, block `0x4015f`, one `createEntity` per caller):
 
@@ -146,7 +146,7 @@ Trade transactions are added here as they land.
 - Details: [arkiv/schema.md](arkiv/schema.md), [why-arkiv.md](arkiv/why-arkiv.md), [how-you-use-arkiv.md](arkiv/how-you-use-arkiv.md), [reach.md](arkiv/reach.md), [friction.md](arkiv/friction.md).
 - Code: `packages/integrations/src/arkiv.ts` (schemas, reads), `kallr-webapp/lib/server/arkiv.ts` (writes), `kallr-webapp/app/trades/page.tsx` (dashboard), `kallr-webapp/app/api/arkiv/score` (settles expired calls, daily Vercel cron).
 
-**Swarm:** when Kallr first prices a call, a snapshot of the post (text, link, the call it read)
+**Swarm:** when Kall Markets first prices a call, a snapshot of the post (text, link, the call it read)
 goes to [Swarm](https://www.ethswarm.org), and the call's Arkiv entity keeps the reference in
 `swarmRef`, so a deleted post stays provable. The `/trades` dashboard also exists as a static page on
 Swarm (`kallr-swarm/`, `node kallr-swarm/publish.mjs`) that reads Arkiv with no server.
@@ -210,7 +210,7 @@ The X API is pay-per-use: about $0.001 per mention read, $0.005 per post read, $
 ```
 kallr-webapp/       Next.js PWA: landing (/), desk (/app), /trades, Flash + after market + checks + Arkiv APIs
 kallr-extension/    Chrome extension for x.com: trade cards, records, profiles, follow, safety checks
-kallr-keyboard/     Android keyboard: FlorisBoard fork with a Kallr row
+kallr-keyboard/     Android keyboard: FlorisBoard fork with a Kall Markets row
 kallr-xbot/         @Kallr on X (parked)
 packages/
   domain/           order parser, reputation, signals
@@ -233,13 +233,13 @@ Parked, not planned for the demo: live X bot, Telegram, agents/MCP, Postgres, Ch
 
 This repo was started at the event (first commit 5 Nov 2026). What we brought in:
 
-- **Chrome extension cards:** the post card, ticker Buy button, caller record, call check drawer, profile card and
+- **Chrome extension cards:** the post card, ticker Buy button, caller record, Call receipt drawer, profile card and
   follow chips were ported from **Xtrading**, our earlier X trading extension (on Monad, with Kuru and Perpl). At
   the event we moved them onto Base and Definitive Flash, added token safety checks, and wired them to this app.
 - **Landing background:** the particle knot behind the landing hero (`kallr-webapp/components/signal-field.tsx`) and
   the black-and-lime look come from the Xtrading site.
 - **Android keyboard:** a fork of [FlorisBoard](https://github.com/florisboard/florisboard) v0.5.2 (Apache-2.0),
-  which does all the typing. We added the Kallr row; the full list of changes is in
+  which does all the typing. We added the Kall Markets row; the full list of changes is in
   [kallr-keyboard/KALLR.md](kallr-keyboard/KALLR.md).
 - **jetpref:** [patrickgold/jetpref](https://github.com/patrickgold/jetpref) (Apache-2.0), vendored at the commit
   FlorisBoard v0.5.2 needs, because its snapshot has expired from Maven Central.

@@ -191,7 +191,7 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
                     SheetState.SignIn -> {
                         Text("Sign in to trade", fontSize = 18.sp, fontWeight = FontWeight.Medium)
                         Text(
-                            "Kallr uses the same wallet as the Kallr desk. Sign in with X once; the key stays with Privy.",
+                            "Kall Markets uses the same wallet as the Kall Markets desk. Sign in with X once; the key stays with Privy.",
                             modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -249,9 +249,9 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedButton(onClick = {
-                                val share = "${s.title} via Kallr" + (order.caller?.let { ", copying @$it's call" } ?: "") + ". Flash on Base."
+                                val share = "${s.title} via Kall Markets" + (order.caller?.let { ", copying @$it's call" } ?: "") + ". Flash on Base."
                                 val cm = context.getSystemService(ClipboardManager::class.java)
-                                cm?.setPrimaryClip(ClipData.newPlainText("Kallr", share))
+                                cm?.setPrimaryClip(ClipData.newPlainText("Kall Markets", share))
                                 Toast.makeText(context, "Copied. Paste it in the chat.", Toast.LENGTH_SHORT).show()
                                 onClose()
                             }, modifier = Modifier.weight(1f).height(48.dp)) { Text("Copy to share") }
@@ -322,7 +322,7 @@ private fun WalletScreen() {
             lineHeight = 36.sp,
         )
         Text(
-            "Trade calls from your keyboard, in X, Telegram or any app. Same wallet as the Kallr desk.",
+            "Trade calls from your keyboard, in X, Telegram or any app. Same wallet as the Kall Markets desk.",
             modifier = Modifier.padding(top = 6.dp, bottom = 20.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -345,7 +345,7 @@ private fun WalletScreen() {
                 Text(a, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(vertical = 6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = {
-                        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Kallr wallet", a))
+                        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Kall Markets wallet", a))
                         Toast.makeText(context, "Address copied", Toast.LENGTH_SHORT).show()
                     }) { Text("Copy address") }
                     OutlinedButton(onClick = { scope.launch { refresh() } }) { Text("Refresh") }
@@ -408,12 +408,12 @@ private fun ShareSheet(text: String, onClose: () -> Unit) {
         Surface(Modifier.fillMaxWidth().clickable(enabled = false) {}, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), tonalElevation = 2.dp) {
             Column(Modifier.dotField().padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 20.dp).navigationBarsPadding()) {
                 SheetHandle()
-                Text("Kallr · check this call", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text("Kall Markets · check this call", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 val r = result
                 when {
                     loading -> Progress("Reading it…")
-                    r == null -> Text("Couldn't check that. Is the Kallr server reachable?", color = MaterialTheme.colorScheme.error)
+                    r == null -> Text("Couldn't check that. Is the Kall Markets server reachable?", color = MaterialTheme.colorScheme.error)
                     else -> {
                         r.fake?.let {
                             Text(
@@ -434,7 +434,7 @@ private fun ShareSheet(text: String, onClose: () -> Unit) {
                         if (trade == null) {
                             if (r.fake == null) {
                                 Text(
-                                    "Nothing Kallr can buy on Base for this.",
+                                    "Nothing Kall Markets can buy on Base for this.",
                                     color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp),
                                 )
                             }

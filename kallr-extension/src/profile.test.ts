@@ -131,8 +131,8 @@ describe("scanProfile", () => {
     expect(hosts[0]?.nextElementSibling?.getAttribute("role")).toBe("tablist");
     const root = hosts[0]?.shadowRoot;
     const text = root?.textContent ?? "";
-    expect(root?.querySelector(".card .title .wordmark")?.textContent).toBe("Kallr");
-    expect(root?.querySelector(".card .title .title-sub")?.textContent).toBe("@kol on Kallr");
+    expect(root?.querySelector(".card .title .wordmark")?.textContent).toBe("Kall Markets");
+    expect(root?.querySelector(".card .title .title-sub")?.textContent).toBe("@kol on Kall Markets");
     // Follow sits in the title row, drawn like X's Follow button.
     expect(root?.querySelector(".card .title .x-follow")?.textContent).toBe("Follow");
     expect(root?.querySelector(".card-actions .cta")?.getAttribute("href")).toBe("https://kallr.test/app");

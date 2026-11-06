@@ -15,10 +15,10 @@ import { hasBrowserWallet, rejected } from "./wallet";
 export { tokenIcon } from "./logos";
 
 /**
- * The post card: live price header, the caller strip (record + Follow), the Call check strip, then
+ * The post card: live price header, the caller strip (record + Follow), the Call receipt strip, then
  * the trade flow. Trades on Base through Definitive Flash with take-profit / stop-loss attached as
  * one bracket. With MetaMask / Rabby on the page every step is signed right here, with a step
- * tracker; otherwise the Kallr desk opens to sign with the Privy wallet.
+ * tracker; otherwise the Kall Markets desk opens to sign with the Privy wallet.
  */
 
 const NAMES: Record<string, string> = { ETH: "Ethereum", BTC: "Bitcoin" };
@@ -142,7 +142,7 @@ export function flashCard(input: {
 
   const card = el("section", {
     class: `inline-card swap-card${input.attached ? " inline-attached" : ""}`,
-    "aria-label": `Trade ${input.asset} with Kallr`,
+    "aria-label": `Trade ${input.asset} with Kall Markets`,
   });
   const priceText = el("b", {}, "…");
   const changeText = el("em", {});
@@ -159,7 +159,7 @@ export function flashCard(input: {
       ? `${hits}/${scored.length} calls moved their way`
       : calls.length
         ? `${calls.length} call${calls.length === 1 ? "" : "s"} seen · none scored yet`
-        : "New caller on Kallr";
+        : "New caller on Kall Markets";
     const thisMove =
       call?.returnBps != null
         ? el("span", { class: call.returnBps >= 0 ? "up" : "down" }, ` · this call ${formatBps(call.returnBps)}`)
@@ -333,7 +333,7 @@ export function flashCard(input: {
       ...row("Steps", withExits ? "Approve twice, sign twice (first time)" : "Approve once (first time), sign once"),
       ...row("Route", "Best route by Definitive · MEV-protected"),
       ...row("Network", "Base mainnet · real funds"),
-      ...row("Sign in", walletOnPage === false ? "Kallr desk (Privy wallet)" : "Your browser wallet"),
+      ...row("Sign in", walletOnPage === false ? "Kall Markets desk (Privy wallet)" : "Your browser wallet"),
     );
 
     const pairBroken = side === "buy" && (tp === null) !== (sl === null);
@@ -462,7 +462,7 @@ export function flashCard(input: {
     if (!text) return;
     const url = deskOrderUrl(appOrigin, text, post);
     openDesk(url);
-    status.replaceChildren("No browser wallet here: review the quote and sign in the Kallr desk. ", safeLink(url, "Open desk ↗"));
+    status.replaceChildren("No browser wallet here: review the quote and sign in the Kall Markets desk. ", safeLink(url, "Open desk ↗"));
   });
 
   // --- token picker, shown over the trade panel ---
@@ -562,7 +562,7 @@ export function flashCard(input: {
     attachedIcon.replaceChildren(choice ? choiceIcon(choice, 28) : tokenIcon(sym(), 28));
     headName.textContent = nameOf();
     headSym.textContent = `${sym()} `;
-    attachedTitle.textContent = `Trade ${sym()} with Kallr`;
+    attachedTitle.textContent = `Trade ${sym()} with Kall Markets`;
   }
   renderHead();
   const header = el(

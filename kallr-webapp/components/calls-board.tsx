@@ -146,7 +146,7 @@ function Empty({ scope, filter, onExplore }: { scope: Scope | "caller"; filter: 
           ? "Star a post to keep it here."
           : scope === "following"
             ? "Follow callers from Explore and their calls land here."
-            : "New calls arrive as Kallr reads callers' posts on X."}
+            : "New calls arrive as Kall Markets reads callers' posts on X."}
       </p>
       {scope === "following" && filter !== "favorites" && (
         <button type="button" onClick={onExplore} className="mt-4 rounded-md bg-lime px-4 py-2 text-sm font-semibold text-on-lime hover:bg-lime-strong">

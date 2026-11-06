@@ -78,7 +78,7 @@ function SignInCard({ what }: { what: string }) {
   return (
     <section className="rounded-lg border border-rule bg-card p-6 text-center">
       <p className="font-semibold">Sign in to {what}</p>
-      <p className="mt-1 text-sm text-slate">Sign in with X. You get a Kallr wallet on Base, or connect MetaMask.</p>
+      <p className="mt-1 text-sm text-slate">Sign in with X. You get a Kall Markets wallet on Base, or connect MetaMask.</p>
       <div className="mt-4 flex justify-center">
         <SignInButton />
       </div>

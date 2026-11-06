@@ -19,9 +19,9 @@ export function LogoMark({ size = 28 }: { size?: number }) {
 
 export function Logo({ href = "/" }: { href?: string }) {
   return (
-    <Link href={href} className="flex items-center gap-2.5" aria-label="Kallr home">
+    <Link href={href} className="flex items-center gap-2.5" aria-label="Kall Markets home">
       <LogoMark size={30} />
-      <span className="font-display text-[19px] font-semibold tracking-[-0.02em]">Kallr</span>
+      <span className="font-display text-[19px] font-semibold tracking-[-0.02em]">Kall Markets</span>
     </Link>
   );
 }

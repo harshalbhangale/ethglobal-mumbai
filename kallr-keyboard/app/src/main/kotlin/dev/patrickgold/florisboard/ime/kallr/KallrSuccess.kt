@@ -252,7 +252,7 @@ fun TradeSuccess(info: TradeSuccessInfo) {
                 .padding(vertical = 6.dp, horizontal = 8.dp),
         )
         Text(
-            "Flash order ${info.orderId.take(8)}… · on your Kallr trades",
+            "Flash order ${info.orderId.take(8)}… · on your Kall Markets trades",
             color = Soft, fontSize = 11.sp, modifier = Modifier.padding(bottom = 12.dp).rise(t, 940),
         )
     }

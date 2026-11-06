@@ -307,7 +307,7 @@ export function OpenOrders({
           <h2 id="history-heading" className="font-display text-lg font-semibold">
             Trade history
           </h2>
-          <p className="mt-1 text-sm text-slate">Every trade placed from this wallet through Kallr, recorded on Arkiv.</p>
+          <p className="mt-1 text-sm text-slate">Every trade placed from this wallet through Kall Markets, recorded on Arkiv.</p>
           {history.loading ? (
             <p className="mt-4 text-sm text-slate">Reading Arkiv…</p>
           ) : history.trades.length === 0 ? (

@@ -657,7 +657,7 @@ private fun PositionsTab(wallet: String?) {
 @Composable
 private fun WalletTab(wallet: String?) {
     val context = LocalContext.current
-    if (wallet == null) return SignInPrompt("Kallr trades from your Privy embedded wallet, the same one as the Kallr desk. Sign in with X once; the key stays with Privy.")
+    if (wallet == null) return SignInPrompt("Kall Markets trades from your Privy embedded wallet, the same one as the Kall Markets desk. Sign in with X once; the key stays with Privy.")
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Card {
             Text("Embedded wallet on Base", color = Muted, fontSize = 11.sp)
@@ -667,7 +667,7 @@ private fun WalletTab(wallet: String?) {
         Row(Modifier.fillMaxWidth()) {
             Box(Modifier.weight(1f)) {
                 PrimaryButton("Copy address") {
-                    context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Kallr wallet", wallet))
+                    context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Kall Markets wallet", wallet))
                     Toast.makeText(context, "Address copied", Toast.LENGTH_SHORT).show()
                 }
             }

@@ -8,7 +8,7 @@ import { formatAmount, getBalances, shortAddress, type Balances } from "@/lib/ch
 const BASESCAN = "https://basescan.org/address/";
 
 /**
- * Which wallet Kallr trades from, said plainly (MetaMask or the Kallr wallet Privy made for you), its
+ * Which wallet Kallr trades from, said plainly (MetaMask or the Kall Markets wallet Privy made for you), its
  * balances on Base, and a switch to any other connected wallet.
  */
 export function WalletPanel({ session }: { session: Session }) {
@@ -33,7 +33,7 @@ export function WalletPanel({ session }: { session: Session }) {
         <p className="mt-1 text-sm text-slate">
           {active?.embedded
             ? "The wallet Privy made for you when you signed in with X. Only you can sign from it."
-            : "Your own wallet. Kallr asks it to sign every order; funds never leave it until a trade fills."}{" "}
+            : "Your own wallet. Kall Markets asks it to sign every order; funds never leave it until a trade fills."}{" "}
           Network: <span className="font-semibold text-ink">Base</span>.
         </p>
         <Balances address={session.address} />
@@ -60,7 +60,7 @@ export function WalletPanel({ session }: { session: Session }) {
           <p className="mt-3 text-sm text-slate">
             {active?.embedded
               ? "Have funds in MetaMask? Connect it and trade from it directly."
-              : "Your Kallr (Privy) wallet appears here too once it's created."}
+              : "Your Kall Markets (Privy) wallet appears here too once it's created."}
           </p>
         )}
       </section>

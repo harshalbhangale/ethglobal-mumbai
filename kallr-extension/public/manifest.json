@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Kallr",
+  "name": "Kall Markets",
   "description": "See how a crypto call on X played out, and copy it with take-profit and stop-loss on Base.",
   "version": "0.1.0",
   "permissions": [
@@ -27,7 +27,7 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_title": "Kallr",
+    "default_title": "Kall Markets",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
