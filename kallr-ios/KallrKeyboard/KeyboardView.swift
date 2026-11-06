@@ -1,7 +1,10 @@
 import SwiftUI
 import UIKit
 
-/** The Kall Keyboard: Calls, Trade, Orders and Wallet. Typing stays on the iPhone keyboard (globe key). */
+/**
+ * The Kall Keyboard: a typing keyboard with a TRADE key, and the Kall panel it opens (Following, Trade,
+ * Orders, Wallet). ABC in the panel goes back to typing.
+ */
 @MainActor
 final class KeyboardModel: ObservableObject {
     enum Tab: String, CaseIterable { case following = "FOLLOWING", trade = "TRADE", orders = "ORDERS", wallet = "WALLET" }
@@ -23,6 +26,17 @@ final class KeyboardModel: ObservableObject {
 
     weak var controller: KeyboardViewController?
     @Published var tab = Tab.following
+
+    // Typing
+    enum Mode { case typing, panel }
+    enum Layer { case letters, numbers, symbols }
+    enum Shift { case off, once, locked }
+    @Published var mode = Mode.typing { didSet { if mode != oldValue { controller?.modeChanged(mode) } } }
+    @Published var layer = Layer.letters
+    @Published var shift = Shift.once
+    @Published var returnLabel = "return"
+    private var lastShiftTap: Date?
+    private var lastSpace: Date?
     @Published var showsGlobe = true
     @Published var fullAccess = false
 
@@ -103,6 +117,83 @@ final class KeyboardModel: ObservableObject {
 
     init(controller: KeyboardViewController) { self.controller = controller }
 
+    // MARK: Typing
+
+    private var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
+
+    func type(_ c: String) {
+        proxy?.insertText(layer == .letters && shift != .off ? c.uppercased() : c)
+        if shift == .once { shift = .off }
+        // Like iOS: an apostrophe in the numbers layer goes back to letters.
+        if layer != .letters, c == "'" { layer = .letters }
+        controller?.afterTyping()
+    }
+
+    /** Space; a quick second space after a word becomes ". " */
+    func space() {
+        let before = proxy?.documentContextBeforeInput ?? ""
+        if let last = lastSpace, Date().timeIntervalSince(last) < 0.4, before.hasSuffix(" "),
+           let prev = before.dropLast().last, prev.isLetter || prev.isNumber {
+            proxy?.deleteBackward()
+            proxy?.insertText(". ")
+            lastSpace = nil
+        } else {
+            proxy?.insertText(" ")
+            lastSpace = Date()
+        }
+        if layer != .letters { layer = .letters }
+        controller?.afterTyping()
+    }
+
+    func backspace() {
+        proxy?.deleteBackward()
+        controller?.afterTyping()
+    }
+
+    func returnKey() {
+        proxy?.insertText("\n")
+        controller?.afterTyping()
+    }
+
+    /** Tap for one capital; double-tap for caps lock; tap again to turn it off. */
+    func shiftTap() {
+        let now = Date()
+        if let last = lastShiftTap, now.timeIntervalSince(last) < 0.3, shift == .once {
+            shift = .locked
+            Haptics.capsLock()
+        } else {
+            shift = shift == .off ? .once : .off
+        }
+        lastShiftTap = now
+    }
+
+    /** Capitalize the start of a sentence, as the field asks. */
+    func autoShift() {
+        guard layer == .letters, shift != .locked else { return }
+        let caps = proxy?.autocapitalizationType ?? .sentences
+        if caps == UITextAutocapitalizationType.none { shift = .off; return }
+        if caps == .allCharacters { shift = .once; return }
+        let before = proxy?.documentContextBeforeInput ?? ""
+        let trimmed = before.trimmingCharacters(in: .whitespaces)
+        let start = trimmed.isEmpty || before.hasSuffix("\n")
+            || (before.hasSuffix(" ") && (trimmed.hasSuffix(".") || trimmed.hasSuffix("!") || trimmed.hasSuffix("?")))
+            || (caps == .words && before.hasSuffix(" "))
+        shift = start ? .once : .off
+    }
+
+    /** TRADE: open the Kall panel, on a tab if given, or where you left it. */
+    func openPanel(_ tab: Tab?) {
+        if let tab { self.tab = tab }
+        mode = .panel
+        if self.tab == .orders { startPolling() }
+        Task { await load() }
+    }
+
+    /** The newest open calls from the callers you follow, for the strip above the keys. */
+    var latestFollowed: [Item] {
+        Array(mine(openItems).sorted { ($0.postedAt ?? 0) > ($1.postedAt ?? 0) }.prefix(6))
+    }
+
     var trackedHandles: [String] { feed?.callers?.filter(\.tracked).map(\.handle) ?? feed?.following ?? [] }
     var followedCallers: [Kallr.FeedCaller] { feed?.callers?.filter { follows.contains($0.handle) } ?? [] }
 
@@ -170,7 +261,7 @@ final class KeyboardModel: ObservableObject {
         tab = .trade
     }
 
-    func tap(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) { UIImpactFeedbackGenerator(style: style).impactOccurred() }
+    func tap(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) { Haptics.impact(style) }
 
     func load() async {
         async let f = Kallr.feed()
@@ -283,6 +374,15 @@ struct KeyboardView: View {
     @ObservedObject var model: KeyboardModel
 
     var body: some View {
+        if model.mode == .typing {
+            TypingKeyboard(model: model)
+                .task { await model.load() }
+        } else {
+            panel
+        }
+    }
+
+    private var panel: some View {
         VStack(spacing: 0) {
             TopBar(model: model)
             Group {
@@ -308,6 +408,12 @@ private struct TopBar: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            Button { Haptics.layer(); model.mode = .typing } label: {
+                Text("ABC").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.bone)
+                    .frame(width: 44, height: 38).background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(Press())
+            .accessibilityLabel("Back to typing")
             HStack(spacing: 2) {
                 ForEach(KeyboardModel.Tab.allCases, id: \.self) { t in
                     Button {

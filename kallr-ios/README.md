@@ -1,7 +1,12 @@
 # Kall Keyboard for iPhone
 
-A small app plus the Kall Keyboard extension, in Kall Markets black and lime. The keyboard is a trading
-panel; typing stays on the iPhone keyboard (the globe key switches between them).
+A small app plus the Kall Keyboard extension, in Kall Markets black and lime. The keyboard types like the
+iPhone keyboard (letters, 123, #+=, shift and caps lock, space, return, auto-capitals, a double space for
+". ", hold to delete), and where the emoji key would be there's the Kall key: our logo with TRADE under
+it. It opens the trading panel below; ABC goes back to typing. A strip above the letters shows the
+newest calls from callers you follow (tap one to trade it), an order you're typing, and the clipboard
+check. Each key has its own haptic (letters, space, delete, shift, caps lock, 123, the Kall key); iOS
+plays keyboard haptics only with Allow Full Access.
 
 - **Following:** calls from the callers you follow (kept on the phone), read from Arkiv by
   `/api/keyboard/feed`: the post's text from its Swarm snapshot, the move since the post, time left, and

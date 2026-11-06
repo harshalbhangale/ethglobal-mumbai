@@ -43,7 +43,7 @@ their records on Arkiv; you sign with MetaMask or the Privy wallet you get when 
 | **Kall Web App** ([kallr.vercel.app/app](https://kallr.vercel.app/app), PWA) | One screen: the callers you follow, their real posts from X with Kall Markets' verdict (entry, hit or miss, return) from Arkiv, Following / Explore / Favorites, and the trade ticket always beside them; Copy call fills it. Orders (open, closed, history with Arkiv proofs) and Wallet (MetaMask or the embedded wallet, balances on Base) | Live; reads Arkiv and quotes Flash on mainnet |
 | **Kall Extension** (Chrome, X only for now) | On x.com: a trade card under call posts with live prices, the caller's record and the Call receipt; Flash's price impact, slippage and fee before you sign; a Basescan receipt with the route after; signed on X with MetaMask or Rabby | Built; loads unpacked |
 | **Kall Keyboard** (Android, built on [FlorisBoard](https://github.com/florisboard/florisboard)) | Works wherever calls are posted (Telegram, X, WhatsApp): reads a call from a copied or shared message, shows the caller's record, and trades it in the keyboard's panel with the Privy wallet | Built; debug APK, talks to the web app's `/api/keyboard` |
-| **Kall Keyboard** (iPhone, `kallr-ios`) | A trading panel keyboard in any app: Following (calls from the callers you follow, with the post text, live move and record; Following / Explore; Active, Settled, Favorites), Trade (Market, Limit or TWAP, any amount, exits, a review with a fresh Flash quote, then one tap to place), Orders (live Flash status, Cancel) and Wallet. Orders are placed from a capped Kall wallet the server holds | Built; installed from Xcode; see [kallr-ios/README.md](kallr-ios/README.md) |
+| **Kall Keyboard** (iPhone, `kallr-ios`) | A typing keyboard for any app with a Kall key that opens the trading panel: Following (calls from the callers you follow, with the post text, live move and record; Following / Explore; Active, Settled, Favorites), Trade (Market, Limit or TWAP, any amount, exits, a review with a fresh Flash quote, then one tap to place), Orders (live Flash status, Cancel) and Wallet. Orders are placed from a capped Kall wallet the server holds | Built; installed from Xcode; see [kallr-ios/README.md](kallr-ios/README.md) |
 | **Safety checks** | Token: honeypot, owner powers, taxes, liquidity, age. Caller: did their wallet sell what they called? | Token checks live (no key); wallet check needs a free Etherscan key |
 
 ## Run it
@@ -87,8 +87,8 @@ TP/SL attach to buys only (a spot sell leaves you in USDC). Tradable today: ETH 
 
 ## Kall Keyboard on iPhone
 
-The demo surface. `kallr-ios` is a SwiftUI app plus a keyboard extension; typing stays on the iPhone
-keyboard and the globe key switches to Kall:
+The demo surface. `kallr-ios` is a SwiftUI app plus a keyboard extension. Kall Keyboard types like the
+iPhone keyboard, with a Kall key (our logo, TRADE) next to 123 that opens the panel:
 
 - **Following:** calls from the callers you follow (kept on the phone), with each post's text from its
   Swarm snapshot, the move since the post and the caller's record. Explore lists everyone Kall Markets
