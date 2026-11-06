@@ -87,7 +87,12 @@ export function FlashReceiptView({ receipt, className = "" }: { receipt: FlashRe
               </p>
               {/* Always one line tall, so rows never jump as details arrive. */}
               <p className={`flex min-h-4 flex-wrap items-center gap-x-2 text-xs leading-4 tabular-nums ${row.state === "failed" ? "text-down" : row.state === "live" ? "text-ink-soft" : "text-slate"}`}>
-                <span className={row.key === "signed" || row.key === "sent" ? "font-mono" : ""}>{row.detail}</span>
+                <span
+                  title={row.detail}
+                  className={`min-w-0 max-w-full ${row.state === "failed" ? "" : "truncate"} ${(row.key === "signed" || row.key === "sent") && row.state === "done" ? "font-mono" : ""}`}
+                >
+                  {row.detail}
+                </span>
                 {row.copy && (
                   <button
                     type="button"

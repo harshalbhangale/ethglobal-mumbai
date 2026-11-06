@@ -372,7 +372,11 @@ describe("sign on X in MetaMask, when picked", () => {
       eth_signTypedData_v4: (p) => (String(p[1]).includes("Bracket") ? "0xb2" : "0xa1"),
     });
     await vi.waitFor(() => expect(card.textContent).toContain("Bought ETH with $25.00"));
-    expect([...card.querySelectorAll(".steps .step")].map((s) => s.className)).toEqual(Array(6).fill("step done"));
+    // The Definitive Flash receipt: quote, signed by MetaMask and sent are done; the fill follows.
+    const rowStates = () => [...card.querySelectorAll<HTMLElement>(".flash-receipt .fr-row")].map((r) => r.className.replace("fr-row ", ""));
+    expect(rowStates().slice(0, 3)).toEqual(["done", "done", "done"]);
+    expect(q(card, '.fr-row[data-row="signed"]').textContent).toContain("Signed by MetaMask0x0000…00a1");
+    expect(q(card, '.fr-row[data-row="sent"]').textContent).toContain("Order 887ccf13…0000");
     expect(open).not.toHaveBeenCalled();
     // The receipt asks Flash for the fill with the wallet that placed it (Flash needs the funder).
     await vi.waitFor(() =>
@@ -414,7 +418,11 @@ describe("sign on X in MetaMask, when picked", () => {
     expect(links).toContain("https://basescan.org/tx/0xhash");
     expect(links).toContain(`https://basescan.org/address/${from}`);
     await vi.waitFor(() => expect(q(card, ".receipt").textContent).toContain("Uniswap V3 · via Definitive"));
-    expect([...card.querySelectorAll<HTMLAnchorElement>(".receipt a")].map((a) => a.href)).toContain(`https://basescan.org/tx/0x${"ab".repeat(32)}`);
+    expect(rowStates()).toEqual(["done", "done", "done", "done"]);
+    expect(q<HTMLAnchorElement>(card, '.fr-row[data-row="filled"] a').href).toBe(`https://basescan.org/tx/0x${"ab".repeat(32)}`);
+    // The rows sit under the success burst, inside the done card.
+    const done = q(card, ".done-card");
+    expect([...done.children].map((c) => c.className).slice(0, 3)).toEqual(["sb", "done-head", "flash-receipt"]);
     // Success burst: check, amount, asset and the TP/SL pair, then the swap on Basescan.
     const burst = q(card, ".sb");
     expect(burst.getAttribute("role")).toBe("status");
@@ -452,7 +460,14 @@ describe("sign on X with the Kall wallet, by default", () => {
       if (m.type === "prices") return { prices: [{ asset: "ETH", price: "2500", source: "chainlink-base" }] };
       if (m.type === "x-status") return { kall: { address: KALL, expires: Date.now() + 86_400_000 }, signer: "kall" };
       if (m.type === "x-order")
-        return { orderId: "99999999-aaaa-bbbb-cccc-000000000000", from: KALL, exits: null, txs: [{ label: "Approve", hash: `0x${"cd".repeat(32)}` }], signature };
+        return {
+          orderId: "99999999-aaaa-bbbb-cccc-000000000000",
+          from: KALL,
+          exits: null,
+          txs: [{ label: "Approve", hash: `0x${"cd".repeat(32)}` }],
+          signature,
+          quote: { from: { amount: "5" }, to: { amount: "0.002" }, estimatedPriceImpact: "0.0003", fees: { estimatedFeeNotional: "0" } },
+        };
       if (m.type === "flash-order-status") return { status: "ORDER_STATUS_FILLED", fills: [{ transactionId: `0x${"ab".repeat(32)}`, venues: [] }] };
       if (m.type === "signer") return { kall: { address: KALL, expires: Date.now() + 86_400_000 }, signer: "metamask" };
       return null;
@@ -472,6 +487,11 @@ describe("sign on X with the Kall wallet, by default", () => {
     const sent = worker.mock.calls.find(([m]) => m.type === "x-order")?.[0] as unknown as { order: Record<string, unknown>; caller: string };
     expect(sent.order).toMatchObject({ asset: "ETH", side: "buy", qty: "5", orderType: "market", funderAddress: KALL });
     expect(sent.caller).toBe("kol");
+    // The Flash receipt shows what the server did: Flash's quote, the Kall wallet, the order ID, the fill.
+    await vi.waitFor(() => expect(q(made.card, '.fr-row[data-row="filled"]').className).toBe("fr-row done"));
+    expect(q(made.card, '.fr-row[data-row="quote"]').textContent).toBe("✓Quote from Definitive$2,500.00 · impact 0.03% · no fee");
+    expect(q(made.card, '.fr-row[data-row="signed"]').textContent).toBe("✓Signed by your Kall wallet0x0000…00c4");
+    expect(q(made.card, '.fr-row[data-row="sent"]').textContent).toContain("Order 99999999…0000");
     // No wallet prompt and no desk: the server signed.
     expect(calls.map((c) => c.method)).not.toContain("eth_requestAccounts");
     expect(open).not.toHaveBeenCalled();

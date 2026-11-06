@@ -56,6 +56,13 @@ export async function POST(req: Request) {
       txs: placed.txs,
       signature: placed.signatures.userSignature,
       typedData: placed.quote.evm.orderTypedData,
+      // Flash's own numbers, for the receipt on the X card: amounts, price impact and fee.
+      quote: {
+        from: placed.quote.from,
+        to: placed.quote.to,
+        estimatedPriceImpact: placed.quote.estimatedPriceImpact ?? null,
+        fees: placed.quote.fees ?? null,
+      },
     });
   } catch (err) {
     return errorResponse(err);

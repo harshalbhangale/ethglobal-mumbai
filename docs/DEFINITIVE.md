@@ -32,6 +32,21 @@ validate every order again before it reaches Flash.
 Every surface now trades from the same Kall wallet. Keyboard builds from before the link still use the shared demo
 wallet our server holds (`0xa8405c…8072`) until its funds move.
 
+## The Flash receipt
+
+With the Kall wallet there is no wallet pop-up, so every trade in the web app and on the X card ends with a
+Definitive Flash receipt that fills in step by step and stays on screen:
+
+1. **Quote from Definitive**: price, price impact and fee, from the Flash quote
+2. **Signed by your Kall wallet** (or MetaMask): the signing wallet
+3. **Sent to Definitive Flash**: the Flash order ID, with a copy button
+4. **Filled**: the amount received and the swap on Basescan, polled from the order's fills. A limit or TWAP order
+   says it stays open in Open orders until it fills
+
+A failed step turns its own row red with the reason. The model is shared in
+[`packages/domain/src/flash-receipt.ts`](../packages/domain/src/flash-receipt.ts). Order history also shows each
+order's ID and, once filled, its swap on Basescan.
+
 ## Code
 
 - [`packages/integrations/src/definitive.ts`](../packages/integrations/src/definitive.ts): the Flash client, order

@@ -1,7 +1,9 @@
 import type { Answer, PostRef } from "./call-view";
 import { appOrigin } from "./config";
 import { el, openDesk, safeLink, send, wordmark } from "./dom";
-import { BASESCAN, type CardOrder, placeOnX, type QuoteFacts, type Step, toFlashInput, waitForFill, waitForTradeRecord } from "./flash-direct";
+import { type QuoteNumbers, receiptQuote } from "@kallr/domain/flash-receipt";
+import { BASESCAN, type CardOrder, placeOnX, type QuoteFacts, toFlashInput, waitForFill, waitForTradeRecord } from "./flash-direct";
+import { type FlashReceiptRows, flashReceiptRows, stepEvents } from "./flash-receipt-card";
 import { followButton } from "./follows";
 import { baseLogo, definitiveLogo, tokenIcon } from "./logos";
 import { cardOrderText, COPYABLE, DECIMAL, deskOrderUrl } from "./post";
@@ -37,72 +39,6 @@ export const MIN_LIQUIDITY_USD = 50_000;
 
 const money = (value: number) =>
   Number.isFinite(value) ? `$${value.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}` : "";
-
-/** Every step placeOnX can report, in order. Approvals and the TP/SL signature appear only when they happen. */
-const TRACK: Array<{ step: Step; label: string; optional?: boolean }> = [
-  { step: "connecting", label: "Connect wallet · Base" },
-  { step: "quoting", label: "Get a Flash quote" },
-  { step: "wrapping", label: "Wrap ETH to WETH", optional: true },
-  { step: "approving", label: "Approve USDC (sized to this order)", optional: true },
-  { step: "approving-exits", label: "Approve the TP/SL exit", optional: true },
-  { step: "signing", label: "Sign the order" },
-  { step: "signing-exits", label: "Sign the TP/SL", optional: true },
-  { step: "submitting", label: "Place on Base" },
-];
-
-/** The Kall wallet signs on the server in one go: no wallet prompts to walk through. */
-const KALL_TRACK: typeof TRACK = [
-  { step: "signing", label: "Your Kall wallet signs · no pop-up" },
-  { step: "submitting", label: "Place on Base" },
-];
-
-/** The live step list: done ✓, current ●, upcoming ○; optional steps show only once reached. */
-export function stepTracker(track = TRACK) {
-  const list = el("ol", { class: "steps", "aria-live": "polite" });
-  const reached = new Set<Step>();
-  let current: Step | null = null;
-  let failed = false;
-  let failMessage = "";
-  const render = () => {
-    const order = track.filter((t) => !t.optional || reached.has(t.step));
-    const at = current ? order.findIndex((t) => t.step === current) : -1;
-    list.replaceChildren(
-      ...order.map((t, i) => {
-        const state = i < at ? "done" : i === at ? (failed ? "failed" : "active") : "todo";
-        return el(
-          "li",
-          { class: `step ${state}` },
-          el("span", { class: "step-dot", "aria-hidden": "true" }, state === "done" ? "✓" : state === "failed" ? "!" : ""),
-          el("span", {}, t.label, state === "failed" && failMessage ? el("small", { class: "step-error" }, failMessage) : null),
-        );
-      }),
-    );
-  };
-  render();
-  return {
-    root: list,
-    to(step: Step) {
-      reached.add(step);
-      current = step;
-      failed = false;
-      render();
-    },
-    /** Marks the current step failed and says why, right under it. */
-    fail(message = "") {
-      failed = true;
-      failMessage = message;
-      render();
-    },
-    finish() {
-      current = null;
-      list.replaceChildren(
-        ...track.filter((t) => !t.optional || reached.has(t.step)).map((t) =>
-          el("li", { class: "step done" }, el("span", { class: "step-dot", "aria-hidden": "true" }, "✓"), el("span", {}, t.label)),
-        ),
-      );
-    },
-  };
-}
 
 /** Turns wallet and Flash errors into one plain sentence the user can act on. */
 export function friendlyError(error: unknown, spending: string) {
@@ -429,22 +365,35 @@ export function flashCard(input: {
     native: side === "sell" && choice?.kind === "known" && choice.key === "ETH",
   });
 
-  type Placed = { orderId: string; from: string; exits: string | null; txs: Array<{ label: string; hash: string }>; signature: string | null };
+  type Placed = {
+    orderId: string;
+    from: string;
+    exits: string | null;
+    txs: Array<{ label: string; hash: string }>;
+    signature: string | null;
+    /** Flash's quote numbers, from the Kall-wallet path (the server quoted). */
+    quote?: QuoteNumbers | null;
+  };
 
   let busy = false;
-  /** Runs one placement with its step list, then shows the receipt (or the error under the failed step). */
-  async function place(track: typeof TRACK, signer: string, go: (tracker: ReturnType<typeof stepTracker>) => Promise<Placed>) {
+  /**
+   * Runs one placement with the Definitive Flash receipt filling in row by row, then shows the success
+   * burst over it (or marks the failed row red with the error).
+   */
+  async function place(signer: string, go: (rows: FlashReceiptRows) => Promise<Placed>) {
     busy = true;
     submit.setAttribute("disabled", "");
-    const tracker = stepTracker(track);
-    progress.replaceChildren(tracker.root);
+    const rows = flashReceiptRows(signer === "MetaMask" ? "MetaMask" : "your Kall wallet");
+    const placedSide = side;
+    const receivedSymbol = side === "buy" ? tokenSym() : "USDC";
+    progress.replaceChildren(rows.root);
     progress.hidden = false;
     review.hidden = true;
     status.textContent = "";
     const spent = side === "buy" ? money(Number(amount.value)) : `${amount.value} ${tokenSym()}`;
     try {
-      const result = await go(tracker);
-      tracker.finish();
+      const result = await go(rows);
+      rows.emit({ type: "sent", orderId: result.orderId });
       walletChip.textContent = `${result.from.slice(0, 6)}…${result.from.slice(-4)}`;
       walletChip.hidden = false;
       // Flash returned an order ID: only now does the success moment play.
@@ -466,12 +415,15 @@ export function flashCard(input: {
           signer,
           signature: result.signature,
           txs: result.txs,
+          rows,
+          side: placedSide,
+          symbol: receivedSymbol,
         }),
       );
       amount.value = "";
     } catch (error) {
       const message = friendlyError(error, side === "buy" ? "USDC" : choice?.kind === "known" && choice.key === "ETH" ? "ETH" : tokenSym());
-      tracker.fail(message);
+      rows.emit({ type: "failed", message });
       status.textContent = message;
     } finally {
       busy = false;
@@ -485,24 +437,34 @@ export function flashCard(input: {
 
   /** MetaMask on the page: quote, approve, sign and submit right here on X, one prompt per step. */
   const placeHere = () =>
-    place(TRACK, "MetaMask", (tracker) =>
-      placeOnX(
+    place("MetaMask", (rows) => {
+      const placing = side;
+      return placeOnX(
         cardOrder(),
-        (step) => tracker.to(step),
-        (facts) => progress.prepend(quoteSummary(facts, side === "buy" ? tokenSym() : "USDC")),
-      ),
-    );
+        (step, from) => rows.emit(...stepEvents(step, from)),
+        (facts, quote) => {
+          rows.emit({ type: "quoted", quote: receiptQuote(quote, placing) });
+          progress.prepend(quoteSummary(facts, placing === "buy" ? tokenSym() : "USDC"));
+        },
+      );
+    });
 
   /** The Kall wallet: Kall's server quotes, signs and places it with no pop-up. */
   const placeWithKall = (from: string) =>
-    place(KALL_TRACK, "Your Kall wallet", async (tracker) => {
-      tracker.to("signing");
+    place("Your Kall wallet", async (rows) => {
+      const placing = side;
+      // Kall's server quotes, signs and sends in one call: the rows complete when it answers.
+      rows.emit({ type: "quoting" });
       const built = toFlashInput(cardOrder(), from);
       if (!built.ok) throw new Error(built.error);
       const res = await send<Placed & { failed?: string }>({ type: "x-order", order: built.input, caller: post.handle });
       if (!res) throw new Error("Couldn't reach Kall Markets. Check the app is running, then try again.");
       if (res.failed) throw new Error(res.failed);
-      tracker.to("submitting");
+      rows.emit(
+        { type: "quoted", quote: res.quote ? receiptQuote(res.quote, placing) : { price: null, impact: null, feeUsd: null } },
+        { type: "signed", wallet: res.from },
+        { type: "sending" },
+      );
       return res;
     });
 
@@ -711,8 +673,9 @@ const short = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;
 const venueName = (v: string) => v.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 /**
- * After a fill: the network, the wallet, every transaction the wallet sent, and the swap itself once
- * Definitive executes it, each linked to Basescan. The swap hash arrives a few seconds later.
+ * Once Flash accepts the order: the success burst, then the Definitive Flash receipt rows (quote,
+ * signature, order ID, fill), then the route, every transaction the wallet sent itself, the
+ * signature and the Arkiv record. The fill arrives a few seconds later and completes the last row.
  */
 export function receipt(r: {
   title: string;
@@ -726,10 +689,14 @@ export function receipt(r: {
   /** The order's EIP-712 signature, when known. */
   signature?: string | null;
   txs: Array<{ label: string; hash: string }>;
+  /** The receipt rows that filled in while placing; moved under the burst here. */
+  rows: FlashReceiptRows;
+  side: "buy" | "sell";
+  /** What a fill pays out: the token on a buy, USDC on a sell. */
+  symbol: string;
 }) {
   const row = (k: string, v: Node | string) => [el("dt", {}, k), el("dd", {}, v)];
   const burst = r.summary ? successBurst(r.summary) : null;
-  const swap = el("dd", { class: "swap-pending" }, "Waiting for Definitive to fill on Base…");
   const venue = el("dd", {}, "Best route by Definitive");
   const arkivTerm = el("dt", {}, "Arkiv");
   const arkiv = el("dd", { class: "swap-pending" }, "Recording the trade…");
@@ -738,11 +705,10 @@ export function receipt(r: {
     { class: "done-card" },
     burst?.root,
     el("div", { class: "done-head" }, el("strong", {}, r.title), el("span", { class: "network-badge" }, baseLogo(14), "Base mainnet")),
+    r.rows.root,
     el(
       "dl",
       { class: "review receipt" },
-      el("dt", {}, "Swap"),
-      swap,
       el("dt", {}, "Route"),
       venue,
       ...r.txs.flatMap((t) => row(t.label, safeLink(`${BASESCAN}/tx/${t.hash}`, `${short(t.hash)} ↗`))),
@@ -764,15 +730,14 @@ export function receipt(r: {
     arkiv.classList.remove("swap-pending");
     arkiv.replaceChildren(safeLink(`https://rabdi.explorer.arkiv.network/entity/${key}`, "Trade record ↗"));
   });
-  void waitForFill(r.orderId, r.from).then((fill) => {
-    if (!fill) {
-      swap.replaceChildren("Still filling: check the order page");
+  void waitForFill(r.orderId, r.from, r.side).then((fill) => {
+    if (!fill || "closed" in fill) {
+      r.rows.emit(fill ? { type: "failed", message: "Definitive closed the order without filling it." } : { type: "slow" });
       burst?.setLink(`${BASESCAN}/address/${r.from}`, "Your wallet on Basescan ↗");
       return;
     }
+    r.rows.emit({ type: "filled", tx: fill.hash, received: fill.received, symbol: r.symbol });
     burst?.setLink(`${BASESCAN}/tx/${fill.hash}`, "View swap on Basescan ↗");
-    swap.classList.remove("swap-pending");
-    swap.replaceChildren(safeLink(`${BASESCAN}/tx/${fill.hash}`, `${short(fill.hash)} ↗`));
     if (fill.venues.length) venue.replaceChildren(`${fill.venues.map(venueName).join(" + ")} · via Definitive`);
   });
   return card;

@@ -5,6 +5,7 @@ import {
   flashQuoteSchema,
   type FlashSignatures,
 } from "@kallr/integrations/definitive";
+import { closedWithoutFill, fillFrom } from "@kallr/domain/flash-receipt";
 import { send } from "./dom";
 import { connect, ensureBase, sendAndWait, signTypedData } from "./wallet";
 
@@ -104,23 +105,35 @@ export function quoteFacts(q: FlashQuote): QuoteFacts {
 
 export const BASESCAN = "https://basescan.org";
 
-export type SwapFill = { hash: string; venues: string[] };
+/** A fill: the swap's hash, the venues it routed through and the amount received (when Flash says). */
+export type SwapFill = { hash: string; venues: string[]; received: string | null };
+
+type OrderStatus = {
+  status: string | null;
+  fills?: Array<{ transactionId: string | null; venues?: string[] }>;
+  filled?: { targetAmount?: string | null; contraAmount?: string | null } | null;
+};
 
 /**
- * Waits for Definitive to execute the signed order on Base and returns the swap's transaction hash and
- * the venues it routed through. `funder` is the wallet that placed it: Flash needs it to find the order.
- * Null when no fill shows up in time (the order page still has it).
+ * Waits for Definitive to execute the signed order on Base. `funder` is the wallet that placed it:
+ * Flash needs it to find the order. `{ closed: true }` when Flash closed it without a fill; null when
+ * no fill shows up in time (the order page still has it).
  */
-export async function waitForFill(orderId: string, funder: string, tries = 20, everyMs = 3000): Promise<SwapFill | null> {
+export async function waitForFill(
+  orderId: string,
+  funder: string,
+  side: "buy" | "sell" = "buy",
+  tries = 20,
+  everyMs = 3000,
+): Promise<SwapFill | { closed: true } | null> {
   for (let i = 0; i < tries; i++) {
-    const res = await send<{ status: string | null; fills?: Array<{ transactionId: string | null; venues: string[] }> }>({
-      type: "flash-order-status",
-      orderId,
-      funder,
-    }).catch(() => null);
-    const fill = res?.fills?.find((f) => f.transactionId && /^0x[0-9a-fA-F]{64}$/.test(f.transactionId));
-    if (fill?.transactionId) return { hash: fill.transactionId, venues: fill.venues ?? [] };
-    if (res?.status && /CANCEL|REJECT|FAIL|EXPIRE/i.test(res.status)) return null;
+    const res = await send<OrderStatus>({ type: "flash-order-status", orderId, funder }).catch(() => null);
+    const fill = fillFrom(res, side);
+    if (fill) {
+      const venues = res?.fills?.find((f) => f.transactionId === fill.tx)?.venues ?? [];
+      return { hash: fill.tx, venues, received: fill.received };
+    }
+    if (closedWithoutFill(res?.status)) return { closed: true };
     await new Promise((r) => setTimeout(r, everyMs));
   }
   return null;
@@ -136,9 +149,15 @@ export async function waitForTradeRecord(orderId: string, funder: string, tries 
   return null;
 }
 
-export async function placeOnX(o: CardOrder, onStep: (step: Step) => void, onQuote?: (facts: QuoteFacts) => void) {
-  onStep("connecting");
+export async function placeOnX(
+  o: CardOrder,
+  report: (step: Step, from?: string) => void,
+  onQuote?: (facts: QuoteFacts, quote: FlashQuote) => void,
+) {
+  report("connecting");
   const from = await connect();
+  // Every step after connecting carries the wallet, for the Flash receipt.
+  const onStep = (step: Step) => report(step, from);
   await ensureBase();
   const built = toFlashInput(o, from);
   if (!built.ok) throw new Error(built.error);
@@ -149,7 +168,7 @@ export async function placeOnX(o: CardOrder, onStep: (step: Step) => void, onQuo
   const parsed = flashQuoteSchema.safeParse(raw.quote);
   if (!parsed.success) throw new Error("Flash returned a quote we couldn't read. Try again.");
   const quote: FlashQuote = parsed.data;
-  onQuote?.(quoteFacts(quote));
+  onQuote?.(quoteFacts(quote), quote);
   /** Transactions the wallet sent itself (wrap, approvals), for Basescan links. */
   const txs: Array<{ label: string; hash: string }> = [];
 

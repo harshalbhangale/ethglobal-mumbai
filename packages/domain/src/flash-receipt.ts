@@ -141,7 +141,7 @@ export function receiptRows(r: FlashReceipt): ReceiptRow[] {
     ...(s[2] === "done" && r.orderId ? { copy: r.orderId } : {}),
   };
   const waiting = r.resting
-    ? "Resting on Flash: it stays open in Open orders until Definitive fills it."
+    ? "Resting: stays open in Open orders until it fills."
     : r.slow
       ? "Still filling. It shows in Order history once Definitive fills it."
       : "Waiting for Definitive to fill…";

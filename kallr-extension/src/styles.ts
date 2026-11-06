@@ -243,6 +243,32 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .done-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .network-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 4px; border-radius: 99px; border: 1px solid var(--line); color: var(--foreground); font: 600 11px/1 system-ui, sans-serif; }
 .receipt { margin: 6px 0 0; padding: 8px 0 0; background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; font-size: 12px; }
+/* Definitive Flash receipt: four rows (quote, signed, sent, filled) that fill in live. Fixed-height
+   detail lines so nothing shifts as values arrive. Lime on X's dark themes, ink on the white theme. */
+.flash-receipt { --fr-accent: var(--lime); --fr-on-accent: var(--on-lime); margin: 0; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--raised); }
+:host([data-theme="light"]) .flash-receipt { --fr-accent: #0e1407; --fr-on-accent: #c6f25a; }
+.done-card .flash-receipt { margin: 6px 0 2px; }
+.fr-head { display: flex; justify-content: space-between; margin: 0 0 8px; color: var(--muted); font: 700 10.5px/1.2 system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+.fr-chain { letter-spacing: 0; text-transform: none; }
+.fr-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.fr-row { display: flex; gap: 10px; align-items: flex-start; }
+.fr-dot { display: grid; place-items: center; width: 18px; height: 18px; flex: 0 0 auto; margin-top: 1px; border-radius: 50%; border: 1.5px solid var(--line-strong); color: var(--muted); font: 700 10px/1 system-ui, sans-serif; }
+.fr-row.live .fr-dot { border-color: var(--fr-accent); border-top-color: transparent; animation: kallr-spin .8s linear infinite; }
+.fr-row.done .fr-dot { background: var(--fr-accent); border-color: var(--fr-accent); color: var(--fr-on-accent); }
+.fr-row.failed .fr-dot { background: var(--negative); border-color: var(--negative); color: #fff; }
+@media (prefers-reduced-motion: reduce) { .fr-row.live .fr-dot { animation: none; border-top-color: var(--fr-accent); } }
+.fr-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; min-width: 0; flex: 1 1 auto; }
+.fr-title { color: var(--foreground); font-size: 13px; font-weight: 700; line-height: 1.3; }
+.fr-row.pending .fr-title { color: var(--muted); font-weight: 600; }
+.fr-row.failed .fr-title, .fr-row.failed .fr-detail { color: var(--negative); }
+.fr-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-height: 16px; color: var(--muted); font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.fr-row.live .fr-detail { color: var(--soft); }
+/* Live text stays on one line (no shift as it changes); an error may wrap so it reads in full. */
+.fr-row:not(.failed) .fr-detail-text { min-width: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fr-detail .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.fr-copy { cursor: pointer; padding: 0 6px; border-radius: 5px; border: 1px solid var(--line-strong); background: transparent; color: var(--muted); font: 600 11px/16px system-ui, sans-serif; }
+.fr-copy:hover { color: var(--foreground); border-color: var(--foreground); }
+.inline-card .fr-link, .fr-link { color: var(--fr-accent); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
 .swap-pending { color: var(--muted); font-weight: 500; animation: kallr-pulse 1.4s ease-in-out infinite; }
 @keyframes kallr-pulse { 50% { opacity: .45; } }
 
