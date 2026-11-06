@@ -19,6 +19,8 @@ export const TOKEN_CARD_CSS = `
 .token-card .tc-line { margin-top: 6px; }
 .token-card .tc-danger { color: #d93f45; } .token-card .tc-warning { color: #c77700; } .token-card .tc-ok { color: #12935f; }
 .token-card a { color: inherit; }
+.token-card.tc-failed { border-color: #d93f45; background: rgba(217, 63, 69, 0.08); }
+.token-card .tc-verdict { font-weight: 800; font-size: 16px; }
 `;
 
 /**
@@ -26,7 +28,36 @@ export const TOKEN_CARD_CSS = `
  * deliberately offers no trade: a ticker copy next to a contract could be a scam's bait.
  * A source that failed is said, never shown as clean.
  */
-export function tokenCheckCard(t: TokenCheck) {
+/**
+ * Does the contract match the coin the post names? A post saying $PEPE next to an address that holds
+ * no token, or a different one, fails the call check: the classic fake-contract shill.
+ */
+export function callCheck(t: TokenCheck, claimed: string | null): string | null {
+  const noToken = !t.symbol && (t.liquidityUsd ?? 0) === 0;
+  const short = `${t.address.slice(0, 6)}…${t.address.slice(-4)}`;
+  if (claimed && noToken) return `There's no $${claimed} at ${short}: no token trades at this address on Base.`;
+  if (claimed && t.symbol && t.symbol.toUpperCase() !== claimed.toUpperCase())
+    return `This contract is $${t.symbol}, not $${claimed}. The post's address doesn't match the coin it names.`;
+  if (!claimed && noToken) return `No token trades at ${short} on Base.`;
+  return null;
+}
+
+/** The first $TICKER a post names, ignoring $ amounts like $5 or $100K. */
+export function claimedTicker(text: string): string | null {
+  return text.match(/\$([A-Za-z][A-Za-z0-9]{1,9})\b/)?.[1]?.toUpperCase() ?? null;
+}
+
+export function tokenCheckCard(t: TokenCheck, claimed: string | null = null) {
+  const failed = callCheck(t, claimed);
+  if (failed)
+    return el(
+      "section",
+      { class: "token-card tc-failed", "aria-label": "Call check failed" },
+      el("div", { class: "tc-head" }, `Kall Markets · call check${claimed ? ` $${claimed}` : ""}`, el("span", { class: "tc-muted" }, "not advice")),
+      el("div", { class: "tc-line tc-danger tc-verdict" }, "✕ Call check failed"),
+      el("div", { class: "tc-line" }, failed),
+      el("div", { class: "tc-line tc-muted" }, "Trading is off for this post. Never buy from a contract address in a post without checking it."),
+    );
   const name = t.symbol ? `$${t.symbol}` : `${t.address.slice(0, 6)}…${t.address.slice(-4)}`;
   const serious = t.flags.filter((f) => f.severity !== "info");
   const verdict = serious.length

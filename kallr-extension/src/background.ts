@@ -50,19 +50,11 @@ async function afterMarket(req: Extract<Request, { type: "after-market" }>) {
   return res.json();
 }
 
-/** A caller's record from the posts this browser has seen, for their profile page. */
+/** A caller's record from Arkiv: every call Kall Markets has priced for them, settled or open. */
 async function callerRecord(handle: string) {
-  const key = `seen:${handle}`;
-  const seen = ((await chrome.storage.local.get(key))[key] as SeenPost[] | undefined) ?? [];
-  const [newest, ...rest] = seen;
-  if (!newest) return { calls: [], record: null, seen: 0 };
-  const res = await fetch(`${appOrigin}/api/after-market`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ handle, post: newest, history: rest }),
-  });
+  const res = await fetch(`${appOrigin}/api/callers/${handle}`, { signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`API ${res.status}`);
-  return { ...(await res.json()), seen: seen.length };
+  return res.json() as Promise<{ calls: unknown[]; writer: string | null }>;
 }
 
 async function watchlist(raw: unknown) {

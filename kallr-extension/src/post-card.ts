@@ -3,7 +3,7 @@ import { addFollowBadge } from "./creator-badge";
 import { el, send, shadowHost } from "./dom";
 import { flashCard } from "./flash-card";
 import { identityFromHref, mightBeCall } from "./post";
-import { TOKEN_CARD_CSS, tokenCheckCard } from "./token-card";
+import { claimedTicker, TOKEN_CARD_CSS, tokenCheckCard } from "./token-card";
 import { findXTicker, mountTickerButton } from "./x-ticker";
 
 /**
@@ -53,7 +53,7 @@ export async function decorate(article: HTMLElement) {
   if (tokenCheck) {
     const { host, root } = shadowHost("kallr-host");
     host.dataset.postId = post.postId;
-    root.append(el("style", {}, TOKEN_CARD_CSS), tokenCheckCard(tokenCheck));
+    root.append(el("style", {}, TOKEN_CARD_CSS), tokenCheckCard(tokenCheck, claimedTicker(post.text)));
     article.querySelector(".kallr-host")?.remove();
     post.textNode.after(host);
     return;

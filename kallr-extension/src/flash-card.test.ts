@@ -73,36 +73,20 @@ const q = <T extends Element = HTMLElement>(root: ParentNode, sel: string) => ro
 const buttons = (root: ParentNode, sel: string) => [...root.querySelectorAll<HTMLButtonElement>(sel)];
 
 describe("flashCard", () => {
-  it("has the card layout: price header, Call receipt strip, Copy button, Powered by footer", async () => {
+  it("has the card layout: price header, the call and Follow, Copy button, Powered by footer", async () => {
     const { card } = await mounted();
     expect(q(card, ".swap-title strong").textContent).toBe("Ethereum");
     // Logos are inlined, so they survive extension reloads.
     expect(q(card, ".swap-icon").getAttribute("src")).toMatch(/^data:image\/png;base64,/);
     expect(q(card, ".caller-strip .caller-handle").textContent).toBe("@kol");
-    expect(q(card, ".caller-strip .caller-record").textContent).toBe("1/1 calls moved their way · this call +2.5%");
+    // The card shows the call itself; the caller's record lives on their profile card.
+    expect(q(card, ".caller-strip .caller-record").textContent).toBe("Long $ETH");
     expect(q(card, ".caller-strip .x-follow").textContent).toBe("Follow");
-    expect(buttons(card, ".call-insights summary .ci-chip").map((c) => c.textContent)).toEqual([
-      "Bullish ETH",
-      "Caller record",
-      "Since the call",
-    ]);
+    expect(card.querySelector(".call-insights")).toBeNull();
     expect(q(card, ".inline-buy").textContent).toBe("⇄ Copy");
     expect(q(card, ".inline-panel").hidden).toBe(true);
     expect(q(card, ".swap-powered").textContent).toBe("Powered byDEFINITIVE");
     expect(q(card, ".swap-powered .definitive-logo").getAttribute("aria-label")).toBe("Definitive");
-  });
-
-  it("opens the Call receipt with the post as text, this call and the record", async () => {
-    const { card } = await mounted({ ...answer(), call: { ...answer().call!, horizonStated: true } });
-    const details = q<HTMLDetailsElement>(card, ".call-insights");
-    details.open = true;
-    details.dispatchEvent(new Event("toggle"));
-    const text = details.textContent ?? "";
-    expect(q(details, "blockquote").textContent).toBe(post.text);
-    expect(text).toContain("24h (stated)");
-    expect(text).toContain("Price at posting$2,400");
-    expect(text).toContain("Detected calls");
-    expect(q(details, ".recent-calls a").getAttribute("href")).toBe("https://x.com/kol/status/2");
   });
 
   it("copies a buy with TP/SL into the desk, sized in USD", async () => {

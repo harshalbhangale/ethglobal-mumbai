@@ -69,7 +69,7 @@ describe("watchlist storage", () => {
 });
 
 /** Routes the content script's messages to the worker's watchlist logic, and answers caller-record. */
-async function wire(record: unknown = { calls: [], seen: 0 }) {
+async function wire(record: unknown = { calls: [], writer: null }) {
   const chrome = fakeChrome();
   const { readWatchlist, updateWatchlist } = await import("./watchlist-storage");
   const sendMessage = vi.fn(async (message: { type: string; command?: { action: string; handle?: string } }) => {
@@ -115,7 +115,7 @@ describe("scanProfile", () => {
   it("mounts one card above the tabs with Follow, the record and recent calls", async () => {
     const postedAt = 1_800_000_000;
     await wire({
-      seen: 3,
+      writer: "0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53",
       calls: [
         { postId: "9", asset: "ETH", direction: "up", status: "hit", returnBps: 220, postedAt, expiresAt: postedAt + 86_400 },
         { postId: "8", asset: "ETH", direction: "up", status: "open", returnBps: 30, postedAt, expiresAt: postedAt + 9e9 },
@@ -137,20 +137,24 @@ describe("scanProfile", () => {
     expect(root?.querySelector(".card .title .x-follow")?.textContent).toBe("Follow");
     expect(root?.querySelector(".card-actions .cta")?.getAttribute("href")).toBe("https://kallr.test/app");
     expect(text).toContain("1/1");
-    expect(text).toContain("Detected from 3 posts by @kol");
+    expect(text).toContain("2 calls by @kol, each priced at the minute it was posted");
+    // The record is read from Arkiv, with a link to the writer's entities.
+    expect(root?.querySelector(".note a")?.getAttribute("href")).toBe(
+      "https://rabdi.explorer.arkiv.network/address/0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53",
+    );
     expect(root?.querySelector(".recent-calls a")?.getAttribute("href")).toBe("https://x.com/kol/status/9");
     const toggle = root?.querySelector<HTMLElement>(".card-toggle");
     toggle?.click();
     expect(toggle?.textContent).toBe("Hide details");
     expect(root?.querySelector(".card-overview")?.textContent).toContain("$ETH bullish1/1 moved their way");
   });
-  it("is honest when nothing has been seen, and leaves non-profile pages alone", async () => {
-    await wire({ calls: [], seen: 0 });
+  it("is honest when a caller has no calls yet, and leaves non-profile pages alone", async () => {
+    await wire({ calls: [], writer: null });
     history.replaceState(null, "", "/newkol");
     document.body.innerHTML = profilePage("newkol");
     const { scanProfile } = await import("./profile");
     await scanProfile();
-    expect(document.querySelector(".kallr-profile-host")?.shadowRoot?.textContent).toContain("No posts by @newkol seen yet");
+    expect(document.querySelector(".kallr-profile-host")?.shadowRoot?.textContent).toContain("No calls by @newkol on Kall Markets yet");
     history.replaceState(null, "", "/home");
     await scanProfile();
     expect(document.querySelector(".kallr-profile-host")).toBeNull();

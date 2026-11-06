@@ -32,11 +32,12 @@ function mount(anchor: HTMLElement, host: HTMLElement) {
   anchor.after(host);
 }
 
-type RecordAnswer = { calls?: SeenCall[]; seen?: number };
+type RecordAnswer = { calls?: SeenCall[]; writer?: string | null };
+const ARKIV_EXPLORER = "https://rabdi.explorer.arkiv.network";
 
 /**
- * The Kallr card on an X profile: the caller's record as metric
- * tiles, recent calls, and Open desk / Show details / Follow. From the posts this browser has seen.
+ * The Kall Markets card on an X profile: the caller's record from Arkiv as metric tiles, recent
+ * calls, and Open desk / Show details / Follow.
  * Refreshes at most once a minute per profile.
  */
 export async function scanProfile() {
@@ -56,7 +57,7 @@ export async function scanProfile() {
   const { host, root } = shadowHost("kallr-profile-host");
   host.dataset.handle = handle;
   host.dataset.refreshAt = String(Date.now() + 60_000);
-  const details = el("div", {}, el("p", { class: "note" }, "Loading the calls this browser has seen…"));
+  const details = el("div", {}, el("p", { class: "note" }, "Loading the record from Arkiv…"));
   const toggle = el("button", { type: "button", class: "card-toggle", "aria-expanded": "false" }, "Show details");
   const overview = el("div", { class: "card-overview", hidden: "" });
   const follow = followButton(handle, (label) => el("button", { type: "button", class: "x-follow" }, label) as HTMLButtonElement);
@@ -95,6 +96,9 @@ export async function scanProfile() {
   const answer = await send<RecordAnswer>({ type: "caller-record", handle });
   if (!host.isConnected || profileHandle() !== handle) return;
   calls = answer?.calls ?? [];
+  const proof = answer?.writer
+    ? safeLink(`${ARKIV_EXPLORER}/address/${answer.writer}`, "Stored on Arkiv ↗")
+    : null;
   details.replaceChildren(
     ...(answer
       ? [recordPanel(calls)]
@@ -102,9 +106,10 @@ export async function scanProfile() {
     el(
       "p",
       { class: "note" },
-      answer?.seen
-        ? `Detected from ${answer.seen} post${answer.seen === 1 ? "" : "s"} by @${handle} this browser has seen. Priced at posting; not wallet returns.`
-        : `No posts by @${handle} seen yet. Scroll their posts and calls get priced as they appear.`,
+      calls.length
+        ? `${calls.length} call${calls.length === 1 ? "" : "s"} by @${handle}, each priced at the minute it was posted. Not wallet returns. `
+        : `No calls by @${handle} on Kall Markets yet. `,
+      proof,
     ),
     ...(calls.length ? [recentCalls(handle, calls, 3) as HTMLElement] : []),
   );

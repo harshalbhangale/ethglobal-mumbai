@@ -1,6 +1,4 @@
-import { callInsights } from "./call-insights";
 import type { Answer, PostRef } from "./call-view";
-import { formatBps } from "./card-metrics";
 import { appOrigin } from "./config";
 import { el, openDesk, safeLink } from "./dom";
 import { BASESCAN, placeOnX, type QuoteFacts, type Step, waitForFill } from "./flash-direct";
@@ -15,7 +13,7 @@ import { hasBrowserWallet, rejected } from "./wallet";
 export { tokenIcon } from "./logos";
 
 /**
- * The post card: live price header, the caller strip (record + Follow), the Call receipt strip, then
+ * The post card: live price header, the caller strip (call + Follow), then
  * the trade flow. Trades on Base through Definitive Flash with take-profit / stop-loss attached as
  * one bracket. With MetaMask / Rabby on the page every step is signed right here, with a step
  * tracker; otherwise the Kall Markets desk opens to sign with the Privy wallet.
@@ -150,30 +148,14 @@ export function flashCard(input: {
   const close = el("button", { type: "button", class: "inline-close", hidden: "", "aria-label": "Close" }, "✕ Close");
   if (!tradable) buy.hidden = true;
 
-  // --- caller strip: who made the call, their record at a glance, and Follow ---
+  // --- caller strip: who made the call, which way, and Follow. Their record lives on their profile. ---
   const callerStrip = (() => {
-    const calls = input.answer?.calls ?? [];
-    const scored = calls.filter((c) => c.status === "hit" || c.status === "miss" || c.status === "flat");
-    const hits = scored.filter((c) => c.status === "hit").length;
-    const summary = scored.length
-      ? `${hits}/${scored.length} calls moved their way`
-      : calls.length
-        ? `${calls.length} call${calls.length === 1 ? "" : "s"} seen · none scored yet`
-        : "New caller on Kall Markets";
-    const thisMove =
-      call?.returnBps != null
-        ? el("span", { class: call.returnBps >= 0 ? "up" : "down" }, ` · this call ${formatBps(call.returnBps)}`)
-        : null;
     const follow = followButton(post.handle, (label) => el("button", { type: "button", class: "x-follow" }, label) as HTMLButtonElement);
+    const read = call ? el("span", { class: `caller-record ${call.direction === "up" ? "up" : "down"}` }, `${call.direction === "up" ? "Long" : "Short"} $${call.asset}`) : null;
     return el(
       "div",
       { class: "caller-strip" },
-      el(
-        "div",
-        { class: "caller-id" },
-        safeLink(`https://x.com/${post.handle}`, `@${post.handle}`, "caller-handle"),
-        el("span", { class: "caller-record" }, summary, thisMove),
-      ),
+      el("div", { class: "caller-id" }, safeLink(`https://x.com/${post.handle}`, `@${post.handle}`, "caller-handle"), read),
       follow,
     );
   })();
@@ -550,7 +532,6 @@ export function flashCard(input: {
   // Clicks inside the card must not open the post underneath.
   card.addEventListener("click", (event) => event.stopPropagation());
 
-  const insights = input.answer ? callInsights({ post, answer: input.answer, live: () => live }) : null;
   const headIcon = el("span", { class: "head-icon" });
   const headName = el("strong", {});
   const headSym = el("span", {});
@@ -579,12 +560,11 @@ export function flashCard(input: {
     card.hidden = true;
     card.append(
       el("header", { class: "swap-head" }, attachedIcon, el("div", { class: "swap-title" }, attachedTitle), close),
-      ...(insights ? [insights] : []),
       panel,
       el("div", { style: "padding: 0 16px 12px" }, footer),
     );
   } else {
-    card.append(header, callerStrip, ...(insights ? [insights] : []), panel);
+    card.append(header, callerStrip, panel);
     if (!tradable) card.append(untradable);
     card.append(el("div", { style: "padding: 0 16px 12px" }, footer));
   }

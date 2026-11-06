@@ -12,6 +12,8 @@ import {
   findCall,
   hasResult,
   readDueCalls,
+  readOpenCalls,
+  readResults,
   resultValues,
   type TradeContext,
   Trades,
@@ -44,6 +46,38 @@ function makeWriter() {
 
 const writer = makeWriter();
 export const arkivWriterAddress: Hex | null = writer?.address ?? null;
+
+/** One caller's record as Arkiv has it: settled calls plus the ones still open, newest first. */
+export async function callerRecordFromArkiv(handle: string) {
+  if (!writer) return null;
+  const h = handle.toLowerCase();
+  const now = Math.floor(Date.now() / 1000);
+  const [settled, open] = await Promise.all([readResults(writer.reader, writer.address, h), readOpenCalls(writer.reader, writer.address, now)]);
+  const dir = (v: unknown) => (v === "down" || v === "short" ? "down" : "up") as "up" | "down";
+  const calls = [
+    ...settled.map((e) => ({
+      postId: String(e.postId.value),
+      asset: String(e.asset.value),
+      direction: dir(e.direction.value),
+      status: (e.status.value === "hit" ? "hit" : e.status.value === "miss" ? "miss" : "flat") as "hit" | "miss" | "flat",
+      returnBps: Number(e.returnBps.value),
+      postedAt: Number(e.postedAt.value),
+      expiresAt: Number(e.deadline.value),
+    })),
+    ...open
+      .filter((e) => String(e.caller.value) === h)
+      .map((e) => ({
+        postId: String(e.postId.value),
+        asset: String(e.asset.value),
+        direction: dir(e.direction.value),
+        status: "open" as const,
+        returnBps: null,
+        postedAt: Number(e.postedAt.value),
+        expiresAt: Number(e.deadline.value),
+      })),
+  ].sort((a, b) => b.postedAt - a.postedAt);
+  return { calls, writer: writer.address };
+}
 
 let queue: Promise<unknown> = Promise.resolve();
 function enqueue(label: string, job: () => Promise<void>) {
