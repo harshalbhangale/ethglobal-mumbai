@@ -61,6 +61,18 @@ final class KeyboardModel: ObservableObject {
     @Published var slPct = 5.0
     @Published var exitsOn = true
     @Published var advancedOpen = false
+
+    // Any Base token: `asset` is ETH, BTC or a contract address; these describe an address.
+    @Published var assetSymbol = ""
+    @Published var assetPrice: Double?
+    @Published var assetLogo: URL?
+    // The token picker: search by name, symbol or a pasted contract.
+    @Published var picking = false { didSet { if picking != oldValue { controller?.updateHeight() } } }
+    @Published var query = ""
+    @Published var hits: [Kallr.TokenHit]?
+    @Published var searching = false
+    @Published var pickerNote: String?
+    private var searchTask: Task<Void, Never>?
     @Published var kind = Kind.market
     @Published var limitPct = -5.0
     @Published var twapMinutes = 60
@@ -116,7 +128,9 @@ final class KeyboardModel: ObservableObject {
 
     // MARK: Swap view
 
-    var price: Double? { feed?.prices[asset] ?? nil }
+    var isAddress: Bool { asset.hasPrefix("0x") }
+    var symbol: String { isAddress ? assetSymbol : asset }
+    var price: Double? { isAddress ? assetPrice : (feed?.prices[asset] ?? nil) }
     /** Where the order buys: the live price, or the limit below it. */
     var entryPrice: Double? { price.map { kind == .limit ? $0 * (1 + limitPct / 100) : $0 } }
     /** About how much of the coin the dollars buy, before fees. */
@@ -127,7 +141,7 @@ final class KeyboardModel: ObservableObject {
     var priceLine: String {
         guard let p = price else { return "Reading the price…" }
         switch kind {
-        case .market: return "1 \(asset) = $" + Self.money(p)
+        case .market: return "1 \(symbol) = $" + Self.money(p)
         case .limit: return "Buys at $" + Self.money(entryPrice ?? p) + " (−\(Kallr.fmt(-limitPct))%)"
         case .twap: return "Over " + (twapMinutes >= 60 ? "\(twapMinutes / 60)h" : "\(twapMinutes)m") + " · now $" + Self.money(p)
         }
@@ -137,7 +151,89 @@ final class KeyboardModel: ObservableObject {
         guard exitsOn, let e = entryPrice else { return nil }
         return "Sells at $\(Self.money(e * (1 + tpPct / 100))) up, or $\(Self.money(e * (1 - slPct / 100))) down"
     }
-    static func money(_ v: Double) -> String { v.formatted(.number.precision(.fractionLength(v >= 100 ? 0 : 2))) }
+    /** Dollar amounts grouped the US way in every locale: 75,973 · 2.23 · 0.000506. */
+    static func money(_ v: Double) -> String {
+        let us = Locale(identifier: "en_US")
+        if v >= 100 { return v.formatted(.number.precision(.fractionLength(0)).locale(us)) }
+        if v >= 1 { return v.formatted(.number.precision(.fractionLength(2)).locale(us)) }
+        return v.formatted(.number.precision(.significantDigits(3)).locale(us))
+    }
+
+    // MARK: Token picker
+
+    /** Keys type into the token search while the picker is up on Trade. */
+    var searchActive: Bool { picking && mode == .panel && tab == .trade }
+
+    func openPicker() {
+        query = ""
+        hits = nil
+        pickerNote = nil
+        layer = .letters
+        shift = .off
+        picking = true
+    }
+
+    func closePicker() {
+        searchTask?.cancel()
+        searching = false
+        picking = false
+    }
+
+    func pickCore(_ key: String) {
+        asset = key
+        placing = .idle
+        closePicker()
+    }
+
+    func pick(_ hit: Kallr.TokenHit) {
+        if hit.riskFlagged == true {
+            Haptics.error()
+            pickerNote = "Definitive flags \(hit.symbol) as risky, so Kall won't trade it."
+            return
+        }
+        Haptics.modifier()
+        switch hit.address.lowercased() {
+        case "0x4200000000000000000000000000000000000006": asset = "ETH"
+        case "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf": asset = "BTC"
+        default:
+            asset = hit.address
+            assetSymbol = hit.symbol
+            assetPrice = hit.priceValue
+            assetLogo = hit.logo
+        }
+        placing = .idle
+        closePicker()
+    }
+
+    /** Paste a contract address from what you copied (iOS asks for Full Access to read it). */
+    func pasteAddress() {
+        Haptics.modifier()
+        guard fullAccess else { pickerNote = "Turn on Allow Full Access to paste."; return }
+        let text = UIPasteboard.general.string ?? ""
+        guard let r = text.range(of: "0x[0-9a-fA-F]{40}", options: .regularExpression) else {
+            pickerNote = "No contract address in what you copied."
+            return
+        }
+        query = String(text[r])
+        searchSoon()
+    }
+
+    private func searchSoon() {
+        pickerNote = nil
+        searchTask?.cancel()
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { hits = nil; searching = false; return }
+        searching = true
+        searchTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            let found = await Kallr.searchTokens(q)
+            guard !Task.isCancelled else { return }
+            hits = found ?? []
+            if found == nil { pickerNote = "Couldn't reach Kall Markets." }
+            searching = false
+        }
+    }
 
     /** MAX: all the USDC the Kall wallet holds, up to the per-order cap. */
     func useMax() {
@@ -154,6 +250,12 @@ final class KeyboardModel: ObservableObject {
     private var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
 
     func type(_ c: String) {
+        if searchActive {
+            query += c
+            if shift == .once { shift = .off }
+            searchSoon()
+            return
+        }
         proxy?.insertText(layer == .letters && shift != .off ? c.uppercased() : c)
         if shift == .once { shift = .off }
         // Like iOS: an apostrophe in the numbers layer goes back to letters.
@@ -163,6 +265,7 @@ final class KeyboardModel: ObservableObject {
 
     /** Space; a quick second space after a word becomes ". " */
     func space() {
+        if searchActive { query += " "; searchSoon(); return }
         let before = proxy?.documentContextBeforeInput ?? ""
         if let last = lastSpace, Date().timeIntervalSince(last) < 0.4, before.hasSuffix(" "),
            let prev = before.dropLast().last, prev.isLetter || prev.isNumber {
@@ -178,11 +281,20 @@ final class KeyboardModel: ObservableObject {
     }
 
     func backspace() {
+        if searchActive {
+            if !query.isEmpty { query.removeLast() }
+            searchSoon()
+            return
+        }
         proxy?.deleteBackward()
         controller?.afterTyping()
     }
 
     func returnKey() {
+        if searchActive {
+            if let first = hits?.first { pick(first) }
+            return
+        }
         proxy?.insertText("\n")
         controller?.afterTyping()
     }
@@ -201,7 +313,7 @@ final class KeyboardModel: ObservableObject {
 
     /** Capitalize the start of a sentence, as the field asks. */
     func autoShift() {
-        guard layer == .letters, shift != .locked else { return }
+        guard layer == .letters, shift != .locked, !searchActive else { return }
         let caps = proxy?.autocapitalizationType ?? .sentences
         if caps == UITextAutocapitalizationType.none { shift = .off; return }
         if caps == .allCharacters { shift = .once; return }
@@ -325,7 +437,12 @@ final class KeyboardModel: ObservableObject {
 
     func applyCopied(_ r: Kallr.Result) {
         copied = r
-        if let symbol = (r.trade?.symbol ?? r.call?.asset)?.uppercased(), ["ETH", "WETH", "BTC", "CBBTC"].contains(symbol) {
+        if let t = r.trade, t.token.hasPrefix("0x") {
+            asset = t.token
+            assetSymbol = t.symbol
+            assetPrice = t.price
+            assetLogo = nil
+        } else if let symbol = (r.trade?.symbol ?? r.call?.asset)?.uppercased(), ["ETH", "WETH", "BTC", "CBBTC"].contains(symbol) {
             asset = symbol.hasSuffix("BTC") ? "BTC" : "ETH"
         }
         if let p = r.prefill {
@@ -440,7 +557,7 @@ private struct TopBar: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Button { Haptics.layer(); model.mode = .typing } label: {
+            Button { Haptics.layer(); model.closePicker(); model.mode = .typing } label: {
                 Text("ABC").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.bone)
                     .frame(width: 44, height: 38).background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
             }
@@ -717,7 +834,9 @@ private struct TradeTab: View {
     @ObservedObject var model: KeyboardModel
 
     var body: some View {
-        if model.editingAmount {
+        if model.picking {
+            TokenPicker(model: model)
+        } else if model.editingAmount {
             AmountPad(model: model)
         } else if case .review(let quote) = model.placing {
             ReviewCard(model: model, quote: quote)
@@ -780,7 +899,7 @@ private struct TradeTab: View {
 
     private var reviewTitle: String {
         let what = model.kind == .market ? "BUY" : model.kind == .limit ? "LIMIT BUY" : "TWAP BUY"
-        return "REVIEW · \(what) $\(model.usd) OF \(model.asset)  ↗"
+        return "REVIEW · \(what) $\(model.usd) OF \(model.symbol)  ↗"
     }
 
     @ViewBuilder private var status: some View {
@@ -862,12 +981,11 @@ private struct GetBox: View {
             }
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 5) {
-                HStack(spacing: 4) {
-                    ForEach(["ETH", "BTC"], id: \.self) { a in
-                        Button { Haptics.layer(); model.asset = a } label: { TokenBadge(symbol: a, selected: model.asset == a) }
-                            .buttonStyle(Press())
-                    }
+                Button { Haptics.modifier(); model.openPicker() } label: {
+                    TokenBadge(symbol: model.symbol, logo: model.isAddress ? model.assetLogo : nil, chevron: true)
                 }
+                .buttonStyle(Press())
+                .accessibilityLabel("Pick a token")
                 Text(model.priceLine).font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted).lineLimit(1)
             }
         }
@@ -877,33 +995,180 @@ private struct GetBox: View {
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Kallr.hairline))
     }
 
-    static func amount(_ v: Double) -> String { String(format: v >= 1 ? "%.4f" : "%.6f", v) }
+    static func amount(_ v: Double) -> String {
+        if v >= 1000 { return v.formatted(.number.precision(.fractionLength(0)).locale(Locale(identifier: "en_US"))) }
+        return String(format: v >= 1 ? "%.4f" : "%.6f", v)
+    }
 }
 
-/** A coin pill: its colour with a glyph, then the symbol. */
-private struct TokenBadge: View {
+/** A coin's mark: its logo, or its colour with a glyph. */
+private struct TokenIcon: View {
     let symbol: String
-    var selected = true
+    var logo: URL? = nil
+    var size: CGFloat = 18
 
     private var tint: Color {
         switch symbol {
         case "ETH": return Color(red: 0.384, green: 0.494, blue: 0.918)
         case "BTC": return Color(red: 0.969, green: 0.576, blue: 0.102)
-        default: return Color(red: 0.153, green: 0.459, blue: 0.792)
+        case "USDC": return Color(red: 0.153, green: 0.459, blue: 0.792)
+        default: return Color(white: 0.32)
         }
     }
-    private var glyph: String { symbol == "ETH" ? "Ξ" : symbol == "BTC" ? "₿" : "$" }
+    private var glyph: String {
+        switch symbol {
+        case "ETH": return "Ξ"
+        case "BTC": return "₿"
+        case "USDC": return "$"
+        default: return String(symbol.prefix(1))
+        }
+    }
+
+    var body: some View {
+        let fallback = Text(glyph).font(.system(size: size * 0.55, weight: .black)).foregroundStyle(.white)
+            .frame(width: size, height: size).background(tint, in: Circle())
+        if let logo {
+            AsyncImage(url: logo) { image in
+                image.resizable().scaledToFill().frame(width: size, height: size).clipShape(Circle())
+            } placeholder: { fallback }
+        } else {
+            fallback
+        }
+    }
+}
+
+/** A coin pill: its mark, the symbol, and a chevron when it opens the picker. */
+private struct TokenBadge: View {
+    let symbol: String
+    var selected = true
+    var logo: URL? = nil
+    var chevron = false
 
     var body: some View {
         HStack(spacing: 5) {
-            Text(glyph).font(.system(size: 10, weight: .black)).foregroundStyle(.white)
-                .frame(width: 18, height: 18).background(tint, in: Circle())
-            Text(symbol).font(.system(size: 12, weight: .heavy)).foregroundStyle(selected ? Kallr.bone : Kallr.muted)
+            TokenIcon(symbol: symbol, logo: logo)
+            Text(symbol).font(.system(size: 12, weight: .heavy)).foregroundStyle(selected ? Kallr.bone : Kallr.muted).lineLimit(1)
+            if chevron { Image(systemName: "chevron.down").font(.system(size: 9, weight: .heavy)).foregroundStyle(Kallr.muted) }
         }
         .padding(.leading, 4).padding(.trailing, 8).frame(height: 26)
         .background(selected ? Kallr.keyDark : .clear, in: Capsule())
         .overlay(Capsule().stroke(selected && symbol != "USDC" ? Kallr.lime.opacity(0.7) : Kallr.hairline))
         .opacity(selected ? 1 : 0.65)
+    }
+}
+
+/**
+ * Pick the coin, like a swap's token list: ETH and BTC up top; type a name or symbol on the keys below,
+ * or paste a contract address, and Definitive's search lists what Flash can trade on Base.
+ */
+private struct TokenPicker: View {
+    @ObservedObject var model: KeyboardModel
+    @State private var blink = false
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 13, weight: .semibold)).foregroundStyle(Kallr.muted)
+                    if model.query.isEmpty {
+                        caret
+                        Text("Name, symbol or 0x address").font(.system(size: 13)).foregroundStyle(Kallr.muted).lineLimit(1)
+                    } else {
+                        Text(model.query).font(.system(size: 14, weight: .semibold)).foregroundStyle(Kallr.bone)
+                            .lineLimit(1).truncationMode(.head)
+                        caret
+                    }
+                    Spacer(minLength: 0)
+                    if model.searching { ProgressView().scaleEffect(0.6).tint(Kallr.lime) }
+                }
+                .padding(.horizontal, 10).frame(height: 36)
+                .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.lime, lineWidth: 1.5))
+                IconButton(symbol: "doc.on.clipboard", label: "Paste a contract address") { model.pasteAddress() }
+                IconButton(symbol: "xmark", label: "Close") { Haptics.layer(); model.closePicker() }
+            }
+            .padding(.horizontal, 8)
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(spacing: 0) { rows }.padding(.horizontal, 8)
+            }
+            .frame(height: 132)
+            .modifier(NoEdgeBlur())
+            GeometryReader { geo in KeyRows(model: model, width: geo.size.width) }
+                .frame(height: 216)
+        }
+        .onAppear { withAnimation(.easeInOut(duration: 0.5).repeatForever()) { blink = true } }
+    }
+
+    private var caret: some View {
+        Rectangle().fill(Kallr.lime).frame(width: 2, height: 18).opacity(blink ? 1 : 0)
+    }
+
+    @ViewBuilder private var rows: some View {
+        if let note = model.pickerNote {
+            Text(note).font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.danger)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6)
+        }
+        if model.query.isEmpty {
+            Button { model.pickCore("ETH") } label: {
+                TokenRow(symbol: "ETH", name: "Ethereum", logo: nil, price: model.feed?.prices["ETH"] ?? nil, detail: nil, selected: model.asset == "ETH")
+            }
+            Button { model.pickCore("BTC") } label: {
+                TokenRow(symbol: "BTC", name: "Bitcoin (cbBTC)", logo: nil, price: model.feed?.prices["BTC"] ?? nil, detail: nil, selected: model.asset == "BTC")
+            }
+            if model.isAddress {
+                TokenRow(symbol: model.assetSymbol, name: "Picked", logo: model.assetLogo, price: model.assetPrice, detail: nil, selected: true)
+            }
+            Text("Search any token Definitive Flash trades on Base, or paste its contract.")
+                .font(.system(size: 11)).foregroundStyle(Kallr.muted)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6)
+        } else if let hits = model.hits {
+            if hits.isEmpty {
+                Text("Nothing on Base matches “\(model.query)”.").font(.system(size: 12)).foregroundStyle(Kallr.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
+            }
+            ForEach(hits) { hit in
+                Button { model.pick(hit) } label: {
+                    TokenRow(symbol: hit.symbol, name: hit.name ?? hit.symbol, logo: hit.logo, price: hit.priceValue, detail: hit.detail,
+                             risky: hit.riskFlagged == true, selected: model.asset.lowercased() == hit.address.lowercased())
+                }
+            }
+        }
+    }
+}
+
+private struct TokenRow: View {
+    let symbol: String
+    let name: String
+    let logo: URL?
+    let price: Double?
+    let detail: String?
+    var risky = false
+    var selected = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            TokenIcon(symbol: symbol, logo: logo, size: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(symbol).font(.system(size: 14, weight: .heavy)).foregroundStyle(Kallr.bone).lineLimit(1)
+                    if risky {
+                        Text("RISKY").font(.system(size: 8, weight: .heavy)).foregroundStyle(Kallr.danger)
+                            .padding(.horizontal, 4).frame(height: 14)
+                            .overlay(RoundedRectangle(cornerRadius: 3).stroke(Kallr.danger.opacity(0.6)))
+                    }
+                }
+                Text(name).font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(price.map { "$" + KeyboardModel.money($0) } ?? "—")
+                    .font(.system(size: 13, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.bone)
+                if let detail { Text(detail).font(.system(size: 10)).foregroundStyle(Kallr.muted) }
+            }
+            if selected { Image(systemName: "checkmark").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime) }
+        }
+        .frame(height: 44)
+        .contentShape(Rectangle())
     }
 }
 
@@ -1039,6 +1304,7 @@ private struct ReviewCard: View {
                 Line(label: "Impact · fee", value: [quote.details?.impactPct.map { String(format: "%.2f%%", $0) }, quote.details?.feeUsd.map { String(format: "$%.2f", $0) }].compactMap { $0 }.joined(separator: " · ").ifEmpty("—"))
                 Line(label: "Exits", value: quote.preview.exits)
                 Line(label: "Approval", value: quote.preview.approval)
+                if let compare = quote.compare { Line(label: "Best price", value: compare.line) }
                 PoweredByDefinitive(height: 9, suffix: "Flash · fresh quote").padding(.top, 2)
             } else {
                 Text("PLACING ON DEFINITIVE FLASH…").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)

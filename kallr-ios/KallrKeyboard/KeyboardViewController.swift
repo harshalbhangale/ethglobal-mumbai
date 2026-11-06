@@ -13,6 +13,7 @@ final class KeyboardViewController: UIInputViewController {
     /** Typing is the iPhone keyboard's height plus the strip; the panel needs more room. */
     static let typingHeight: CGFloat = 260
     static let panelHeight: CGFloat = 336
+    static let pickerHeight: CGFloat = 440
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -34,8 +35,10 @@ final class KeyboardViewController: UIInputViewController {
         self.height = height
     }
 
-    func modeChanged(_ mode: KeyboardModel.Mode) {
-        height?.constant = mode == .typing ? Self.typingHeight : Self.panelHeight
+    func modeChanged(_ mode: KeyboardModel.Mode) { updateHeight() }
+
+    func updateHeight() {
+        height?.constant = model.mode == .typing ? Self.typingHeight : model.picking ? Self.pickerHeight : Self.panelHeight
         view.setNeedsLayout()
     }
 

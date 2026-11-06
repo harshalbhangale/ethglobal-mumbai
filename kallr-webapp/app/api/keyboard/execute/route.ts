@@ -5,6 +5,7 @@ import { recordTrade } from "@/lib/server/arkiv";
 import { errorResponse } from "@/lib/server/flash";
 import { authorized, keyboardWalletAddress, MAX_ORDER_USD, placeFromKeyboardWallet } from "@/lib/server/keyboard-wallet";
 import { tradeTokenByKey } from "@/lib/server/keyboard-tokens";
+import { compareWith, uniswapFor } from "@/lib/server/uniswap";
 
 /**
  * One-tap orders from the Kall keyboard on iPhone. The keyboard sends a simple order (token,
@@ -35,11 +36,13 @@ export async function POST(req: Request) {
     }
     const token = await tradeTokenByKey(order.token);
     const input = buildKeyboardOrder(order, token.price);
-    const placed = await placeFromKeyboardWallet(input, body.dryRun === true);
+    // The review also sets the Flash quote beside Uniswap's for the same trade (a benchmark only).
+    const dryRun = body.dryRun === true;
+    const [placed, uni] = await Promise.all([placeFromKeyboardWallet(input, dryRun), dryRun ? uniswapFor(input).catch(() => null) : null]);
     const preview = previewLines(order, input, placed.quote, token.symbol);
     // What the review card shows next to the preview: Flash's own estimates for this quote.
     const details = quoteDetails(placed.quote);
-    if (placed.dryRun) return Response.json({ dryRun: true, preview, details, approvals: placed.approvals });
+    if (placed.dryRun) return Response.json({ dryRun: true, preview, details, approvals: placed.approvals, compare: compareWith(placed.quote, uni) });
     after(() => recordTrade(input, placed.submitted.orderId, { source: "keyboard", caller: order.caller ?? null }));
     return Response.json({ dryRun: false, orderId: placed.submitted.orderId, preview, details, approvals: placed.approvals });
   } catch (err) {

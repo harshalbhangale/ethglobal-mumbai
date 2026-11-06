@@ -14,8 +14,12 @@ plays keyboard haptics only with Allow Full Access.
   **Explore** lists every caller Kall Markets tracks or has priced, with their record and Follow. The
   clipboard button checks a post or $TICKER message you copied.
 - **Trade:** laid out like a swap. **You pay** is dollars of USDC (tap to type, with $1, $5, $10, $25 and
-  Max; the Kall wallet's balance beside it); **You get** is ETH or BTC, about how much, and the price it
-  buys at. Market, Limit or TWAP is a small toggle; take-profit and stop-loss fold into Advanced (with the
+  Max; the Kall wallet's balance beside it); **You get** is the coin, about how much, and the price it
+  buys at. Tap the coin to pick another, like a swap's token list: ETH and BTC up top, then type a name or
+  symbol on the keyboard's own keys, or paste a contract address, and Definitive's search lists what Flash
+  trades on Base (logo, price, liquidity; risky tokens are marked and refused). The review also sets the
+  Flash quote beside Uniswap's for the same trade ("Best price: ✓ Definitive Flash · +0.42% vs Uniswap")
+  when the server has `UNISWAP_API_KEY`; orders still go only to Flash. Market, Limit or TWAP is a small toggle; take-profit and stop-loss fold into Advanced (with the
   limit offset, −1 to −10%, or the TWAP length, 10 minutes to 12 hours) and show where they'd sell. **Review** gets a fresh
   Definitive Flash quote (you pay, you get, price impact and fee, exits, approval) without sending
   anything; **Confirm & place** sends it.
@@ -30,8 +34,7 @@ and submits, then records the trade on Arkiv as a keyboard trade. The Kall walle
 by the server, funded with ETH on Base (swapped to USDC in the app), with a per-order cap (`KALL_EXEC_MAX_USD`, $25).
 An order typed on the iPhone keyboard ("buy $20 of eth tp 10% sl 5%") is filled in when you switch to Kall.
 
-iOS doesn't let keyboards use the microphone, so voice orders are Android only, as are Base tokens beyond
-ETH and BTC.
+iOS doesn't let keyboards use the microphone, so voice orders are Android only.
 
 ## The app
 

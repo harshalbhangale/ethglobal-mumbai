@@ -101,7 +101,7 @@ private struct StripChip: View {
 private let letterFill = Color(white: 0.24)
 private let specialFill = Color(white: 0.14)
 
-private struct KeyRows: View {
+struct KeyRows: View {
     @ObservedObject var model: KeyboardModel
     let width: CGFloat
 
@@ -200,7 +200,8 @@ private struct KeyRows: View {
     // Bottom row: 123 / ABC, (globe), TRADE, space, return.
 
     private var bottomRow: some View {
-        let fixed: CGFloat = 1.25 + 2.0 + 2.25 + (model.showsGlobe ? 1 : 0)
+        let kallKey = !model.searchActive
+        let fixed: CGFloat = 1.25 + (kallKey ? 2.0 : 0) + 2.25 + (model.showsGlobe ? 1 : 0)
         return HStack(spacing: 0) {
             Key(touch: unit * 1.25, visual: unit * 1.25 - gap, height: keyHeight, rowHeight: rowHeight, fill: specialFill,
                 feel: { _ in Haptics.layer() }) {
@@ -217,6 +218,7 @@ private struct KeyRows: View {
                 }
                 .accessibilityLabel("Next keyboard")
             }
+            if kallKey {
             Key(touch: unit * 2, visual: unit * 2 - gap, height: keyHeight, rowHeight: rowHeight, fill: Kallr.lime,
                 feel: { _ in Haptics.trade() }) {
                 model.openPanel(nil)
@@ -230,6 +232,7 @@ private struct KeyRows: View {
                 .foregroundStyle(Kallr.black)
             }
             .accessibilityLabel("Kall: trade")
+            }
             Key(touch: unit * (10 - fixed), visual: unit * (10 - fixed) - gap, height: keyHeight, rowHeight: rowHeight, fill: letterFill,
                 feel: { _ in Haptics.space() }) {
                 model.space()
@@ -240,7 +243,7 @@ private struct KeyRows: View {
                 feel: { _ in Haptics.modifier() }) {
                 model.returnKey()
             } label: {
-                Text(model.returnLabel).font(.system(size: 16)).foregroundStyle(Kallr.bone)
+                Text(model.searchActive ? "select" : model.returnLabel).font(.system(size: 16)).foregroundStyle(Kallr.bone)
             }
         }
     }

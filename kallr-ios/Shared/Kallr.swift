@@ -189,7 +189,53 @@ enum Kallr {
     struct Preview: Codable { let title: String; let kind: String; let pay: String; let get: String; let exits: String; let approval: String }
     struct Details: Codable { let impactPct: Double?; let slippagePct: Double?; let feeUsd: Double? }
     /** A dry run (the review card) or a placed order. */
-    struct Placed: Codable { let orderId: String?; let preview: Preview; let details: Details?; let approvals: [String]? }
+    /** The same trade quoted on Uniswap at the same moment: a benchmark, orders go only to Flash. */
+    struct Compare: Codable {
+        let edgePct: Double
+        let winner: String
+        var line: String {
+            switch winner {
+            case "flash": return String(format: "✓ Definitive Flash · +%.2f%% vs Uniswap", edgePct)
+            case "uniswap": return String(format: "Uniswap +%.2f%% · Flash adds MEV protection", -edgePct)
+            default: return "Same as Uniswap"
+            }
+        }
+    }
+    struct Placed: Codable { let orderId: String?; let preview: Preview; let details: Details?; let approvals: [String]?; let compare: Compare? }
+
+    /** A Base token from Definitive's search (symbol, name or contract address). */
+    struct TokenHit: Codable, Identifiable {
+        let address: String
+        let symbol: String
+        let name: String?
+        let price: String?
+        let liquidity: String?
+        let change24h: String?
+        let imageUrl: String?
+        let riskFlagged: Bool?
+        var id: String { address }
+        var priceValue: Double? { price.flatMap(Double.init) }
+        var logo: URL? { imageUrl.flatMap(URL.init(string:)) }
+        /** "Liq $1.2M", from Definitive's liquidity figure. */
+        var detail: String? {
+            liquidity.flatMap(Double.init).map { "Liq $" + Kallr.compact($0) }
+        }
+    }
+
+    /** 1.2M, 340K, 2.1B: the same in every locale (not lakh or crore). */
+    static func compact(_ v: Double) -> String {
+        if v >= 1e9 { return String(format: "%.1fB", v / 1e9) }
+        if v >= 1e6 { return String(format: "%.1fM", v / 1e6) }
+        if v >= 1e3 { return String(format: "%.0fK", v / 1e3) }
+        return String(format: "%.0f", v)
+    }
+
+    static func searchTokens(_ q: String) async -> [TokenHit]? {
+        struct Body: Codable { let tokens: [TokenHit] }
+        guard let encoded = q.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return nil }
+        let body: Body? = await get("api/tokens/search?q=\(encoded)")
+        return body?.tokens
+    }
     private struct ExecuteBody: Codable { let order: KeyboardOrder; let dryRun: Bool }
 
     struct Failure: LocalizedError { let message: String; var errorDescription: String? { message } }
