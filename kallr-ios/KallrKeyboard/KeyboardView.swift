@@ -2527,7 +2527,7 @@ private struct WalletTab: View {
             if let w = model.wallet, let address = w.address {
                 HStack(spacing: 8) {
                     Balance(label: "ETH", value: w.ethValue.map { String(format: "%.5f", $0) } ?? "…")
-                    Balance(label: "USDC TO TRADE", value: w.usdcValue.map { String(format: "%.2f", $0) } ?? "…")
+                    Balance(label: "USDC", value: w.usdcValue.map { String(format: "%.2f", $0) } ?? "…")
                 }
                 HStack(spacing: 8) {
                     Text(address).font(.system(size: 11, design: .monospaced)).foregroundStyle(Kallr.bone).lineLimit(1).truncationMode(.middle)
@@ -2544,7 +2544,7 @@ private struct WalletTab: View {
                 }
                 .padding(10)
                 .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
-                Text("Deposit ETH from the Kall Keyboard app (copy the address, or scan its QR), then swap some to USDC there. About $1 of ETH stays for gas. Orders go up to $\(Kallr.fmt(w.maxUsd ?? 25)) each, Base only.")
+                Text("Deposit, swap and withdraw in the Kall app. Up to $\(Kallr.fmt(w.maxUsd ?? 25)) per order, Base only.")
                     .font(.system(size: 11)).foregroundStyle(Kallr.muted)
             } else if !model.fullAccess {
                 Empty(text: "Turn on Allow Full Access for Kall Keyboard in Settings.")

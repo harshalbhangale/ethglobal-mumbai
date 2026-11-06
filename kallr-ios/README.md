@@ -16,10 +16,12 @@ plays keyboard haptics only with Allow Full Access.
 - **Following:** calls from the callers you follow (kept on the phone), read from Arkiv by
   `/api/keyboard/feed`: the post's text from its Swarm snapshot, the move since the post, time left, and
   **Trade**. Each call shows the hash of its Arkiv record; open the call and tap the record to see it on
-  Arkiv's explorer. Chips for the callers you follow, with their hit rates, narrow the list; Active,
-  Settled and starred Favorites filter it.
-  **Explore** lists every caller Kall Markets tracks or has priced, with their record and Follow. The
-  clipboard button checks a post or $TICKER message you copied.
+  Arkiv's explorer. Chips for the callers you follow, with their hit rates, open each caller's page;
+  Active, Settled and starred Favorites filter the list.
+  **Explore** lists every caller Kall Markets tracks or has priced, with their record and Follow. A
+  caller's page (from `/api/callers/<handle>`) has every call they made: open ones with time left, closed
+  ones in a "Closed calls" dropdown, each row call | result | Arkiv ↗ | X ↗, and how many of their posts
+  are deleted on X. The clipboard button checks a post or $TICKER message you copied.
 - **Trade:** laid out like a swap. **You pay** is dollars of USDC (tap to type, with $1, $5, $10, $25 and
   Max; the Kall wallet's balance beside it); **You get** is the coin, about how much, and the price it
   buys at. Tap the coin to pick another, like a swap's token list: ETH and BTC up top, then type a name or
@@ -32,7 +34,7 @@ plays keyboard haptics only with Allow Full Access.
 - **Orders:** the Kall wallet's Flash orders with live status (re-read every 5 seconds while one is
   working), which call each one copied, its Arkiv trade record (a seal in the list; the hash and a link
   in the order), and **Cancel** for working limit and TWAP orders. After a trade, the done screen shows
-  the Arkiv record once the server writes it. Cancelling is
+  the Arkiv record once the server writes it, and **Open on Basescan** opens the fill in Safari. Cancelling is
   Flash's gasless signed message and is final.
 - **Wallet:** the Kall wallet's address and balances.
 
@@ -46,12 +48,14 @@ iOS doesn't let keyboards use the microphone, so voice orders are Android only.
 
 ## The app
 
-- **Wallet:** the Kall wallet's ETH and USDC, its address (copy, or open it on BaseScan), ETH and BTC
-  prices, how many calls are open on Arkiv, the latest orders and the best callers by settled hit rate.
-  **Deposit ETH** (USDC also works) picks an amount, then copies the Kall wallet's address, opens a wallet
-  app with the transfer on Base filled in (an EIP-681 link), or shows it as a QR code for a wallet on
-  another device. Balances are read again when you come back from the wallet, and a
-  deposit that landed is called out.
+- **Wallet:** the Kall wallet's ETH and USDC, its address (copy, or open it on BaseScan), the latest
+  orders and the best callers by settled hit rate.
+  **Deposit** (ETH or USDC) picks an amount, then copies the Kall wallet's address, opens a wallet
+  app with the transfer on Base filled in (an EIP-681 link), or shows it as a QR code for Rainbow or any
+  wallet. Balances are read again when you come back from the wallet, and a deposit that landed is called
+  out. **Withdraw** sends ETH or USDC to an address on Base: Review checks it without sending, then hold
+  to send (`/api/keyboard/withdraw`, up to `KALL_EXEC_MAX_WITHDRAW_USD`, $100, per withdrawal; ETH keeps a
+  little for gas).
 - **Swap ETH to USDC:** type dollars (or $5, $10, $25, Max), review a fresh Definitive Flash quote, confirm.
   The server (`/api/keyboard/swap`) sells that much of the Kall wallet's ETH for USDC: Flash's wrap to
   WETH, an approval for exactly that amount, then the signed order. About $1 of ETH always stays for gas,
@@ -59,7 +63,8 @@ iOS doesn't let keyboards use the microphone, so voice orders are Android only.
 - **History:** every Flash order the Kall wallet placed: totals, All / Working / Done, what each one filled
   at, and a detail sheet with the Flash order ID, the call it copied, whether the trade is recorded on
   Arkiv, and Cancel while it's working. Re-read every 5 seconds while an order is working.
-- **Keyboard:** setup steps, a field to try a typed order, and a call checker.
+- **Keyboard:** setup steps and three Telegram calls to copy: an ETH long with targets, a fake contract
+  Chainlink CRE blocks, and a real one it confirms.
 
 Debug builds can read from a local server and show another wallet's orders, for testing History before
 the Kall wallet has traded:
