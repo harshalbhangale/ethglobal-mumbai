@@ -5,7 +5,9 @@ import UIKit
 @MainActor
 final class KeyboardModel: ObservableObject {
     enum Tab: String, CaseIterable { case calls = "CALLS", trade = "TRADE", orders = "ORDERS", wallet = "WALLET" }
-    enum Placing: Equatable { case idle, placing, done(String), failed(String) }
+    /** Idle → quoting → review (a fresh quote, nothing sent) → placing → done or failed. */
+    enum Placing { case idle, quoting, review(Kallr.Placed), placing, done(String), failed(String) }
+    enum Kind: String, CaseIterable { case market = "Market", limit = "Limit", twap = "TWAP" }
 
     weak var controller: KeyboardViewController?
     @Published var tab = Tab.calls
@@ -23,6 +25,9 @@ final class KeyboardModel: ObservableObject {
     @Published var asset = "ETH"
     @Published var usd = "5"
     @Published var exits: Exits = .tp10
+    @Published var kind = Kind.market
+    @Published var limitPct = -5.0
+    @Published var twapMinutes = 60
     @Published var source: (handle: String, postId: String, line: String)?
     @Published var editingAmount = false
     @Published var placing = Placing.idle
@@ -30,6 +35,24 @@ final class KeyboardModel: ObservableObject {
     // Orders and wallet
     @Published var orders: [Kallr.Order]?
     @Published var wallet: Kallr.Wallet?
+    private var polling: Task<Void, Never>?
+
+    var busy: Bool { if case .quoting = placing { return true }; if case .placing = placing { return true }; return false }
+
+    /** Which call an order copied, from the Arkiv trade records. */
+    func caller(of orderId: String) -> String? { feed?.trades?.first { $0.flashOrderId == orderId }?.caller }
+
+    /** While Orders is open and something is working, re-read Flash every 5 seconds. */
+    func startPolling() {
+        polling?.cancel()
+        polling = Task { @MainActor in
+            while !Task.isCancelled, tab == .orders {
+                await loadOrders()
+                let open = orders?.contains { $0.open } ?? false
+                try? await Task.sleep(nanoseconds: open ? 5_000_000_000 : 15_000_000_000)
+            }
+        }
+    }
 
     enum Exits: String, CaseIterable {
         case none = "No exits", tp10 = "TP 10% · SL 5%", tp20 = "TP 20% · SL 10%"
@@ -62,6 +85,20 @@ final class KeyboardModel: ObservableObject {
         tab = .trade
     }
 
+    private var order: Kallr.KeyboardOrder {
+        Kallr.KeyboardOrder(
+            token: asset,
+            kind: kind == .market ? "swap" : kind == .limit ? "limit" : "twap",
+            usd: usd,
+            limitPct: kind == .limit ? limitPct : nil,
+            twapMinutes: kind == .twap ? twapMinutes : nil,
+            tpPct: exits.pcts?.0,
+            slPct: exits.pcts?.1,
+            postId: source?.postId,
+            caller: source?.handle
+        )
+    }
+
     func applyCopied(_ r: Kallr.Result) {
         copied = r
         if let symbol = (r.trade?.symbol ?? r.call?.asset)?.uppercased(), ["ETH", "WETH", "BTC", "CBBTC"].contains(symbol) {
@@ -82,11 +119,26 @@ final class KeyboardModel: ObservableObject {
         return nil
     }
 
-    func buy() {
-        guard blocked == nil, placing != .placing else { return }
+    /** Buy: a fresh Definitive quote for the review card. Nothing is approved, signed or sent yet. */
+    func review() {
+        guard blocked == nil, !busy else { return }
+        tap(.medium)
+        placing = .quoting
+        Task {
+            switch await Kallr.execute(order, dryRun: true) {
+            case .success(let quote): placing = .review(quote)
+            case .failure(let error):
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                placing = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    /** Confirm: the server re-quotes, approves this amount, signs and places the order on Flash. */
+    func confirm() {
+        guard !busy else { return }
         tap(.heavy)
         placing = .placing
-        let order = Kallr.KeyboardOrder(token: asset, kind: "swap", usd: usd, tpPct: exits.pcts?.0, slPct: exits.pcts?.1, postId: source?.postId, caller: source?.handle)
         Task {
             switch await Kallr.execute(order) {
             case .success(let placed):
@@ -145,7 +197,7 @@ private struct TopBar: View {
                     Button {
                         model.tap()
                         withAnimation(.easeOut(duration: 0.15)) { model.tab = t }
-                        if t == .orders { Task { await model.loadOrders() } }
+                        if t == .orders { model.startPolling() }
                         if t == .wallet || t == .calls { Task { await model.load() } }
                     } label: {
                         Text(t.rawValue)
@@ -295,7 +347,15 @@ private struct TradeTab: View {
     @ObservedObject var model: KeyboardModel
 
     var body: some View {
-        if model.editingAmount { AmountPad(model: model) } else { form }
+        if model.editingAmount {
+            AmountPad(model: model)
+        } else if case .review(let quote) = model.placing {
+            ReviewCard(model: model, quote: quote)
+        } else if case .placing = model.placing {
+            ReviewCard(model: model, quote: nil)
+        } else {
+            form
+        }
     }
 
     private var form: some View {
@@ -319,20 +379,38 @@ private struct TradeTab: View {
                 ForEach(["1", "5", "10", "25"], id: \.self) { a in Chip(label: "$\(a)", on: model.usd == a) { model.tap(); model.usd = a } }
                 Chip(label: "Custom", on: false) { model.tap(); model.editingAmount = true }
             }
-            HStack(spacing: 6) {
-                ForEach(KeyboardModel.Exits.allCases, id: \.self) { e in Chip(label: e.rawValue, on: model.exits == e) { model.tap(); model.exits = e } }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(KeyboardModel.Kind.allCases, id: \.self) { k in Chip(label: k.rawValue, on: model.kind == k) { model.tap(); model.kind = k } }
+                    Rectangle().fill(Kallr.hairline).frame(width: 1, height: 20).padding(.horizontal, 2)
+                    switch model.kind {
+                    case .market:
+                        ForEach(KeyboardModel.Exits.allCases, id: \.self) { e in Chip(label: e.rawValue, on: model.exits == e) { model.tap(); model.exits = e } }
+                    case .limit:
+                        ForEach([-3.0, -5.0, -10.0], id: \.self) { p in Chip(label: "\(Kallr.fmt(p))%", on: model.limitPct == p) { model.tap(); model.limitPct = p } }
+                    case .twap:
+                        ForEach([(10, "10 min"), (60, "1 hour"), (240, "4 hours")], id: \.0) { m in Chip(label: m.1, on: model.twapMinutes == m.0) { model.tap(); model.twapMinutes = m.0 } }
+                    }
+                }
+            }
+            if model.kind != .market {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(KeyboardModel.Exits.allCases, id: \.self) { e in Chip(label: e.rawValue, on: model.exits == e) { model.tap(); model.exits = e } }
+                    }
+                }
             }
             Spacer(minLength: 0)
             status
-            Button { model.buy() } label: {
-                Text(model.placing == .placing ? "PLACING ON FLASH…" : model.blocked ?? "BUY $\(model.usd) OF \(model.asset)  ↗")
+            Button { model.review() } label: {
+                Text(model.busy ? "GETTING A QUOTE…" : model.blocked ?? "REVIEW $\(model.usd) OF \(model.asset)  ↗")
                     .font(.system(size: 15, weight: .heavy)).tracking(0.5).lineLimit(1).minimumScaleFactor(0.8)
                     .foregroundStyle(model.blocked == nil ? Kallr.black : Kallr.muted)
                     .frame(maxWidth: .infinity, minHeight: 50)
                     .background(model.blocked == nil ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 11))
             }
             .buttonStyle(Press())
-            .disabled(model.blocked != nil || model.placing == .placing)
+            .disabled(model.blocked != nil || model.busy)
         }
         .padding(.horizontal, 8)
         .padding(.bottom, 6)
@@ -345,10 +423,70 @@ private struct TradeTab: View {
         case .failed(let message):
             Text(message).font(.system(size: 12)).foregroundStyle(Kallr.danger).lineLimit(2)
         default:
-            Text("From your Kall wallet · up to $\(Kallr.fmt(model.wallet?.maxUsd ?? 25)) per order")
+            Text("Fresh Definitive quote first, then you confirm · Kall wallet, up to $\(Kallr.fmt(model.wallet?.maxUsd ?? 25)) per order")
                 .font(.system(size: 10)).foregroundStyle(Kallr.muted)
         }
     }
+}
+
+/** The fresh Definitive quote, in plain lines, and the one tap that places it. */
+private struct ReviewCard: View {
+    @ObservedObject var model: KeyboardModel
+    let quote: Kallr.Placed?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let quote {
+                Text("\(quote.preview.title.uppercased()) · \(quote.preview.kind)")
+                    .font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.bone).lineLimit(1).minimumScaleFactor(0.8)
+                Line(label: "You pay", value: quote.preview.pay)
+                Line(label: "You get", value: quote.preview.get)
+                Line(label: "Impact · fee", value: [quote.details?.impactPct.map { String(format: "%.2f%%", $0) }, quote.details?.feeUsd.map { String(format: "$%.2f", $0) }].compactMap { $0 }.joined(separator: " · ").ifEmpty("—"))
+                Line(label: "Exits", value: quote.preview.exits)
+                Line(label: "Approval", value: quote.preview.approval)
+            } else {
+                Text("PLACING ON DEFINITIVE FLASH…").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)
+                Text("Re-quoting, approving this amount, signing and submitting on Base. About 10–30 seconds.")
+                    .font(.system(size: 12)).foregroundStyle(Kallr.muted)
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 8) {
+                Button { model.tap(); model.placing = .idle } label: {
+                    Text("BACK").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.bone)
+                        .frame(width: 72, height: 50).background(Kallr.keyDark, in: RoundedRectangle(cornerRadius: 11))
+                }
+                .buttonStyle(Press())
+                .disabled(quote == nil)
+                Button { model.confirm() } label: {
+                    Text(quote == nil ? "PLACING…" : "CONFIRM & PLACE  ↗")
+                        .font(.system(size: 15, weight: .heavy)).tracking(0.5)
+                        .foregroundStyle(Kallr.black)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 11))
+                }
+                .buttonStyle(Press())
+                .disabled(quote == nil)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.bottom, 6)
+    }
+}
+
+private struct Line: View {
+    let label: String
+    let value: String
+    var body: some View {
+        HStack {
+            Text(label).font(.system(size: 12)).foregroundStyle(Kallr.muted)
+            Spacer()
+            Text(value).font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.bone).lineLimit(1)
+        }
+    }
+}
+
+private extension String {
+    func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
 }
 
 private struct AmountPad: View {
@@ -398,7 +536,8 @@ private struct OrdersTab: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(o.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
-                                if let exits = o.exits { Text(exits).font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(1) }
+                                let sub = [model.caller(of: o.orderId).map { "from @\($0)'s call" }, o.exits].compactMap { $0 }.joined(separator: " · ")
+                                if !sub.isEmpty { Text(sub).font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(1) }
                             }
                             Spacer()
                             Text(o.statusLabel).font(.system(size: 10, weight: .heavy))
@@ -416,6 +555,7 @@ private struct OrdersTab: View {
             .padding(.horizontal, 8)
         }
         .refreshable { await model.loadOrders() }
+        .onAppear { model.startPolling() }
     }
 }
 

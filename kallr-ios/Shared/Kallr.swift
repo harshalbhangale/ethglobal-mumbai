@@ -132,11 +132,13 @@ enum Kallr {
 
     struct FeedCall: Codable { let postId: String; let caller: String; let asset: String; let direction: String; let deadline: Double?; let entry: Double? }
     struct FeedResult: Codable { let postId: String; let caller: String; let asset: String; let status: String; let returnBps: Int? }
+    struct FeedTrade: Codable { let flashOrderId: String; let caller: String? }
     struct Feed: Codable {
         let following: [String]
         let prices: [String: Double?]
         let calls: [FeedCall]
         let results: [FeedResult]
+        let trades: [FeedTrade]?
     }
 
     static func feed() async -> Feed? { await get("api/keyboard/feed") }
@@ -155,19 +157,35 @@ enum Kallr {
 
     static func wallet() async -> Wallet? { await get("api/keyboard/execute") }
 
-    struct KeyboardOrder: Codable { let token: String; let kind: String; let usd: String; let tpPct: Double?; let slPct: Double?; let postId: String?; let caller: String? }
-    struct Preview: Codable { let title: String; let get: String; let exits: String }
-    struct Placed: Codable { let orderId: String?; let preview: Preview }
+    struct KeyboardOrder: Codable {
+        let token: String
+        let kind: String
+        let usd: String
+        var limitPct: Double? = nil
+        var twapMinutes: Int? = nil
+        let tpPct: Double?
+        let slPct: Double?
+        let postId: String?
+        let caller: String?
+    }
+    struct Preview: Codable { let title: String; let kind: String; let pay: String; let get: String; let exits: String; let approval: String }
+    struct Details: Codable { let impactPct: Double?; let slippagePct: Double?; let feeUsd: Double? }
+    /** A dry run (the review card) or a placed order. */
+    struct Placed: Codable { let orderId: String?; let preview: Preview; let details: Details?; let approvals: [String]? }
+    private struct ExecuteBody: Codable { let order: KeyboardOrder; let dryRun: Bool }
 
     struct Failure: LocalizedError { let message: String; var errorDescription: String? { message } }
 
-    /** Place an order from the Kall keyboard wallet: the server quotes, approves, signs and submits on Flash. */
-    static func execute(_ order: KeyboardOrder) async -> Swift.Result<Placed, Failure> {
+    /**
+     * Place an order from the Kall keyboard wallet: the server quotes, approves, signs and submits on
+     * Flash. With dryRun it gets a fresh quote and signs, but sends nothing: the review card.
+     */
+    static func execute(_ order: KeyboardOrder, dryRun: Bool = false) async -> Swift.Result<Placed, Failure> {
         var request = URLRequest(url: origin.appendingPathComponent("api/keyboard/execute"), timeoutInterval: 120)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue("Bearer \(Secrets.execToken)", forHTTPHeaderField: "authorization")
-        request.httpBody = try? JSONEncoder().encode(["order": order])
+        request.httpBody = try? JSONEncoder().encode(ExecuteBody(order: order, dryRun: dryRun))
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
