@@ -61,6 +61,21 @@ final class KeyboardModel: ObservableObject {
     @Published var slPct = 5.0
     @Published var exitsOn = true
     @Published var advancedOpen = false
+    /** What You pay is in: USDC buys the coin; ETH swaps the wallet's ETH to USDC. */
+    @Published var payAsset = "USDC"
+    var payingETH: Bool { payAsset == "ETH" }
+    /** ETH above the gas reserve (about $1 stays for gas), in dollars rounded down to cents. */
+    var swappableUsd: Double? {
+        guard let eth = wallet?.ethValue, let p = feed?.prices["ETH"] ?? nil, p > 0 else { return nil }
+        return max(0, ((eth - 0.0004) * p * 100).rounded(.down) / 100)
+    }
+
+    func togglePay() {
+        Haptics.layer()
+        payAsset = payingETH ? "USDC" : "ETH"
+        placing = .idle
+        if payingETH { kind = .market; advancedOpen = false }
+    }
 
     // Any Base token: `asset` is ETH, BTC or a contract address; these describe an address.
     @Published var assetSymbol = ""
@@ -239,6 +254,11 @@ final class KeyboardModel: ObservableObject {
 
     /** MAX: all the USDC the Kall wallet holds, up to the per-order cap. */
     func useMax() {
+        if payingETH {
+            if let most = swappableUsd, most >= 1 { usd = String(format: "%.2f", most) }
+            freshEntry = false
+            return
+        }
         guard let usdc = wallet?.usdcValue else { return }
         let most = (min(usdc, wallet?.maxUsd ?? 25) * 100).rounded(.down) / 100
         if most > 0 { usd = String(format: "%.2f", most) }
@@ -457,10 +477,16 @@ final class KeyboardModel: ObservableObject {
     var blocked: String? {
         if let w = copied?.warning { return w.hasPrefix("Fake") ? "No buy: fake contract" : "No buy: risky token" }
         guard let n = Double(usd), n > 0 else { return "Enter an amount" }
+        if payingETH {
+            guard let most = swappableUsd else { return "Reading your wallet…" }
+            if most < 1 { return "Deposit ETH in the Kall app" }
+            if n < 1 { return "Swap at least $1" }
+            if n > most { return "Up to $\(String(format: "%.2f", most)) of ETH, keeping gas" }
+            return nil
+        }
         if let max = wallet?.maxUsd, n > max { return "Up to $\(Kallr.fmt(max)) per order" }
         if let usdc = wallet?.usdcValue, usdc < n {
-            let ethUsd = (wallet?.ethValue ?? 0) * ((feed?.prices["ETH"] ?? nil) ?? 0)
-            return ethUsd > n + 1 ? "Swap ETH to USDC in the Kall app" : "Deposit ETH in the Kall app"
+            return (swappableUsd ?? 0) >= 1 ? "No USDC yet: tap USDC above to pay with ETH" : "Deposit ETH in the Kall app"
         }
         return nil
     }
@@ -471,7 +497,8 @@ final class KeyboardModel: ObservableObject {
         tap(.medium)
         placing = .quoting
         Task {
-            switch await Kallr.execute(order, dryRun: true) {
+            let result = payingETH ? await Kallr.swap(usd: usd, dryRun: true) : await Kallr.execute(order, dryRun: true)
+            switch result {
             case .success(let quote): placing = .review(quote)
             case .failure(let error):
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
@@ -485,12 +512,25 @@ final class KeyboardModel: ObservableObject {
         guard !busy else { return }
         tap(.heavy)
         placing = .placing
+        let swapping = payingETH
         Task {
-            switch await Kallr.execute(order) {
+            let result = swapping ? await Kallr.swap(usd: usd) : await Kallr.execute(order)
+            switch result {
             case .success(let placed):
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 placing = .done("\(placed.preview.title) · \(placed.preview.get)")
-                Task { await load() }
+                if swapping {
+                    // The USDC lands a moment after the fill: read the wallet again, then buy with it.
+                    Task {
+                        for _ in 0..<6 {
+                            try? await Task.sleep(nanoseconds: 3_000_000_000)
+                            await load()
+                        }
+                        payAsset = "USDC"
+                    }
+                } else {
+                    Task { await load() }
+                }
             case .failure(let error):
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
                 placing = .failed(error.localizedDescription)
@@ -867,8 +907,8 @@ private struct TradeTab: View {
                             .offset(y: (PayBox.height - GetBox.height) / 2)
                             .allowsHitTesting(false)
                     }
-                    OrderTypeRow(model: model)
-                    if model.advancedOpen {
+                    if !model.payingETH { OrderTypeRow(model: model) }
+                    if model.advancedOpen, !model.payingETH {
                         AdvancedPanel(model: model).transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
@@ -904,6 +944,7 @@ private struct TradeTab: View {
     }
 
     private var reviewTitle: String {
+        if model.payingETH { return "REVIEW · SWAP $\(model.usd) OF ETH TO USDC  ↗" }
         let what = model.kind == .market ? "BUY" : model.kind == .limit ? "LIMIT BUY" : "TWAP BUY"
         return "REVIEW · \(what) $\(model.usd) OF \(model.symbol)  ↗"
     }
@@ -947,9 +988,13 @@ private struct PayBox: View {
             }
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 5) {
-                TokenBadge(symbol: "USDC")
+                Button { model.togglePay() } label: { TokenBadge(symbol: model.payAsset, chevron: true) }
+                    .buttonStyle(Press())
+                    .accessibilityLabel("Pay with \(model.payingETH ? "USDC" : "ETH")")
                 HStack(spacing: 5) {
-                    Text(model.wallet?.usdcValue.map { String(format: "Bal $%.2f", $0) } ?? "Bal …")
+                    Text(model.payingETH
+                         ? (model.swappableUsd.map { String(format: "Can swap $%.2f", $0) } ?? "Bal …")
+                         : (model.wallet?.usdcValue.map { String(format: "Bal $%.2f", $0) } ?? "Bal …"))
                         .font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted)
                     // While typing, MAX sits with the quick amounts under the box.
                     if !editing {
@@ -981,18 +1026,24 @@ private struct GetBox: View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("YOU GET").font(.system(size: 9, weight: .heavy)).tracking(0.6).foregroundStyle(Kallr.muted)
-                Text(model.estimate.map { "≈ " + Self.amount($0) } ?? "—")
+                Text(model.payingETH ? (Double(model.usd).map { String(format: "≈ %.2f", $0 * 0.97) } ?? "—")
+                     : (model.estimate.map { "≈ " + Self.amount($0) } ?? "—"))
                     .font(.system(size: 22, weight: .black).monospacedDigit()).foregroundStyle(Kallr.bone)
                     .lineLimit(1).minimumScaleFactor(0.6)
             }
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 5) {
-                Button { Haptics.modifier(); model.openPicker() } label: {
-                    TokenBadge(symbol: model.symbol, logo: model.isAddress ? model.assetLogo : nil, chevron: true)
+                if model.payingETH {
+                    TokenBadge(symbol: "USDC")
+                } else {
+                    Button { Haptics.modifier(); model.openPicker() } label: {
+                        TokenBadge(symbol: model.symbol, logo: model.isAddress ? model.assetLogo : nil, chevron: true)
+                    }
+                    .buttonStyle(Press())
+                    .accessibilityLabel("Pick a token")
                 }
-                .buttonStyle(Press())
-                .accessibilityLabel("Pick a token")
-                Text(model.priceLine).font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted).lineLimit(1)
+                Text(model.payingETH ? "Swap on Flash · ~$1 of ETH stays for gas" : model.priceLine)
+                    .font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.muted).lineLimit(1)
             }
         }
         .padding(.horizontal, 12)

@@ -217,12 +217,9 @@ enum Kallr {
     struct Compare: Codable {
         let edgePct: Double
         let winner: String
+        /** Same wording as the web app and extension: Definitive Flash, with its edge when it beats Uniswap. */
         var line: String {
-            switch winner {
-            case "flash": return String(format: "✓ Definitive Flash · +%.2f%% vs Uniswap", edgePct)
-            case "uniswap": return String(format: "Uniswap +%.2f%% · Flash adds MEV protection", -edgePct)
-            default: return "Same as Uniswap"
-            }
+            winner == "flash" ? String(format: "✓ Definitive Flash · +%.2f%% vs Uniswap", abs(edgePct)) : "✓ Definitive Flash · best route on Base"
         }
     }
     struct Placed: Codable { let orderId: String?; let preview: Preview; let details: Details?; let approvals: [String]?; let compare: Compare? }
