@@ -592,8 +592,6 @@ private struct TradeTab: View {
 
     private var form: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(model.source?.line ?? "Buy on Base · Definitive Flash")
-                .font(.system(size: 12, weight: .semibold)).foregroundStyle(model.source == nil ? Kallr.muted : Kallr.bone).lineLimit(1)
             AmountBar(model: model, editing: false)
             HStack(spacing: 6) {
                 ForEach(["1", "5", "10", "25"], id: \.self) { a in Chip(label: "$\(a)", on: model.usd == a) { model.tap(); model.usd = a } }
@@ -620,6 +618,12 @@ private struct TradeTab: View {
                 }
             }
             Spacer(minLength: 0)
+            // The post this trade copies, just above the footer.
+            if let source = model.source {
+                Label(source.line, systemImage: "quote.bubble.fill")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
+                    .labelStyle(PostLabel())
+            }
             status
             Button { model.review() } label: {
                 Text(model.busy ? "GETTING A QUOTE…" : model.blocked ?? "REVIEW $\(model.usd) OF \(model.asset)  ↗")
@@ -706,6 +710,16 @@ private struct Line: View {
 
 private extension String {
     func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
+}
+
+/** A post line: lime quote icon, then the caller and their call. */
+private struct PostLabel: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.icon.font(.system(size: 11)).foregroundStyle(Kallr.lime)
+            configuration.title
+        }
+    }
 }
 
 /**
