@@ -340,6 +340,15 @@ enum Kallr {
         let placedAt: String?
         let attachedBracket: Bracket?
         let filled: Filled?
+        /** The wallet that placed it: the Kall wallet, or the person's own wallet (X and the web app). */
+        let funderAddress: String?
+        /** From its Arkiv record, via /api/history: keyboard, extension (X) or desk (web app); nil without one. */
+        let source: String?
+        let caller: String?
+        let postId: String?
+        let arkivKey: String?
+        /** The coin's symbol when the record names it; Flash only gives the token's address. */
+        let assetHint: String?
 
         /** When Flash took the order, from its ISO timestamp. */
         var placedDate: Date? {
@@ -352,6 +361,7 @@ enum Kallr {
         var placedAgo: String? { placedDate.map { Kallr.ago($0.timeIntervalSince1970) } }
 
         var symbol: String {
+            if let assetHint, !assetHint.isEmpty { return assetHint }
             switch targetAsset.lowercased() {
             case "0x4200000000000000000000000000000000000006": return "ETH"
             case "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf": return "BTC"
@@ -377,6 +387,7 @@ enum Kallr {
             switch status {
             case "ORDER_STATUS_PENDING", "ORDER_STATUS_ACCEPTED": return "WORKING"
             case "ORDER_STATUS_PARTIALLY_FILLED": return "PART FILLED"
+            case "RECORDED": return "ON ARKIV"
             default: return status.replacingOccurrences(of: "ORDER_STATUS_", with: "")
             }
         }
@@ -392,6 +403,39 @@ enum Kallr {
         struct Body: Codable { let orders: [Order] }
         let body: Body? = await get("api/flash/orders?funder=\(funder)")
         return body?.orders
+    }
+
+    /** Every order across these wallets, newest first, each with where it was placed (keyboard, X, web). */
+    static func history(wallets: [String]) async -> [Order]? {
+        struct Body: Codable { let orders: [Order] }
+        guard !wallets.isEmpty else { return nil }
+        let body: Body? = await get("api/history?wallets=\(wallets.joined(separator: ","))")
+        return body?.orders
+    }
+
+    /** How an order filled on Base: each fill's transaction and the venues Flash routed it through. */
+    struct Fills: Codable {
+        struct Fill: Codable {
+            let transactionId: String?
+            let venues: [String]?
+            let status: String?
+            let filledAt: String?
+        }
+        let status: String?
+        let fills: [Fill]
+        /** "Uniswap v2", from Flash's "uniswap_v2". */
+        var venues: String? {
+            let names = Set(fills.flatMap { $0.venues ?? [] }).sorted().map { v in
+                v.split(separator: "_").map { w in w.count <= 2 ? String(w) : w.prefix(1).uppercased() + w.dropFirst() }.joined(separator: " ")
+            }
+            return names.isEmpty ? nil : names.joined(separator: ", ")
+        }
+        var transaction: String? { fills.compactMap(\.transactionId).first }
+    }
+
+    static func fills(orderId: String, funder: String?) async -> Fills? {
+        let q = funder.map { "?funder=\($0)" } ?? ""
+        return await get("api/flash/orders/\(orderId)\(q)")
     }
 
     private static func get<T: Decodable>(_ path: String) async -> T? {

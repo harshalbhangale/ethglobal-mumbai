@@ -280,6 +280,7 @@ export const flashOrderDetailSchema = z
       venues: f.venues ?? [],
       fillPrice: f.fillPrice ?? null,
       status: f.status ?? null,
+      filledAt: f.filledAt ?? null,
     })),
   }));
 export type FlashOrderDetail = z.output<typeof flashOrderDetailSchema>;
@@ -360,10 +361,14 @@ export function flashClient(options: { apiKey?: string; fetcher?: typeof fetch }
       const res = z.object({ assets: z.array(flashTokenSchema) }).passthrough().parse(await call(`/search?${q}`));
       return res.assets.filter((a) => a.chain === "base");
     },
-    /** One order with its fills: each fill carries the on-chain transaction and the venues it routed through. */
-    async getOrder(orderId: string): Promise<FlashOrderDetail> {
+    /**
+     * One order with its fills: each fill carries the on-chain transaction and the venues it routed through.
+     * Flash wants the order's funder wallet with it.
+     */
+    async getOrder(orderId: string, funderAddress?: string): Promise<FlashOrderDetail> {
       const id = z.string().uuid().parse(orderId);
-      return flashOrderDetailSchema.parse(await call(`/orders/${id}`));
+      const q = funderAddress ? `?${new URLSearchParams({ funderAddress: String(address.parse(funderAddress)) })}` : "";
+      return flashOrderDetailSchema.parse(await call(`/orders/${id}${q}`));
     },
     /**
      * Cancel an open order. The funder signs flashCancelMessage(orderId) with EIP-191 personal_sign;

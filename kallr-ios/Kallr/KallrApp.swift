@@ -58,12 +58,43 @@ final class AppStore: ObservableObject {
     @Published var ordersFailed = false
     /** "+10.00 USDC arrived", shown once after a deposit lands. */
     @Published var received: String?
+    /** The person's own wallets (X with the extension, the web app), kept on this phone; History reads them too. */
+    @Published var linkedWallets: [String] = UserDefaults.standard.stringArray(forKey: "kall.linkedWallets") ?? [] {
+        didSet { UserDefaults.standard.set(linkedWallets, forKey: "kall.linkedWallets") }
+    }
+
+    /** The Kall wallet's address (or the debug override). */
+    var kallAddress: String? { historyFunder ?? wallet?.address }
+    /** Placed by the Kall wallet (keyboard and app): the only orders this app can cancel. */
+    func isKall(_ o: Kallr.Order) -> Bool {
+        guard let funder = o.funderAddress, let kall = kallAddress else { return true }
+        return funder.lowercased() == kall.lowercased()
+    }
+    var kallOrders: [Kallr.Order]? { orders?.filter(isKall) }
+
+    /** Links the first wallet address in `text`; false when there isn't one. */
+    @discardableResult
+    func link(_ text: String) -> Bool {
+        guard let r = text.range(of: #"0x[0-9a-fA-F]{40}"#, options: .regularExpression) else { return false }
+        let address = String(text[r])
+        if address.lowercased() == kallAddress?.lowercased() { note = "That's the Kall wallet: its trades are already here."; return true }
+        if !linkedWallets.contains(where: { $0.lowercased() == address.lowercased() }) { linkedWallets.append(address) }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Task { await refresh() }
+        return true
+    }
+
+    func unlink(_ address: String) {
+        linkedWallets.removeAll { $0.lowercased() == address.lowercased() }
+        orders = orders?.filter { ($0.funderAddress ?? "").lowercased() != address.lowercased() }
+        Task { await refresh() }
+    }
 
     var ethPrice: Double? { price("ETH") }
     func price(_ symbol: String) -> Double? { feed?.prices[symbol] ?? nil }
-    func caller(of orderId: String) -> String? { feed?.trades?.first { $0.flashOrderId == orderId }?.caller }
-    /** The keyboard wrote this order to Arkiv as a trade record. */
-    func recorded(_ orderId: String) -> Bool { feed?.trades?.contains { $0.flashOrderId == orderId } ?? false }
+    func caller(of o: Kallr.Order) -> String? { o.caller ?? feed?.trades?.first { $0.flashOrderId == o.orderId }?.caller }
+    /** Kall wrote this order to Arkiv as a trade record. */
+    func recorded(_ o: Kallr.Order) -> Bool { o.arkivKey != nil || (feed?.trades?.contains { $0.flashOrderId == o.orderId } ?? false) }
     /** Callers with settled calls, best hit rate first. */
     var topCallers: [Kallr.FeedCaller] {
         (feed?.callers ?? []).filter { $0.settled > 0 }
@@ -81,8 +112,14 @@ final class AppStore: ObservableObject {
             self.wallet = wallet
         }
         if let feed { self.feed = feed }
-        if let address = historyFunder ?? self.wallet?.address {
-            if let fresh = await Kallr.orders(funder: address) {
+        // The Kall wallet (keyboard and app) and the person's own wallets (X and the web app), in one list.
+        var wallets = kallAddress.map { [$0] } ?? []
+        for a in linkedWallets where !wallets.contains(where: { $0.lowercased() == a.lowercased() }) { wallets.append(a) }
+        if !wallets.isEmpty {
+            var fresh = await Kallr.history(wallets: wallets)
+            // A server without /api/history yet: the Kall wallet's orders straight from Flash.
+            if fresh == nil, let kall = kallAddress { fresh = await Kallr.orders(funder: kall) }
+            if let fresh {
                 orders = fresh
                 ordersFailed = false
             } else {
@@ -224,7 +261,7 @@ private struct WalletHome: View {
                 Spacer()
                 Button("See all", action: seeHistory).font(.footnote.weight(.semibold)).tint(Kallr.lime)
             }
-            if let orders = store.orders, !orders.isEmpty {
+            if let orders = store.kallOrders, !orders.isEmpty {
                 ForEach(orders.prefix(3), id: \.orderId) { o in OrderRow(order: o, store: store, compact: true) }
             } else {
                 Text(store.orders == nil ? (store.ordersFailed ? "Couldn't read your orders from Flash. Pull down to try again." : "Reading your orders from Flash…") : "No orders yet. Copy a call from the Kall Keyboard to place one.")
@@ -495,7 +532,11 @@ private struct Markets: View {
 
 enum BaseScan {
     static func address(_ a: String) -> URL? { URL(string: "https://basescan.org/address/\(a)") }
+    static func tx(_ hash: String) -> URL? { URL(string: "https://basescan.org/tx/\(hash)") }
 }
+
+/** "0xa840…8072". */
+private func shortAddress(_ a: String) -> String { a.count > 12 ? "\(a.prefix(6))…\(a.suffix(4))" : a }
 
 private struct Amount: View {
     let label: String
@@ -625,8 +666,67 @@ enum QR {
 
 // MARK: - History
 
+/** Where an order was placed: the keyboard (Kall wallet), X with the extension, the web app, or just your wallet. */
+private enum Origin {
+    case keyboard, x, web, ownWallet
+
+    init(_ o: Kallr.Order, kall: Bool) {
+        switch o.source {
+        case "keyboard": self = .keyboard
+        case "extension": self = .x
+        case "desk": self = .web
+        default: self = kall ? .keyboard : .ownWallet
+        }
+    }
+
+    var short: String {
+        switch self {
+        case .keyboard: return "Keyboard"
+        case .x: return "On X"
+        case .web: return "Web app"
+        case .ownWallet: return "Your wallet"
+        }
+    }
+
+    var long: String {
+        switch self {
+        case .keyboard: return "Kall Keyboard"
+        case .x: return "X, with the Kall extension"
+        case .web: return "Kall web app"
+        case .ownWallet: return "Your wallet (no Kall record)"
+        }
+    }
+}
+
+private struct OriginIcon: View {
+    let origin: Origin
+    var size: CGFloat = 34
+
+    var body: some View {
+        ZStack {
+            Circle().fill(origin == .keyboard ? Kallr.lime : Kallr.graphite)
+            Circle().stroke(origin == .keyboard ? .clear : Kallr.hairline)
+            switch origin {
+            case .keyboard: Image(systemName: "keyboard.fill").font(.system(size: size * 0.4, weight: .bold)).foregroundStyle(Kallr.black)
+            case .x: Text("𝕏").font(.system(size: size * 0.48, weight: .heavy)).foregroundStyle(Kallr.bone)
+            case .web: Image(systemName: "globe").font(.system(size: size * 0.44, weight: .semibold)).foregroundStyle(Kallr.bone)
+            case .ownWallet: Image(systemName: "wallet.pass").font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(Kallr.bone)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityLabel(origin.long)
+    }
+}
+
+/** Every trade, from the keyboard, X and the web app: read live from Definitive Flash, with its Arkiv record. */
 private struct HistoryView: View {
-    enum Filter: String, CaseIterable { case all = "All", working = "Working", done = "Done" }
+    enum Filter: String, CaseIterable { case all = "All", keyboard = "Keyboard", x = "X & web", working = "Working" }
+    struct Day: Identifiable {
+        let label: String
+        let orders: [Kallr.Order]
+        var id: String { label }
+    }
+
     @ObservedObject var store: AppStore
     let setUp: () -> Void
     @State private var filter = Filter.all
@@ -636,37 +736,67 @@ private struct HistoryView: View {
         let all = store.orders ?? []
         switch filter {
         case .all: return all
+        case .keyboard: return all.filter { store.isKall($0) }
+        case .x: return all.filter { !store.isKall($0) }
         case .working: return all.filter(\.open)
-        case .done: return all.filter { !$0.open }
         }
+    }
+
+    /** By day, newest first: TODAY, YESTERDAY, NOV 4. */
+    private var days: [Day] {
+        let cal = Calendar.current
+        var out: [(day: Date?, orders: [Kallr.Order])] = []
+        for o in shown {
+            let day = o.placedDate.map { cal.startOfDay(for: $0) }
+            if let i = out.firstIndex(where: { $0.day == day }) { out[i].orders.append(o) } else { out.append((day, [o])) }
+        }
+        return out.map { group in
+            guard let day = group.day else { return Day(label: "EARLIER", orders: group.orders) }
+            let label = cal.isDateInToday(day) ? "TODAY" : cal.isDateInYesterday(day) ? "YESTERDAY"
+                : day.formatted(.dateTime.month(.abbreviated).day()).uppercased()
+            return Day(label: label, orders: group.orders)
+        }
+    }
+
+    /** USDC that changed hands in fills: paid on buys, received on sells. */
+    private var volume: Double {
+        (store.orders ?? []).compactMap { $0.filled?.contraAmount.flatMap(Double.init) }.reduce(0, +)
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Header(eyebrow: "DEFINITIVE FLASH / KALL WALLET ORDERS", title: "HISTORY")
+                Header(eyebrow: "KEYBOARD · X · WEB APP — ON FLASH AND ARKIV", title: "HISTORY")
                 if let note = store.note { Text(note).font(.footnote).foregroundStyle(Kallr.muted) }
+                if store.linkedWallets.isEmpty, store.orders != nil { WalletsCard(store: store) }
                 if let orders = store.orders {
                     if orders.isEmpty {
                         empty
                     } else {
                         HStack(spacing: 10) {
-                            Amount(label: "ORDERS", value: "\(orders.count)")
-                            Amount(label: "WORKING", value: "\(orders.filter(\.open).count)")
+                            Amount(label: "TRADES", value: "\(orders.count)", sub: "\(orders.filter(\.open).count) working")
                             Amount(label: "FILLED", value: "\(orders.filter { $0.statusLabel == "FILLED" }.count)")
+                            Amount(label: "VOLUME", value: String(format: "$%.2f", volume), sub: "USDC")
                         }
+                        .fixedSize(horizontal: false, vertical: true)
                         Picker("Show", selection: $filter) {
                             ForEach(Filter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                         }
                         .pickerStyle(.segmented)
                         if shown.isEmpty {
-                            Text(filter == .working ? "Nothing working on Flash right now." : "No finished orders yet.")
+                            Text(filter == .working ? "Nothing working on Flash right now."
+                                 : filter == .x ? (store.linkedWallets.isEmpty ? "Link the wallet you trade with on X to see those trades." : "No trades from X or the web app yet.")
+                                 : "No keyboard trades yet.")
                                 .font(.footnote).foregroundStyle(Kallr.muted)
                         }
-                        ForEach(shown) { o in
-                            OrderRow(order: o, store: store, compact: false)
-                                .contentShape(Rectangle())
-                                .onTapGesture { selected = o }
+                        ForEach(days) { day in
+                            Text(day.label).font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
+                                .padding(.top, 4)
+                            ForEach(day.orders) { o in
+                                OrderRow(order: o, store: store, compact: false)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { selected = o }
+                            }
                         }
                     }
                 } else if store.ordersFailed {
@@ -675,6 +805,7 @@ private struct HistoryView: View {
                 } else {
                     ProgressView().tint(Kallr.lime).frame(maxWidth: .infinity)
                 }
+                if !store.linkedWallets.isEmpty { WalletsCard(store: store).padding(.top, 6) }
                 PoweredByDefinitive(height: 12, suffix: "Flash on Base").padding(.top, 8)
             }
             .padding(20)
@@ -694,7 +825,7 @@ private struct HistoryView: View {
 
     private var empty: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("No orders yet. In X or Telegram, switch to the Kall Keyboard, pick a call and tap Trade. Every order lands here, read live from Definitive Flash.")
+            Text("No trades yet. Trade from the Kall Keyboard in X or Telegram, or copy a call on X with the Kall extension. Every trade lands here, read live from Definitive Flash and recorded on Arkiv.")
                 .font(.subheadline).foregroundStyle(Kallr.muted)
             Button(action: setUp) {
                 Text("SET UP THE KALL KEYBOARD")
@@ -707,17 +838,96 @@ private struct HistoryView: View {
     }
 }
 
+/** The wallets History reads: the Kall wallet, and the person's own wallet for X and the web app. */
+private struct WalletsCard: View {
+    @ObservedObject var store: AppStore
+    @State private var draft = ""
+    @State private var bad = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("YOUR WALLETS").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
+            if let kall = store.kallAddress {
+                wallet(.keyboard, "Kall wallet", "keyboard and app", kall, removable: false)
+            }
+            ForEach(store.linkedWallets, id: \.self) { a in
+                wallet(.x, "Your wallet", "X and the web app", a, removable: true)
+            }
+            HStack(spacing: 8) {
+                TextField("", text: $draft, prompt: Text("0x… the wallet you trade with on X").foregroundColor(Kallr.muted))
+                    .font(.system(size: 13, design: .monospaced)).foregroundStyle(Kallr.bone)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .submitLabel(.done).onSubmit(add)
+                    .padding(.horizontal, 12).frame(height: 42)
+                    .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
+                if draft.isEmpty {
+                    // The system Paste button reads the clipboard without iOS's "Allow Paste" prompt.
+                    PasteButton(payloadType: String.self) { strings in
+                        let text = strings.joined(separator: " ")
+                        Task { @MainActor in bad = !store.link(text) }
+                    }
+                    .labelStyle(.titleOnly)
+                    .buttonBorderShape(.roundedRectangle(radius: 10))
+                    .tint(Kallr.lime)
+                } else {
+                    Button(action: add) {
+                        Text("LINK").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.black)
+                            .padding(.horizontal, 16).frame(height: 42)
+                            .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+            }
+            Text(bad ? "That isn't a wallet address. Copy it from MetaMask, or from Wallet in the Kall web app."
+                 : "Trades you place on X with the Kall extension, or in the Kall web app, come from your own wallet. Link it and they show up here next to your keyboard trades. Only the address is kept, on this phone.")
+                .font(.footnote).foregroundStyle(bad ? Kallr.danger : Kallr.muted)
+        }
+        .padding(14)
+        .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Kallr.hairline))
+    }
+
+    private func add() {
+        if store.link(draft) {
+            draft = ""
+            bad = false
+        } else {
+            bad = true
+        }
+    }
+
+    private func wallet(_ origin: Origin, _ title: String, _ used: String, _ address: String, removable: Bool) -> some View {
+        HStack(spacing: 10) {
+            OriginIcon(origin: origin, size: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Kallr.bone)
+                Text("\(used) · \(shortAddress(address))").font(.system(size: 12, design: .monospaced)).foregroundStyle(Kallr.muted).lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            if removable {
+                Button { store.unlink(address) } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 18)).foregroundStyle(Kallr.muted)
+                }
+                .accessibilityLabel("Remove \(shortAddress(address))")
+            }
+        }
+    }
+}
+
 private struct OrderRow: View {
     let order: Kallr.Order
     @ObservedObject var store: AppStore
     let compact: Bool
 
     var body: some View {
+        let kall = store.isKall(order)
+        let origin = Origin(order, kall: kall)
         HStack(alignment: .top, spacing: 10) {
+            OriginIcon(origin: origin, size: compact ? 28 : 34)
             VStack(alignment: .leading, spacing: 3) {
                 Text(order.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Kallr.bone)
-                let sub = [store.caller(of: order.orderId).map { "from @\($0)'s call" }, order.placedAgo, compact ? nil : order.exits].compactMap { $0 }
-                if !sub.isEmpty { Text(sub.joined(separator: " · ")).font(.footnote).foregroundStyle(Kallr.muted).lineLimit(2) }
+                let sub = [origin.short, store.caller(of: order).map { "@\($0)'s call" }, order.placedAgo, compact ? nil : order.exits]
+                    .compactMap { $0 }.filter { !$0.isEmpty }
+                Text(sub.joined(separator: " · ")).font(.footnote).foregroundStyle(Kallr.muted).lineLimit(2)
                 if !compact, let fill = order.filledLine {
                     Text(fill).font(.footnote.weight(.semibold).monospacedDigit()).foregroundStyle(Kallr.lime).lineLimit(2)
                 }
@@ -725,7 +935,7 @@ private struct OrderRow: View {
             Spacer(minLength: 6)
             VStack(alignment: .trailing, spacing: 6) {
                 StatusBadge(order: order)
-                if !compact, order.open, order.orderType != "bracket" {
+                if !compact, kall, order.open, order.orderType != "bracket" {
                     Button { Task { await store.cancel(order.orderId) } } label: {
                         Text(store.cancelling.contains(order.orderId) ? "…" : "CANCEL").font(.system(size: 10, weight: .heavy))
                             .foregroundStyle(Kallr.danger).padding(.horizontal, 8).frame(height: 22)
@@ -753,7 +963,10 @@ private struct StatusBadge: View {
     }
 }
 
-/** One order: what it is, where it came from, its Flash ID, and Cancel while it's working. */
+/**
+ * One order: where it was placed and from which wallet, what filled, its transaction on Base, its Arkiv
+ * record and the post it copied; Cancel while a Kall-wallet order is working.
+ */
 private struct OrderDetail: View {
     let orderId: String
     let fallback: Kallr.Order
@@ -761,11 +974,15 @@ private struct OrderDetail: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var copied = false
+    @State private var fills: Kallr.Fills?
 
     /** The latest copy, so the status moves while the sheet is open. */
     private var order: Kallr.Order { store.orders?.first { $0.orderId == orderId } ?? fallback }
+    private var funder: String? { order.funderAddress ?? store.kallAddress }
 
     var body: some View {
+        let kall = store.isKall(order)
+        let origin = Origin(order, kall: kall)
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
@@ -773,20 +990,40 @@ private struct OrderDetail: View {
                     Spacer()
                     Button("Done") { dismiss() }.tint(Kallr.lime)
                 }
-                Text(order.title).font(.system(size: 24, weight: .black)).foregroundStyle(Kallr.bone)
+                HStack(spacing: 12) {
+                    OriginIcon(origin: origin, size: 44)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(order.title).font(.system(size: 22, weight: .black)).foregroundStyle(Kallr.bone)
+                        Text(origin.long).font(.footnote.weight(.semibold)).foregroundStyle(Kallr.muted)
+                    }
+                }
+                if let fill = order.filledLine {
+                    Text(fill).font(.system(size: 15, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.lime)
+                }
                 VStack(spacing: 0) {
+                    row("Placed from", origin.long)
+                    if let funder { row("Wallet", "\(kall ? "Kall wallet" : "Your wallet") · \(shortAddress(funder))") }
                     row("Type", order.orderType == "bracket" ? "Exit (take profit / stop loss)" : order.orderType.capitalized)
-                    row("Side", order.side.capitalized)
                     // Flash sizes buys in USDC and sells (and exits) in the asset.
                     row("Size", order.side == "buy" && order.orderType != "bracket" ? "$\(order.qty) of \(order.symbol)" : "\(order.qty) \(order.symbol)")
                     if let when = order.placedDate { row("Placed", when.formatted(date: .abbreviated, time: .shortened)) }
-                    if let fill = order.filledLine { row("Filled", fill) }
                     if let exits = order.exits, !exits.isEmpty { row("Exits", exits) }
-                    if let caller = store.caller(of: order.orderId) { row("Copied from", "@\(caller)'s call") }
-                    row("On Arkiv", store.recorded(order.orderId) ? "Trade recorded" : "Not recorded yet", last: true)
+                    if let caller = store.caller(of: order) { row("Copied from", "@\(caller)'s call") }
+                    if let fills, !fills.fills.isEmpty {
+                        row("On Base", [chainStatus(fills.fills.first?.status), fills.venues.map { "via \($0)" }].compactMap { $0 }.joined(separator: " "))
+                    }
+                    row("On Arkiv", store.recorded(order) ? "Trade recorded" : "Not recorded", last: true)
                 }
                 .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Kallr.hairline))
+
+                VStack(spacing: 10) {
+                    if let tx = fills?.transaction { link("TRANSACTION ON BASESCAN", BaseScan.tx(tx), primary: true) }
+                    if let key = order.arkivKey { link("TRADE RECORD ON ARKIV", URL(string: "https://rabdi.explorer.arkiv.network/entity/\(key)")) }
+                    if let post = order.postId { link("THE CALL ON X", URL(string: "https://x.com/i/status/\(post)")) }
+                    if let funder { link(kall ? "KALL WALLET ON BASESCAN" : "YOUR WALLET ON BASESCAN", BaseScan.address(funder)) }
+                }
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text("FLASH ORDER ID").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
                     HStack(spacing: 10) {
@@ -805,7 +1042,7 @@ private struct OrderDetail: View {
                     .padding(12)
                     .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
                 }
-                if order.open, order.orderType != "bracket" {
+                if kall, order.open, order.orderType != "bracket" {
                     Button { Task { await store.cancel(order.orderId) } } label: {
                         Text(store.cancelling.contains(order.orderId) ? "CANCELLING…" : "CANCEL ORDER")
                             .font(.system(size: 14, weight: .heavy)).tracking(0.6)
@@ -815,15 +1052,6 @@ private struct OrderDetail: View {
                     }
                     .disabled(store.cancelling.contains(order.orderId))
                 }
-                if let address = store.wallet?.address, let url = BaseScan.address(address) {
-                    Button { openURL(url) } label: {
-                        Text("KALL WALLET ON BASESCAN  ↗")
-                            .font(.system(size: 14, weight: .heavy)).tracking(0.6)
-                            .foregroundStyle(Kallr.bone)
-                            .frame(maxWidth: .infinity, minHeight: 48)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
-                    }
-                }
                 PoweredByDefinitive(height: 12, suffix: "Flash on Base")
             }
             .padding(20)
@@ -831,6 +1059,29 @@ private struct OrderDetail: View {
         }
         .background(Kallr.black.ignoresSafeArea())
         .presentationDetents([.large])
+        // The fill's transaction on Base, read once (and again if the order fills while the sheet is open).
+        .task(id: order.status) {
+            guard order.status != "RECORDED" else { return }
+            fills = await Kallr.fills(orderId: orderId, funder: funder)
+        }
+    }
+
+    /** "Finalized", from Flash's "CHAIN_STATUS_FINALIZED". */
+    private func chainStatus(_ s: String?) -> String? {
+        guard let s, !s.isEmpty else { return nil }
+        return s.replacingOccurrences(of: "CHAIN_STATUS_", with: "").replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    private func link(_ title: String, _ url: URL?, primary: Bool = false) -> some View {
+        Button { if let url { openURL(url) } } label: {
+            Text("\(title)  ↗")
+                .font(.system(size: 14, weight: .heavy)).tracking(0.6)
+                .foregroundStyle(primary ? Kallr.black : Kallr.bone)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(primary ? Kallr.lime : .clear, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(primary ? .clear : Kallr.hairline))
+        }
+        .disabled(url == nil)
     }
 
     private func row(_ label: String, _ value: String, last: Bool = false) -> some View {
