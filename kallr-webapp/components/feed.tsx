@@ -51,7 +51,7 @@ export function CountUp({ value, format = (n: number) => Math.round(n).toLocaleS
 // ---------- Shell: X-style three columns ----------
 
 const NAV = [
-  { href: "/dashboard", label: "Home", icon: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5z" /> },
+  { href: "/app", label: "Home", icon: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5z" /> },
   { href: "/kol", label: "Callers", icon: <path d="M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM17 11a3 3 0 1 0 0-6M21 19v-1a4 4 0 0 0-3-3.87" /> },
   { href: "/trades", label: "Trades", icon: <path d="M4 17l6-6 4 4 6-8M14 7h6v6" /> },
   { href: "/app", label: "Desk", icon: <path d="M3 5h18v11H3zM8 20h8M12 16v4" /> },
@@ -65,7 +65,7 @@ export function Shell({ session, children, rail }: { session: Session; children:
     <div className="relative min-h-dvh">
       <div className="mx-auto grid max-w-[1280px] lg:grid-cols-[240px_minmax(0,1fr)_340px] xl:grid-cols-[260px_minmax(0,1fr)_360px]">
         <aside className="sticky top-0 hidden h-dvh flex-col px-4 py-6 lg:flex">
-          <Logo href="/dashboard" />
+          <Logo href="/app" />
           <nav className="mt-8 flex flex-col gap-1" aria-label="Main">
             {NAV.map((n) => (
               <Link
@@ -107,7 +107,7 @@ export function Shell({ session, children, rail }: { session: Session; children:
 
         <main className="min-h-dvh min-w-0 border-rule bg-card/70 pb-24 backdrop-blur lg:border-x lg:pb-0">
           <div className="flex items-center justify-between border-b border-rule px-4 py-3 lg:hidden">
-            <Logo href="/dashboard" />
+            <Logo href="/app" />
             {!session.authenticated && <SignInButton />}
           </div>
           {children}

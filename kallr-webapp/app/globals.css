@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Black, bone and lime: the same look as the keyboard and the Xtrading site. */
+/* Black, bone and lime: the same look as the Kallr keyboard. */
 @theme {
   --color-paper: #050605;
   --color-card: #0d110f;
@@ -178,7 +178,7 @@
 .lift { transition: transform 200ms ease, box-shadow 200ms ease; }
 .lift:hover { transform: translateY(-2px); box-shadow: 0 10px 30px -12px rgba(20, 33, 61, 0.25); }
 
-/* ---------- Xtrading-style landing ---------- */
+/* ---------- Landing ---------- */
 
 @keyframes caret-blink { 50% { opacity: 0; } }
 .type-caret {

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 /**
- * The particle knot behind the landing hero, ported from the team's earlier Xtrading site
+ * The particle knot behind the landing hero, ported from the team's earlier X trading site
  * (apps/web/components/signal-field.tsx there). A 3D torus knot of dots projected onto a canvas,
  * turning slowly and leaning toward the mouse. Decorative only: no prices or data in it.
  * It stops when off screen, when the tab is hidden, and for reduced motion.

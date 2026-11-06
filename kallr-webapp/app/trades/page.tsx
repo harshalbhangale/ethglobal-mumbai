@@ -97,7 +97,7 @@ function Dashboard({ session }: { session: Session | null }) {
       <header className="flex items-center justify-between border-b border-rule bg-card px-6 py-4">
         <Logo href="/" />
         <nav className="flex items-center gap-5 text-sm">
-          <Link href="/dashboard" className="text-slate hover:text-ink">
+          <Link href="/app" className="text-slate hover:text-ink">
             Dashboard
           </Link>
           <Link href="/app" className="text-slate hover:text-ink">

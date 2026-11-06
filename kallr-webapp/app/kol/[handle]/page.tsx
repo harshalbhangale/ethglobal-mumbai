@@ -76,7 +76,7 @@ function Profile({ session }: { session: Session }) {
   return (
     <Shell session={session} rail={rail}>
       <div className="sticky top-0 z-30 flex items-center gap-4 bg-card/85 px-4 py-2 backdrop-blur">
-        <Link href="/dashboard" aria-label="Back" className="rounded-full p-2 hover:bg-paper">
+        <Link href="/app" aria-label="Back" className="rounded-full p-2 hover:bg-paper">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 12H5M11 6l-6 6 6 6" />
           </svg>

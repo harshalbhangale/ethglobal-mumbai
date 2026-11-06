@@ -6,17 +6,19 @@ import { OPEN_STATUSES } from "@kallr/integrations/definitive";
 import { Logo, LogoMark } from "@/components/logo";
 import { SignInButton, WithSession, type Session } from "@/components/auth";
 import { InstallButton } from "@/components/install-button";
+import { CallsBoard } from "@/components/calls-board";
 import { Following } from "@/components/following";
+import { useKallrData } from "@/lib/feed";
 import { WalletPanel } from "@/components/wallet-panel";
 import { useWallets } from "@privy-io/react-auth";
 import { OpenOrders, useFlashOrders } from "@/components/order-desk";
 import { TradeTicket } from "@/components/trade-ticket";
 
 const nav = [
+  { id: "following", label: "Following" },
   { id: "desk", label: "Trade" },
   { id: "orders", label: "Orders" },
   { id: "wallet", label: "Wallet" },
-  { id: "following", label: "Following" },
 ];
 
 export default function AppPage() {
@@ -47,7 +49,7 @@ function AppShell({ session }: { session: Session }) {
             <SignInButton />
           </div>
           <p className="mt-6 text-sm text-slate">
-            <a href="/dashboard" className="border-b border-rule-strong pb-0.5 hover:border-ink">
+            <a href="/kol" className="border-b border-rule-strong pb-0.5 hover:border-ink">
               Browse live calls first ↗
             </a>
           </p>
@@ -64,11 +66,12 @@ const isTab = (v: string): v is Tab => nav.some((n) => n.id === v);
 
 /** One view at a time, kept in the URL hash so links and the back button work; never a jump down a long page. */
 function useTab(): [Tab, (t: Tab) => void] {
-  const [tab, setTabState] = useState<Tab>("desk");
+  const [tab, setTabState] = useState<Tab>("following");
   useEffect(() => {
     const read = () => {
       const h = window.location.hash.slice(1);
-      setTabState(isTab(h) ? h : "desk");
+      const fallback: Tab = new URLSearchParams(window.location.search).has("order") ? "desk" : "following";
+      setTabState(isTab(h) ? h : fallback);
     };
     read();
     window.addEventListener("hashchange", read);
@@ -96,10 +99,10 @@ const Icon = ({ tab }: { tab: Tab }) => (
 );
 
 const titles: Record<Tab, { title: (handle: string | null) => string; sub: string }> = {
-  desk: { title: (h) => (h ? `Hi, @${h}` : "Trade"), sub: "Copy a call, set your exits, and let Kallr watch it for you." },
+  desk: { title: () => "Trade", sub: "Copy a call, set your exits, and let Kallr watch it for you." },
   orders: { title: () => "Orders", sub: "Live from Definitive Flash. Exits arm when an entry first fills." },
-  wallet: { title: () => "Wallet", sub: "Your wallet on Base. Funds stay here until a trade fills." },
-  following: { title: () => "Following", sub: "Callers you follow, here and from X." },
+  wallet: { title: () => "Wallet", sub: "Which wallet Kallr trades from, and what's in it on Base." },
+  following: { title: (h) => (h ? `Hi, @${h}` : "Following"), sub: "Calls from the callers you follow, read from Arkiv. Star the ones you care about." },
 };
 
 function Desk({ session }: { session: Session }) {
@@ -107,6 +110,7 @@ function Desk({ session }: { session: Session }) {
   const { wallets } = useWallets();
   const wallet = wallets.find((w) => w.address.toLowerCase() === session.address?.toLowerCase()) ?? null;
   const flashOrders = useFlashOrders(session.address);
+  const arkiv = useKallrData(session.address);
   const openCount = flashOrders.orders?.filter((o) => OPEN_STATUSES.includes(o.status)).length ?? 0;
 
   return (
@@ -132,11 +136,8 @@ function Desk({ session }: { session: Session }) {
             </button>
           ))}
           <div className="my-2 border-t border-rule" />
-          <Link href="/dashboard" className="rounded-lg px-3 py-2 text-[15px] text-slate hover:text-ink">
-            Dashboard
-          </Link>
-          <Link href="/trades" className="rounded-lg px-3 py-2 text-[15px] text-slate hover:text-ink">
-            Trade history
+          <Link href="/kol" className="rounded-lg px-3 py-2 text-[15px] text-slate hover:text-ink">
+            All callers
           </Link>
         </nav>
         <div className="mt-auto space-y-3">
@@ -169,16 +170,17 @@ function Desk({ session }: { session: Session }) {
             <TradeTicket wallet={wallet} onPlaced={flashOrders.refresh} onViewOrders={() => setTab("orders")} />
           </div>
           <div hidden={tab !== "orders"}>
-            <OpenOrders orders={flashOrders.orders} error={flashOrders.error} />
+            <OpenOrders
+              orders={flashOrders.orders}
+              error={flashOrders.error}
+              history={{ trades: arkiv.trades, explorer: arkiv.explorer, loading: arkiv.loading }}
+            />
           </div>
           <div hidden={tab !== "wallet"} className="max-w-xl">
-            {session.address ? (
-              <WalletPanel address={session.address} embedded={session.embedded} />
-            ) : (
-              <section className="rounded-2xl border border-rule bg-card p-6 text-sm text-slate">Setting up your wallet…</section>
-            )}
+            <WalletPanel session={session} />
           </div>
-          <div hidden={tab !== "following"} className="max-w-3xl">
+          <div hidden={tab !== "following"} className="grid max-w-5xl gap-4 lg:grid-cols-[1fr_300px]">
+            <CallsBoard />
             <Following />
           </div>
         </main>

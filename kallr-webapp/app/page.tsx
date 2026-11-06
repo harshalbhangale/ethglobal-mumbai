@@ -43,7 +43,7 @@ export default function Landing() {
             <a href="#how" className="hidden text-slate hover:text-ink sm:inline">
               How it works
             </a>
-            <Link href="/dashboard" className="rounded-md bg-lime px-4 py-2.5 font-semibold text-on-lime transition-colors hover:bg-lime-strong">
+            <Link href="/app" className="rounded-md bg-lime px-4 py-2.5 font-semibold text-on-lime transition-colors hover:bg-lime-strong">
               Open Kallr <span aria-hidden="true">↗</span>
             </Link>
           </nav>
@@ -75,7 +75,7 @@ export default function Landing() {
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4">
               <Link
-                href="/dashboard"
+                href="/app"
                 className="inline-flex items-center gap-4 rounded-md bg-lime px-5 py-3.5 font-semibold text-on-lime transition-colors hover:bg-lime-strong"
               >
                 See live calls <span aria-hidden="true">↗</span>
