@@ -130,23 +130,20 @@ describe("scanProfile", () => {
     expect(hosts).toHaveLength(1);
     expect(hosts[0]?.nextElementSibling?.getAttribute("role")).toBe("tablist");
     const root = hosts[0]?.shadowRoot;
-    const text = root?.textContent ?? "";
-    expect(root?.querySelector(".card .title .wordmark")?.textContent).toBe("Kall Markets");
-    expect(root?.querySelector(".card .title .title-sub")?.textContent).toBe("@kol on Kall Markets");
-    // Follow sits in the title row, drawn like X's Follow button.
-    expect(root?.querySelector(".card .title .x-follow")?.textContent).toBe("Follow");
-    expect(root?.querySelector(".card-actions .cta")?.getAttribute("href")).toBe("https://kallr.test/app");
-    expect(text).toContain("1/1");
-    expect(text).toContain("2 calls by @kol, each priced at the minute it was posted");
-    // The record is read from Arkiv, with a link to the writer's entities.
-    expect(root?.querySelector(".note a")?.getAttribute("href")).toBe(
+    // Small: a header with Follow, four numbers, the last calls, one footer line.
+    expect(root?.querySelector(".pc-title")?.textContent).toBe("Kall record @kol");
+    expect(root?.querySelector(".pc-head .pc-follow")?.textContent).toBe("Follow");
+    const stats = [...(root?.querySelectorAll(".pc-stat") ?? [])].map((s) => s.textContent);
+    expect(stats).toEqual(["2calls", "100%hit rate · 1/1", "+2.2%avg return", "1open"]);
+    expect(root?.querySelectorAll(".pc-calls li")).toHaveLength(2);
+    expect(root?.querySelector(".pc-calls a")?.getAttribute("href")).toMatch(/^https:\/\/x\.com\/kol\/status\/(8|9)$/);
+    // The record is read from Arkiv, with a link to the writer's entities, and the desk link.
+    const foot = [...(root?.querySelectorAll(".pc-foot a") ?? [])].map((a) => a.getAttribute("href"));
+    expect(foot).toEqual([
       "https://rabdi.explorer.arkiv.network/address/0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53",
-    );
-    expect(root?.querySelector(".recent-calls a")?.getAttribute("href")).toBe("https://x.com/kol/status/9");
-    const toggle = root?.querySelector<HTMLElement>(".card-toggle");
-    toggle?.click();
-    expect(toggle?.textContent).toBe("Hide details");
-    expect(root?.querySelector(".card-overview")?.textContent).toContain("$ETH bullish1/1 moved their way");
+      "https://kallr.test/app?caller=kol",
+    ]);
+    expect(root?.querySelector(".pc-foot")?.textContent).toContain("too few to judge");
   });
   it("is honest when a caller has no calls yet, and leaves non-profile pages alone", async () => {
     await wire({ calls: [], writer: null });
@@ -154,7 +151,7 @@ describe("scanProfile", () => {
     document.body.innerHTML = profilePage("newkol");
     const { scanProfile } = await import("./profile");
     await scanProfile();
-    expect(document.querySelector(".kallr-profile-host")?.shadowRoot?.textContent).toContain("No calls by @newkol on Kall Markets yet");
+    expect(document.querySelector(".kallr-profile-host")?.shadowRoot?.textContent).toContain("No calls by @newkol scored on Kall yet");
     history.replaceState(null, "", "/home");
     await scanProfile();
     expect(document.querySelector(".kallr-profile-host")).toBeNull();

@@ -4,7 +4,7 @@ import { tokenReferences } from "@kallr/integrations/token-references";
 import { after } from "next/server";
 import { z } from "zod";
 import { aiEnabled, readCall } from "@/lib/server/ai";
-import { recordCall } from "@/lib/server/arkiv";
+import { callEntityKey, recordCall } from "@/lib/server/arkiv";
 
 // Token checks are cached for 10 minutes per contract.
 const tokenCache = new Map<string, { at: number; check: TokenCheck | null }>();
@@ -82,5 +82,7 @@ export async function POST(req: Request) {
       postedAt,
       expiresAt,
     }));
-  return Response.json({ call, record, calls, checks: { token }, coverage: "posts seen in this browser" });
+  // The call's own record on Arkiv, so the card can link straight to it (null until it's written).
+  const arkivKey = await callEntityKey(current.postId);
+  return Response.json({ call, record, calls, checks: { token }, arkivKey, coverage: "posts seen in this browser" });
 }

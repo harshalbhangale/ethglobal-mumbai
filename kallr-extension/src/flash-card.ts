@@ -169,10 +169,13 @@ export function flashCard(input: {
   const callerStrip = (() => {
     const follow = followButton(post.handle, (label) => el("button", { type: "button", class: "x-follow" }, label) as HTMLButtonElement);
     const read = call ? el("span", { class: `caller-record ${call.direction === "up" ? "up" : "down"}` }, `${call.direction === "up" ? "Long" : "Short"} $${call.asset}`) : null;
+    // The call's own record on Arkiv: read-only, so a deleted post still has it.
+    const key = input.answer?.arkivKey;
+    const onArkiv = key && /^0x[0-9a-fA-F]{64}$/.test(key) ? safeLink(`https://rabdi.explorer.arkiv.network/entity/${key}`, "On Arkiv ↗", "caller-arkiv") : null;
     return el(
       "div",
       { class: "caller-strip" },
-      el("div", { class: "caller-id" }, safeLink(`https://x.com/${post.handle}`, `@${post.handle}`, "caller-handle"), read),
+      el("div", { class: "caller-id" }, safeLink(`https://x.com/${post.handle}`, `@${post.handle}`, "caller-handle"), read, onArkiv),
       follow,
     );
   })();

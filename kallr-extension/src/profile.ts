@@ -1,9 +1,8 @@
-import { recentCalls } from "./call-insights";
 import type { SeenCall } from "./card-metrics";
 import { appOrigin } from "./config";
-import { el, poweredBy, safeLink, send, shadowHost, wordmark } from "./dom";
+import { el, send } from "./dom";
 import { followButton } from "./follows";
-import { breakdown, recordPanel } from "./record-panel";
+import { callerCard, PROFILE_CARD_CSS } from "./profile-card";
 
 /** First path segments on x.com that are app pages, not profiles. */
 const RESERVED = new Set([
@@ -33,12 +32,15 @@ function mount(anchor: HTMLElement, host: HTMLElement) {
 }
 
 type RecordAnswer = { calls?: SeenCall[]; writer?: string | null };
-const ARKIV_EXPLORER = "https://rabdi.explorer.arkiv.network";
+
+const isDark = () => {
+  const bg = getComputedStyle(document.body).backgroundColor.match(/\d+/g)?.map(Number) ?? [255, 255, 255];
+  return (bg[0] ?? 255) + (bg[1] ?? 255) + (bg[2] ?? 255) < 200;
+};
 
 /**
- * The Kall Markets card on an X profile: the caller's record from Arkiv as metric tiles, recent
- * calls, and Open desk / Show details / Follow.
- * Refreshes at most once a minute per profile.
+ * The Kall card on an X profile: the caller's record from Arkiv, small. Calls, hit rate, average return,
+ * open calls, the last three calls, and where it's stored. Refreshes at most once a minute per profile.
  */
 export async function scanProfile() {
   const handle = profileHandle();
@@ -51,67 +53,25 @@ export async function scanProfile() {
   const anchor = document.querySelector<HTMLElement>('[data-testid="primaryColumn"] [data-testid="UserName"]');
   if (!anchor) return;
   if (existing && Number(existing.dataset.refreshAt) > Date.now()) return;
-  const expanded = existing?.dataset.expanded === "true";
   existing?.remove();
 
-  const { host, root } = shadowHost("kallr-profile-host");
+  const host = el("div", { class: "kallr-profile-host" });
   host.dataset.handle = handle;
   host.dataset.refreshAt = String(Date.now() + 60_000);
-  const details = el("div", {}, el("p", { class: "note" }, "Loading the record from Arkiv…"));
-  const toggle = el("button", { type: "button", class: "card-toggle", "aria-expanded": "false" }, "Show details");
-  const overview = el("div", { class: "card-overview", hidden: "" });
-  const follow = followButton(handle, (label) => el("button", { type: "button", class: "x-follow" }, label) as HTMLButtonElement);
-  let calls: SeenCall[] = [];
-  const setOpen = (open: boolean) => {
-    overview.hidden = !open;
-    host.dataset.expanded = String(open);
-    toggle.setAttribute("aria-expanded", String(open));
-    toggle.textContent = open ? "Hide details" : "Show details";
-    if (open) overview.replaceChildren(breakdown(calls));
-  };
-  toggle.addEventListener("click", () => setOpen(overview.hidden));
-  root.append(
-    el(
-      "div",
-      { class: "card" },
-      el(
-        "div",
-        { class: "title" },
-        el("span", { class: "title-id" }, wordmark(20), el("span", { class: "title-sub" }, `@${handle} on Kall Markets`)),
-        follow,
-      ),
-      details,
-      el(
-        "div",
-        { class: "card-actions" },
-        safeLink(new URL("/app", appOrigin).href, "Open desk ↗", "cta"),
-        toggle,
-      ),
-      overview,
-      poweredBy(),
-    ),
-  );
+  host.dataset.theme = isDark() ? "dark" : "light";
+  host.addEventListener("click", (e) => e.stopPropagation());
+  const root = host.attachShadow({ mode: "open" });
+  const follow = followButton(handle, (label) => el("button", { type: "button", class: "pc-follow" }, label) as HTMLButtonElement);
+  const deskUrl = new URL(`/app?caller=${handle}`, appOrigin).href;
+  let card = callerCard({ handle, calls: null, follow, deskUrl });
+  root.append(el("style", {}, PROFILE_CARD_CSS), card);
   mount(anchor, host);
 
   const answer = await send<RecordAnswer>({ type: "caller-record", handle });
   if (!host.isConnected || profileHandle() !== handle) return;
-  calls = answer?.calls ?? [];
-  const proof = answer?.writer
-    ? safeLink(`${ARKIV_EXPLORER}/address/${answer.writer}`, "Stored on Arkiv ↗")
-    : null;
-  details.replaceChildren(
-    ...(answer
-      ? [recordPanel(calls)]
-      : [el("p", { class: "note" }, "Couldn't load the record. Try again in a minute.")]),
-    el(
-      "p",
-      { class: "note" },
-      calls.length
-        ? `${calls.length} call${calls.length === 1 ? "" : "s"} by @${handle}, each priced at the minute it was posted. Not wallet returns. `
-        : `No calls by @${handle} on Kall Markets yet. `,
-      proof,
-    ),
-    ...(calls.length ? [recentCalls(handle, calls, 3) as HTMLElement] : []),
-  );
-  if (expanded) setOpen(true);
+  const next = answer
+    ? callerCard({ handle, calls: answer.calls ?? [], writer: answer.writer, follow, deskUrl })
+    : el("div", { class: "pc" }, el("p", { class: "pc-empty" }, "Couldn't load the record. Try again in a minute."));
+  card.replaceWith(next);
+  card = next;
 }

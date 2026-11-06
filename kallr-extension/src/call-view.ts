@@ -20,6 +20,8 @@ export type Answer = {
   calls?: SeenCall[];
   /** Safety checks on a contract the post shares (GoPlus + Dexscreener). */
   checks?: { token: import("./token-card").TokenCheck | null };
+  /** This call's entity on Arkiv, for a direct explorer link; null until it's written. */
+  arkivKey?: string | null;
 };
 
 export type PostRef = { handle: string; postId: string };

@@ -186,6 +186,8 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .inline-card a.caller-handle { color: var(--foreground); font-weight: 700; font-size: 15px; text-decoration: none; }
 .inline-card a.caller-handle:hover { text-decoration: underline; }
 .caller-record { color: var(--muted); font-size: 13px; }
+.caller-arkiv { color: var(--muted); font-size: 12px; text-decoration: none; margin-left: 8px; }
+.caller-arkiv:hover { text-decoration: underline; }
 
 /* Follow pill, as X draws it: white "Follow", outlined "Following", red "Unfollow" on hover. */
 .x-follow { flex: 0 0 auto; min-width: 84px; height: 34px; padding: 0 16px; border-radius: 99px; cursor: pointer;

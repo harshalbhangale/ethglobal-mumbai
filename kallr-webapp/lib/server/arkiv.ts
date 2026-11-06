@@ -10,6 +10,7 @@ import {
   callValues,
   callSnapshot,
   findCall,
+  findResultKey,
   hasResult,
   readDueCalls,
   readOpenCalls,
@@ -183,4 +184,14 @@ export async function dueCallsForCre(nowSeconds: number) {
     postedAt: Number(c.postedAt.value),
     expiresAt: Number(c.deadline.value),
   }));
+}
+
+/** The Arkiv entity key of a stored call, for a direct explorer link, or null when it isn't stored yet. */
+export async function callEntityKey(postId: string): Promise<string | null> {
+  if (!writer) return null;
+  // A settled call's permanent record is its result; an open call is still its own entity.
+  const result = await findResultKey(writer.reader, writer.address, postId).catch(() => null);
+  if (result) return result;
+  const open = await findCall(writer.reader, writer.address, postId).catch(() => null);
+  return open?.key ?? null;
 }

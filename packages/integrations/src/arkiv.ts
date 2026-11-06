@@ -249,6 +249,18 @@ export async function readTrackedCallers(client: ArkivPublic, writer: Hex) {
   return (await client.select().from(TrackedCallers).createdBy(writer).orderBy(desc("addedAt")).limit(100).fetch()).entities;
 }
 
+/** The entity key of a call's settled result (permanent, unlike the open call), or null. */
+export async function findResultKey(client: ArkivPublic, writer: Hex, postId: string): Promise<string | null> {
+  const page = await client
+    .select({ $key: true })
+    .from(CallResults)
+    .createdBy(writer)
+    .where(eq("postId", postId))
+    .limit(1)
+    .fetch();
+  return page.entities[0]?.$key ?? null;
+}
+
 export async function hasResult(client: ArkivPublic, writer: Hex, postId: string) {
   const page = await client
     .select({ $key: true })
