@@ -120,6 +120,15 @@ enum Kallr {
 
     static let up = Color(red: 0.541, green: 0.851, blue: 0.486)
 
+    /** "2h ago", "5m ago" since a post. */
+    static func ago(_ t: Double?) -> String {
+        guard let t else { return "" }
+        let s = Date().timeIntervalSince1970 - t
+        if s < 3600 { return "\(max(1, Int(s / 60)))m ago" }
+        if s < 86400 { return "\(Int(s / 3600))h ago" }
+        return "\(Int(s / 86400))d ago"
+    }
+
     /** "3h left", "40m left" until a call's deadline. */
     static func left(_ deadline: Double?) -> String {
         guard let deadline else { return "" }
@@ -130,8 +139,10 @@ enum Kallr {
 
     // MARK: Calls feed (Arkiv, read by the server)
 
-    struct FeedCall: Codable { let postId: String; let caller: String; let asset: String; let direction: String; let deadline: Double?; let entry: Double? }
-    struct FeedResult: Codable { let postId: String; let caller: String; let asset: String; let status: String; let returnBps: Int? }
+    struct FeedCall: Codable { let postId: String; let caller: String; let asset: String; let direction: String; let postedAt: Double?; let deadline: Double?; let entry: Double?; let text: String? }
+    struct FeedResult: Codable { let postId: String; let caller: String; let asset: String; let direction: String?; let status: String; let returnBps: Int?; let postedAt: Double?; let text: String? }
+    /** A caller Kall Markets tracks or has priced, with their record. */
+    struct FeedCaller: Codable { let handle: String; let focus: String?; let tracked: Bool; let open: Int; let settled: Int; let hits: Int; let hitRate: Double? }
     struct FeedTrade: Codable { let flashOrderId: String; let caller: String? }
     struct Feed: Codable {
         let following: [String]
@@ -139,6 +150,7 @@ enum Kallr {
         let calls: [FeedCall]
         let results: [FeedResult]
         let trades: [FeedTrade]?
+        let callers: [FeedCaller]?
     }
 
     static func feed() async -> Feed? { await get("api/keyboard/feed") }
@@ -194,6 +206,24 @@ enum Kallr {
             return .failure(Failure(message: message))
         } catch {
             return .failure(Failure(message: "Couldn't reach Kall Markets. Check your connection."))
+        }
+    }
+
+    /** Cancel an open order the Kall wallet placed: the server signs Flash's cancel message. */
+    static func cancel(orderId: String) async -> Swift.Result<Void, Failure> {
+        var request = URLRequest(url: origin.appendingPathComponent("api/keyboard/cancel"), timeoutInterval: 30)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.setValue("Bearer \(Secrets.execToken)", forHTTPHeaderField: "authorization")
+        request.httpBody = try? JSONEncoder().encode(["orderId": orderId])
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if (200..<300).contains(status) { return .success(()) }
+            let message = (try? JSONDecoder().decode([String: String].self, from: data))?["error"] ?? "Couldn't cancel (\(status))."
+            return .failure(Failure(message: message))
+        } catch {
+            return .failure(Failure(message: "Couldn't reach Kall Markets."))
         }
     }
 

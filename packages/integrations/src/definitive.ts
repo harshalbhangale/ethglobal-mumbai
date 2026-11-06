@@ -299,6 +299,11 @@ export const flashTokenSchema = z
   .passthrough();
 export type FlashToken = z.infer<typeof flashTokenSchema>;
 
+/** The exact plaintext Flash checks byte for byte before cancelling an order. */
+export function flashCancelMessage(orderId: string) {
+  return `Definitive Flash v1 — Cancel Order\nOrder: ${orderId}`;
+}
+
 export function flashClient(options: { apiKey?: string; fetcher?: typeof fetch } = {}) {
   const apiKey = options.apiKey || FLASH_PUBLIC_DEV_KEY;
   const fetcher = options.fetcher ?? fetch;
@@ -346,6 +351,14 @@ export function flashClient(options: { apiKey?: string; fetcher?: typeof fetch }
     async getOrder(orderId: string): Promise<FlashOrderDetail> {
       const id = z.string().uuid().parse(orderId);
       return flashOrderDetailSchema.parse(await call(`/orders/${id}`));
+    },
+    /**
+     * Cancel an open order. The funder signs flashCancelMessage(orderId) with EIP-191 personal_sign;
+     * gasless and offchain. Cancelling is final: Flash never reopens the order.
+     */
+    async cancel(orderId: string, userSignature: string) {
+      const id = z.string().uuid().parse(orderId);
+      return z.object({}).passthrough().parse(await call(`/orders/${id}/cancel`, { method: "POST", body: { cancelMessage: flashCancelMessage(id), userSignature } }));
     },
     async listOrders(funderAddress: string, pageSize = 25): Promise<FlashOrder[]> {
       const q = new URLSearchParams({ funderAddress: String(address.parse(funderAddress)), pageSize: String(pageSize) });

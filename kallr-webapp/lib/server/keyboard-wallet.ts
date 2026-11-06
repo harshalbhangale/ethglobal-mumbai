@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import {
   buildQuoteRequest,
   buildSubmitRequest,
+  flashCancelMessage,
   type FlashOrderInput,
   type FlashSignatures,
 } from "@kallr/integrations/definitive";
@@ -51,6 +52,12 @@ async function approve(tx: { to: string; data: string }) {
   const hash = await walletClient.sendTransaction({ to: tx.to as Hex, data: tx.data as Hex });
   const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 90_000 });
   if (receipt.status !== "success") throw new Error("The approval failed on Base.");
+}
+
+/** Cancel an open order the keyboard wallet placed: a gasless signed message, no transaction. */
+export async function cancelFromKeyboardWallet(orderId: string) {
+  if (!account) throw new Error("The keyboard wallet isn't set up.");
+  return flash.cancel(orderId, await account.signMessage({ message: flashCancelMessage(orderId) }));
 }
 
 // One order at a time, so approvals never race the wallet's nonce.

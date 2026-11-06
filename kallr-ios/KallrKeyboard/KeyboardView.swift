@@ -4,17 +4,35 @@ import UIKit
 /** The Kall Keyboard: Calls, Trade, Orders and Wallet. Typing stays on the iPhone keyboard (globe key). */
 @MainActor
 final class KeyboardModel: ObservableObject {
-    enum Tab: String, CaseIterable { case calls = "CALLS", trade = "TRADE", orders = "ORDERS", wallet = "WALLET" }
+    enum Tab: String, CaseIterable { case following = "FOLLOWING", trade = "TRADE", orders = "ORDERS", wallet = "WALLET" }
+    enum Scope: CaseIterable { case following, explore }
+    enum Filter: CaseIterable {
+        case active, settled, favorites
+        func label(count: Int) -> String { (self == .active ? "Active" : self == .settled ? "Settled" : "★ Favorites") + (count > 0 ? " \(count)" : "") }
+    }
+    /** A call or a settled result, as the Following list shows it. */
+    struct Item: Identifiable {
+        let postId: String; let caller: String; let asset: String; let short: Bool
+        let postedAt: Double?; let deadline: Double?; let entry: Double?; let text: String?
+        let status: String?; let returnBps: Int?
+        var id: String { postId }
+    }
     /** Idle → quoting → review (a fresh quote, nothing sent) → placing → done or failed. */
     enum Placing { case idle, quoting, review(Kallr.Placed), placing, done(String), failed(String) }
     enum Kind: String, CaseIterable { case market = "Market", limit = "Limit", twap = "TWAP" }
 
     weak var controller: KeyboardViewController?
-    @Published var tab = Tab.calls
+    @Published var tab = Tab.following
     @Published var showsGlobe = true
     @Published var fullAccess = false
 
-    // Calls
+    // Following: who you follow and which calls you starred are kept on this phone.
+    @Published var scope = Scope.following
+    @Published var filter = Filter.active
+    @Published var selectedCaller: String?
+    @Published var follows: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "kall.follows") ?? [])
+    @Published var favorites: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "kall.favorites") ?? [])
+    @Published var refreshing = false
     @Published var feed: Kallr.Feed?
     @Published var feedError: String?
     @Published var copied: Kallr.Result?
@@ -36,6 +54,28 @@ final class KeyboardModel: ObservableObject {
     @Published var orders: [Kallr.Order]?
     @Published var wallet: Kallr.Wallet?
     private var polling: Task<Void, Never>?
+    @Published var cancelling: Set<String> = []
+    @Published var ordersNote: String?
+
+    /** Cancel a working order on Flash (final: Flash never reopens it), then re-read the list. */
+    func cancel(_ orderId: String) {
+        guard !cancelling.contains(orderId) else { return }
+        tap(.heavy)
+        cancelling.insert(orderId)
+        Task {
+            let result = await Kallr.cancel(orderId: orderId)
+            cancelling.remove(orderId)
+            switch result {
+            case .success:
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                ordersNote = "Order cancelled on Flash."
+            case .failure(let error):
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                ordersNote = error.localizedDescription
+            }
+            await loadOrders()
+        }
+    }
 
     var busy: Bool { if case .quoting = placing { return true }; if case .placing = placing { return true }; return false }
 
@@ -61,6 +101,73 @@ final class KeyboardModel: ObservableObject {
 
     init(controller: KeyboardViewController) { self.controller = controller }
 
+    var trackedHandles: [String] { feed?.callers?.filter(\.tracked).map(\.handle) ?? feed?.following ?? [] }
+    var followedCallers: [Kallr.FeedCaller] { feed?.callers?.filter { follows.contains($0.handle) } ?? [] }
+
+    func toggleFollow(_ handle: String) {
+        tap(.medium)
+        if follows.contains(handle) { follows.remove(handle) } else { follows.insert(handle) }
+        UserDefaults.standard.set(Array(follows), forKey: "kall.follows")
+    }
+
+    func followAll(_ handles: [String]) {
+        tap(.medium)
+        follows.formUnion(handles)
+        UserDefaults.standard.set(Array(follows), forKey: "kall.follows")
+    }
+
+    func toggleFavorite(_ postId: String) {
+        tap()
+        if favorites.contains(postId) { favorites.remove(postId) } else { favorites.insert(postId) }
+        UserDefaults.standard.set(Array(favorites), forKey: "kall.favorites")
+    }
+
+    private var openItems: [Item] {
+        (feed?.calls ?? []).map { Item(postId: $0.postId, caller: $0.caller, asset: $0.asset, short: $0.direction == "down", postedAt: $0.postedAt, deadline: $0.deadline, entry: $0.entry, text: $0.text, status: nil, returnBps: nil) }
+    }
+    private var settledItems: [Item] {
+        (feed?.results ?? []).map { Item(postId: $0.postId, caller: $0.caller, asset: $0.asset, short: $0.direction == "down", postedAt: $0.postedAt, deadline: nil, entry: nil, text: $0.text, status: $0.status, returnBps: $0.returnBps) }
+    }
+    private func mine(_ items: [Item]) -> [Item] {
+        items.filter { follows.contains($0.caller.lowercased()) && (selectedCaller == nil || $0.caller.lowercased() == selectedCaller) }
+    }
+    func count(_ f: Filter) -> Int {
+        switch f {
+        case .active: return mine(openItems).count
+        case .settled: return mine(settledItems).count
+        case .favorites: return (openItems + settledItems).filter { favorites.contains($0.postId) }.count
+        }
+    }
+    var visibleItems: [Item] {
+        switch filter {
+        case .active: return mine(openItems)
+        case .settled: return mine(settledItems)
+        case .favorites: return (openItems + settledItems).filter { favorites.contains($0.postId) }
+        }
+    }
+
+    /** The live move since the post, in the called direction. */
+    func move(_ item: Item) -> Double? {
+        guard let entry = item.entry, entry > 0, let price = feed?.prices[item.asset] ?? nil else { return nil }
+        let m = (price - entry) / entry * 100
+        return item.short ? -m : m
+    }
+
+    func refresh() async {
+        refreshing = true
+        await load()
+        refreshing = false
+    }
+
+    /** Trade a call from the list: fills the Trade tab with its coin and the post it came from. */
+    func trade(_ item: Item) {
+        tap(.medium)
+        asset = item.asset
+        source = (item.caller, item.postId, "@\(item.caller) · \(item.short ? "SHORT" : "LONG") $\(item.asset)")
+        placing = .idle
+        tab = .trade
+    }
+
     func tap(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) { UIImpactFeedbackGenerator(style: style).impactOccurred() }
 
     func load() async {
@@ -76,14 +183,6 @@ final class KeyboardModel: ObservableObject {
         orders = await Kallr.orders(funder: address)
     }
 
-    /** Copy a call into the Trade tab. */
-    func copy(_ c: Kallr.FeedCall) {
-        tap(.medium)
-        asset = c.asset
-        source = (c.caller, c.postId, "@\(c.caller) · \(c.direction == "down" ? "SHORT" : "LONG") $\(c.asset)")
-        placing = .idle
-        tab = .trade
-    }
 
     private var order: Kallr.KeyboardOrder {
         Kallr.KeyboardOrder(
@@ -171,7 +270,7 @@ struct KeyboardView: View {
             TopBar(model: model)
             Group {
                 switch model.tab {
-                case .calls: CallsTab(model: model)
+                case .following: FollowingTab(model: model)
                 case .trade: TradeTab(model: model)
                 case .orders: OrdersTab(model: model)
                 case .wallet: WalletTab(model: model)
@@ -198,7 +297,7 @@ private struct TopBar: View {
                         model.tap()
                         withAnimation(.easeOut(duration: 0.15)) { model.tab = t }
                         if t == .orders { model.startPolling() }
-                        if t == .wallet || t == .calls { Task { await model.load() } }
+                        if t == .wallet || t == .following { Task { await model.load() } }
                     } label: {
                         Text(t.rawValue)
                             .font(.system(size: 11, weight: .heavy)).tracking(0.6)
@@ -226,53 +325,221 @@ private struct TopBar: View {
     }
 }
 
-// MARK: - Calls
+// MARK: - Following
 
-private struct CallsTab: View {
+private struct FollowingTab: View {
     @ObservedObject var model: KeyboardModel
 
     var body: some View {
         VStack(spacing: 6) {
-            Button { model.tap(); model.controller?.checkCopied() } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "doc.on.clipboard").font(.system(size: 13, weight: .semibold))
-                    Text(model.checking ? "Checking…" : model.note ?? copiedLine)
-                        .font(.system(size: 12, weight: .semibold)).lineLimit(1)
-                    Spacer(minLength: 0)
-                    if model.copied?.headline(typed: nil) != nil, model.copied?.warning == nil {
-                        Text("TRADE ↗").font(.system(size: 11, weight: .heavy)).foregroundStyle(Kallr.black)
-                            .padding(.horizontal, 8).frame(height: 22).background(Kallr.lime, in: RoundedRectangle(cornerRadius: 5))
+            HStack(spacing: 6) {
+                HStack(spacing: 2) {
+                    ForEach(KeyboardModel.Scope.allCases, id: \.self) { sc in
+                        Button { model.tap(); model.scope = sc } label: {
+                            Text(sc == .following ? "FOLLOWING \(model.follows.count)" : "EXPLORE")
+                                .font(.system(size: 10, weight: .heavy)).tracking(0.5)
+                                .foregroundStyle(model.scope == sc ? Kallr.black : Kallr.bone)
+                                .frame(maxWidth: .infinity, minHeight: 28)
+                                .background(model.scope == sc ? Kallr.bone : .clear, in: RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(Press())
                     }
                 }
-                .foregroundStyle(model.copied?.warning != nil || model.note != nil ? Kallr.danger : Kallr.bone)
-                .padding(.horizontal, 10)
-                .frame(height: 36)
-                .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 9))
+                .padding(2)
+                .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
+                IconButton(symbol: "doc.on.clipboard", label: "Check what you copied") { model.controller?.checkCopied() }
+                IconButton(symbol: model.refreshing ? "hourglass" : "arrow.clockwise", label: "Refresh") { Task { await model.refresh() } }
             }
-            .buttonStyle(Press())
-            .simultaneousGesture(TapGesture().onEnded { if model.copied?.warning == nil, model.copied?.headline(typed: nil) != nil { model.tab = .trade } })
             .padding(.horizontal, 6)
 
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    if let feed = model.feed {
-                        Section(title: "OPEN CALLS · FROM THE CALLERS YOU FOLLOW")
-                        ForEach(feed.calls, id: \.postId) { c in CallRow(call: c, price: feed.prices[c.asset] ?? nil, model: model) }
-                        if feed.calls.isEmpty { Empty(text: "No open calls right now.") }
-                        Section(title: "SETTLED")
-                        ForEach(feed.results.prefix(8), id: \.postId) { r in ResultRow(result: r) }
-                    } else {
-                        Empty(text: model.feedError ?? "Reading Arkiv…")
+            if model.checking || model.note != nil || model.copied?.headline(typed: nil) != nil { CopiedBanner(model: model) }
+
+            if model.scope == .explore { ExploreList(model: model) } else { FollowingList(model: model) }
+        }
+    }
+}
+
+private struct IconButton: View {
+    let symbol: String
+    let label: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(Kallr.bone)
+                .frame(width: 36, height: 32).background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(Press())
+        .accessibilityLabel(label)
+    }
+}
+
+/** What Check found in the clipboard: the call, or a red warning. */
+private struct CopiedBanner: View {
+    @ObservedObject var model: KeyboardModel
+    var body: some View {
+        let warning = model.copied?.warning != nil || model.note != nil
+        HStack(spacing: 8) {
+            Text(model.checking ? "Checking what you copied…" : model.note ?? model.copied?.headline(typed: nil) ?? "")
+                .font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                .foregroundStyle(warning ? Kallr.danger : Kallr.bone)
+            Spacer(minLength: 0)
+            if !warning, model.copied?.trade != nil {
+                SmallButton(label: "TRADE ↗") { model.tap(.medium); model.tab = .trade }
+            }
+        }
+        .padding(.horizontal, 10).frame(height: 32)
+        .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 6)
+    }
+}
+
+private struct FollowingList: View {
+    @ObservedObject var model: KeyboardModel
+
+    var body: some View {
+        if model.follows.isEmpty {
+            VStack(spacing: 8) {
+                Text("You don't follow anyone yet.").font(.system(size: 13, weight: .semibold)).foregroundStyle(Kallr.bone)
+                Text("Follow callers in Explore, or start with everyone Kall Markets tracks.")
+                    .font(.system(size: 11)).foregroundStyle(Kallr.muted).multilineTextAlignment(.center)
+                SmallButton(label: "FOLLOW ALL \(model.trackedHandles.count) TRACKED") { model.followAll(model.trackedHandles) }
+                    .disabled(model.trackedHandles.isEmpty)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 16)
+        } else {
+            VStack(spacing: 6) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        Chip(label: "All", on: model.selectedCaller == nil) { model.tap(); model.selectedCaller = nil }
+                        ForEach(model.followedCallers, id: \.handle) { c in
+                            Chip(label: "@\(c.handle)\(c.hitRate.map { " · \(Int(($0 * 100).rounded()))%" } ?? "")", on: model.selectedCaller == c.handle) {
+                                model.tap(); model.selectedCaller = model.selectedCaller == c.handle ? nil : c.handle
+                            }
+                        }
                     }
+                    .padding(.horizontal, 6)
+                }
+                HStack(spacing: 6) {
+                    ForEach(KeyboardModel.Filter.allCases, id: \.self) { f in
+                        Chip(label: f.label(count: model.count(f)), on: model.filter == f) { model.tap(); model.filter = f }
+                    }
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 6)
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        let items = model.visibleItems
+                        if model.feed == nil { Empty(text: model.feedError ?? "Reading Arkiv…") }
+                        else if items.isEmpty { Empty(text: model.filter == .favorites ? "Star a call to keep it here." : model.filter == .active ? "No open calls from who you follow." : "Nothing settled yet.") }
+                        ForEach(items) { item in CallCard(item: item, model: model) }
+                    }
+                    .padding(.horizontal, 6)
+                }
+                .refreshable { await model.refresh() }
             }
         }
     }
+}
 
-    private var copiedLine: String {
-        if let r = model.copied, let h = r.headline(typed: nil) { return h }
-        return "Check what you copied: an X post or a $TICKER message"
+private struct ExploreList: View {
+    @ObservedObject var model: KeyboardModel
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                if let callers = model.feed?.callers {
+                    ForEach(callers, id: \.handle) { c in
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Text("@\(c.handle)").font(.system(size: 13, weight: .bold)).foregroundStyle(Kallr.bone)
+                                    if c.tracked { Text("TRACKED").font(.system(size: 8, weight: .heavy)).foregroundStyle(Kallr.lime) }
+                                }
+                                Text([c.focus, c.settled > 0 ? "\(c.hits)/\(c.settled) hit" : "no settled calls", c.open > 0 ? "\(c.open) open" : nil].compactMap { $0 }.joined(separator: " · "))
+                                    .font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(1)
+                            }
+                            Spacer(minLength: 4)
+                            let on = model.follows.contains(c.handle)
+                            Button { model.toggleFollow(c.handle) } label: {
+                                Text(on ? "FOLLOWING" : "FOLLOW").font(.system(size: 10, weight: .heavy))
+                                    .foregroundStyle(on ? Kallr.bone : Kallr.black)
+                                    .frame(width: 84, height: 28)
+                                    .background(on ? Kallr.graphite : Kallr.lime, in: RoundedRectangle(cornerRadius: 7))
+                                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(on ? Kallr.hairline : .clear))
+                            }
+                            .buttonStyle(Press())
+                        }
+                        .padding(.vertical, 7)
+                        .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline).frame(height: 1) }
+                    }
+                } else {
+                    Empty(text: model.feedError ?? "Reading Arkiv…")
+                }
+            }
+            .padding(.horizontal, 8)
+        }
+        .refreshable { await model.refresh() }
+    }
+}
+
+/** One call: who, which way, the post itself, how it's going, a star, and Trade. */
+private struct CallCard: View {
+    let item: KeyboardModel.Item
+    @ObservedObject var model: KeyboardModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text("@\(item.caller)").font(.system(size: 13, weight: .bold)).foregroundStyle(Kallr.bone)
+                Text("\(item.short ? "SHORT" : "LONG") $\(item.asset)").font(.system(size: 10, weight: .heavy))
+                    .foregroundStyle(item.short ? Kallr.danger : Kallr.lime)
+                Text(Kallr.ago(item.postedAt)).font(.system(size: 10)).foregroundStyle(Kallr.muted)
+                Spacer(minLength: 0)
+                Button { model.toggleFavorite(item.postId) } label: {
+                    Image(systemName: model.favorites.contains(item.postId) ? "star.fill" : "star")
+                        .font(.system(size: 13)).foregroundStyle(model.favorites.contains(item.postId) ? Kallr.lime : Kallr.muted)
+                        .frame(width: 28, height: 24)
+                }
+                .buttonStyle(Press())
+                .accessibilityLabel("Favorite")
+            }
+            if let text = item.text {
+                Text(text).font(.system(size: 12)).foregroundStyle(Kallr.bone.opacity(0.82)).lineLimit(2)
+            }
+            HStack(spacing: 6) {
+                if let status = item.status {
+                    Text(status.uppercased()).font(.system(size: 10, weight: .heavy))
+                        .foregroundStyle(status == "hit" ? Kallr.up : status == "miss" ? Kallr.danger : Kallr.muted)
+                    if let bps = item.returnBps { Text(String(format: "%+.2f%% called move", Double(bps) / 100)).font(.system(size: 11)).foregroundStyle(Kallr.muted) }
+                } else {
+                    if let move = model.move(item) {
+                        Text(String(format: "%+.2f%% since post", move)).font(.system(size: 11, weight: .semibold)).foregroundStyle(move >= 0 ? Kallr.up : Kallr.danger)
+                    }
+                    Text(Kallr.left(item.deadline)).font(.system(size: 11)).foregroundStyle(Kallr.muted)
+                }
+                Spacer(minLength: 0)
+                if item.status == nil, !item.short, ["ETH", "BTC"].contains(item.asset) {
+                    SmallButton(label: "TRADE ↗") { model.trade(item) }
+                } else if item.status == nil {
+                    Text(item.short ? "CAN'T COPY SHORTS" : "NOT ON BASE").font(.system(size: 9, weight: .bold)).foregroundStyle(Kallr.muted)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline).frame(height: 1) }
+    }
+}
+
+private struct SmallButton: View {
+    let label: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Text(label).font(.system(size: 11, weight: .heavy)).foregroundStyle(Kallr.black)
+                .padding(.horizontal, 10).frame(height: 28)
+                .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(Press())
     }
 }
 
@@ -287,58 +554,6 @@ private struct Section: View {
 private struct Empty: View {
     let text: String
     var body: some View { Text(text).font(.system(size: 12)).foregroundStyle(Kallr.muted).frame(maxWidth: .infinity, minHeight: 40) }
-}
-
-private struct CallRow: View {
-    let call: Kallr.FeedCall
-    let price: Double?
-    @ObservedObject var model: KeyboardModel
-
-    private var move: Double? {
-        guard let entry = call.entry, let price, entry > 0 else { return nil }
-        let m = (price - entry) / entry * 100
-        return call.direction == "down" ? -m : m
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("@\(call.caller)").font(.system(size: 13, weight: .bold)).foregroundStyle(Kallr.bone)
-                HStack(spacing: 6) {
-                    Text("\(call.direction == "down" ? "SHORT" : "LONG") $\(call.asset)").font(.system(size: 11, weight: .heavy)).foregroundStyle(call.direction == "down" ? Kallr.danger : Kallr.lime)
-                    if let move { Text(String(format: "%+.2f%% since post", move)).font(.system(size: 11)).foregroundStyle(move >= 0 ? Kallr.up : Kallr.danger) }
-                    Text(Kallr.left(call.deadline)).font(.system(size: 11)).foregroundStyle(Kallr.muted)
-                }
-            }
-            Spacer(minLength: 0)
-            if call.direction != "down", ["ETH", "BTC"].contains(call.asset) {
-                Button { model.copy(call) } label: {
-                    Text("COPY").font(.system(size: 11, weight: .heavy)).foregroundStyle(Kallr.black)
-                        .frame(width: 58, height: 30).background(Kallr.lime, in: RoundedRectangle(cornerRadius: 7))
-                }
-                .buttonStyle(Press())
-            } else {
-                Text(call.direction == "down" ? "SHORT" : "NOT ON BASE").font(.system(size: 9, weight: .bold)).foregroundStyle(Kallr.muted).frame(width: 58)
-            }
-        }
-        .padding(.vertical, 7)
-        .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline).frame(height: 1) }
-    }
-}
-
-private struct ResultRow: View {
-    let result: Kallr.FeedResult
-    var body: some View {
-        HStack {
-            Text("@\(result.caller)").font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.bone)
-            Text("$\(result.asset)").font(.system(size: 12)).foregroundStyle(Kallr.muted)
-            Spacer()
-            Text(result.status.uppercased()).font(.system(size: 10, weight: .heavy)).foregroundStyle(result.status == "hit" ? Kallr.up : result.status == "miss" ? Kallr.danger : Kallr.muted)
-            Text(String(format: "%+.1f%%", Double(result.returnBps ?? 0) / 100)).font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.bone)
-        }
-        .padding(.vertical, 6)
-        .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline).frame(height: 1) }
-    }
 }
 
 // MARK: - Trade
@@ -530,6 +745,7 @@ private struct OrdersTab: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 Section(title: "YOUR KALL WALLET ORDERS · DEFINITIVE FLASH")
+                if let note = model.ordersNote { Text(note).font(.system(size: 11)).foregroundStyle(Kallr.muted).frame(maxWidth: .infinity, alignment: .leading) }
                 if let orders = model.orders {
                     if orders.isEmpty { Empty(text: "No orders yet. Copy a call from Calls, or buy from Trade.") }
                     ForEach(orders, id: \.orderId) { o in
@@ -540,6 +756,14 @@ private struct OrdersTab: View {
                                 if !sub.isEmpty { Text(sub).font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(1) }
                             }
                             Spacer()
+                            if o.open, o.orderType != "bracket" {
+                                Button { model.cancel(o.orderId) } label: {
+                                    Text(model.cancelling.contains(o.orderId) ? "…" : "CANCEL").font(.system(size: 10, weight: .heavy)).foregroundStyle(Kallr.danger)
+                                        .padding(.horizontal, 8).frame(height: 22)
+                                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Kallr.danger.opacity(0.5)))
+                                }
+                                .buttonStyle(Press())
+                            }
                             Text(o.statusLabel).font(.system(size: 10, weight: .heavy))
                                 .foregroundStyle(o.open ? Kallr.black : o.statusLabel == "FILLED" ? Kallr.lime : Kallr.muted)
                                 .padding(.horizontal, 8).frame(height: 22)

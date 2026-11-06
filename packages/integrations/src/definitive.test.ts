@@ -4,6 +4,7 @@ import {
   buildQuoteRequest,
   buildSubmitRequest,
   FLASH_BASE_ASSETS,
+  flashCancelMessage,
   flashClient,
   flashOrderInputSchema,
   flashQuoteSchema,
@@ -177,5 +178,13 @@ describe("TWAP", () => {
   it("refuses a duration on market and limit orders", () => {
     expect(flashOrderInputSchema.safeParse({ ...copyCall, durationSeconds: 600 }).success).toBe(false);
     expect(buildQuoteRequest(copyCall)).not.toHaveProperty("durationSeconds");
+  });
+});
+
+describe("flashCancelMessage", () => {
+  it("is the exact two-line message Flash checks", () => {
+    expect(flashCancelMessage("0b6f7c2e-1111-4222-8333-444455556666")).toBe(
+      "Definitive Flash v1 — Cancel Order\nOrder: 0b6f7c2e-1111-4222-8333-444455556666",
+    );
   });
 });
