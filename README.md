@@ -52,20 +52,6 @@ there, through [Definitive Flash](https://definitive.fi) on Base, signed in your
 - **Arkiv: the receipts.** Calls, results, trades and the callers we track, read-only so nobody can edit a miss,
   and readable by anyone without asking us. The whole story, schema and what got in our way:
   **[arkiv/README.md](arkiv/README.md)**.
-- **Anon-RPC: private reads.** Checking your balance right before you copy a call tells an RPC provider what
-  you're about to trade. So the web app reads Base and Arkiv through Anon-RPC over the Nym mixnet; a badge in the
-  sidebar shows whether reads are private or went direct. Code: [`anon-rpc.ts`](kallr-webapp/lib/anon-rpc.ts).
-  Notes: [feedback/anon-rpc.md](feedback/anon-rpc.md).
-
-  | Surface | Private reads | How |
-  | --- | --- | --- |
-  | Web app | Yes | Balances, Chainlink prices, receipts and the Arkiv feed, through the worker in the page |
-  | Kall Keyboard, iOS | Yes | A hidden web view loads [`/anon-bridge`](kallr-webapp/app/anon-bridge/bridge.tsx) when Trade opens; the wallet's ETH and USDC, Chainlink's ETH price, the allowance and the fill's receipt go through it as one batch, with a live log in Trade ([`AnonBridge.swift`](kallr-ios/KallrKeyboard/AnonBridge.swift)) |
-  | Kall Keyboard, Android | No | |
-  | Extension | No | Reads go through your wallet or Kall's server |
-
-  If Nym isn't connected in time, a read goes direct and the log shows it in red; it never waits on the mixnet
-  to trade.
 
 Also: Chainlink price feeds on Base (entry and exit prices), Privy (sign in with X, embedded wallet), GoPlus and
 Dexscreener (token checks).

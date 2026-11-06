@@ -104,17 +104,7 @@ export function quoteDetails(q: FlashQuote) {
     impactPct: pct(q.estimatedPriceImpact),
     slippagePct: pct(q.recommendedSlippage),
     feeUsd: q.fees?.estimatedFeeNotional ? Number(q.fees.estimatedFeeNotional) : null,
-    approval: approvalTarget(q.evm.approveTx),
   };
-}
-
-/**
- * The token and spender an approval transaction names (ERC-20 approve(spender, amount)), so the
- * keyboard can read the current allowance itself. Null when the quote needs no approval.
- */
-export function approvalTarget(tx: { to: string; data: string } | null | undefined): { token: string; spender: string } | null {
-  if (!tx || !/^0x095ea7b3[0-9a-fA-F]{128}/.test(tx.data)) return null;
-  return { token: tx.to, spender: `0x${tx.data.slice(34, 74)}` };
 }
 
 /** The swap's review card, in the same shape as an order's. */

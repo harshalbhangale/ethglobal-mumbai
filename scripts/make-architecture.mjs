@@ -95,13 +95,13 @@ s += t(a.x + 28, 800, "Read-only records", 22, TEXT, 700);
 ["kallr.calls", "kallr.call-results", "kallr.trades", "kallr.tracked-callers"].forEach((c, i) => { s += chip(a.x + 28 + (i % 2) * 168, 822 + Math.floor(i / 2) * 42, c); });
 s += lines(a.x + 28, 940, ["A miss can’t be edited or deleted", "Every caller’s record is public", "Arkiv Rabdi testnet · chain 7794095"], 15, 30, TEXT);
 
-// Anon-RPC
+// Chainlink
 s += `<g transform="translate(${k.x + 28} 730)"><rect width="34" height="34" rx="17" fill="none" stroke="${LIME}" stroke-width="2"/><circle cx="17" cy="17" r="6" fill="${LIME}"/></g>`;
-s += t(k.x + 74, 755, "Anon-RPC", 24, TEXT, 700);
-s += t(k.x + k.w - 28, 754, "PRIVATE READS", 13, LIME, 700, "end");
-s += t(k.x + 28, 800, "Reads over the Nym mixnet", 22, TEXT, 700);
-["Balances", "Chainlink price", "Receipts", "Arkiv feed"].forEach((c, i) => { s += chip(k.x + 28 + (i % 2) * 150, 822 + Math.floor(i / 2) * 42, c); });
-s += lines(k.x + 28, 940, ["The RPC can’t tie your reads to your IP", "Hash-pinned worker in your browser", "Badge shows if a read ever went direct"], 15, 30, TEXT);
+s += t(k.x + 74, 755, "Chainlink", 24, TEXT, 700);
+s += t(k.x + k.w - 28, 754, "PRICES", 13, LIME, 700, "end");
+s += t(k.x + 28, 800, "Price feeds on Base", 22, TEXT, 700);
+["ETH / USD", "BTC / USD", "Entry", "Exit"].forEach((c, i) => { s += chip(k.x + 28 + (i % 2) * 150, 822 + Math.floor(i / 2) * 42, c); });
+s += lines(k.x + 28, 940, ["Each call priced when it’s posted", "And again at its deadline", "Live prices in the web app and extension"], 15, 30, TEXT);
 
 // Base strip
 s += box(60, 1092, 1480, 56, { r: 28, fill: "#111511" });

@@ -82,10 +82,9 @@ s += `<path d="M${lx} ${MY + 128} C${lx} ${760} ${AX + AW / 2 + 40} ${760} ${AX 
 s += `<rect x="${px - 215}" y="${712}" width="430" height="36" rx="18" fill="${INK}" stroke="${LIME}" stroke-opacity=".5"/>`;
 s += t(px, 736, "The caller’s record shows up in all three apps", 14.5, TEXT, 500, "middle");
 
-// Footer: privacy + settlement
+// Footer: who holds the keys
 s += `<line x1="70" y1="832" x2="${W - 70}" y2="832" stroke="${RULE}"/>`;
 s += `<circle cx="80" cy="862" r="6" fill="${LIME}"/>` + t(96, 867, "You sign every trade in your own wallet (MetaMask or Privy). Kall never holds your keys.", 14, MUTE);
-s += `<circle cx="${W - 560}" cy="862" r="6" fill="none" stroke="${LIME}" stroke-width="2"/>` + t(W - 544, 867, "Your balances and receipts are read privately via Anon-RPC (Nym)", 14, MUTE);
 s += "</svg>\n";
 await writeFile(R + "docs/flow.svg", s);
 console.log("docs/flow.svg");

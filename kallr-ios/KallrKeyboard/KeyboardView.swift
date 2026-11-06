@@ -187,104 +187,22 @@ final class KeyboardModel: ObservableObject {
         liveTask = nil
     }
 
-    // MARK: Anon-RPC
+    // MARK: The fill on Base
 
-    /** A line in Trade's Anon-RPC log: real reads only. */
-    struct AnonEntry: Identifiable {
-        enum Tone { case info, ok, direct }
-        let id = UUID()
-        let text: String
-        let tone: Tone
-    }
-    @Published var anonState = AnonBridge.State.idle
-    @Published var anonLog: [AnonEntry] = []
-    var anonStartedAt: Date?
-    let anon = AnonBridge()
+    /** The swap's transaction once Flash fills it, for the done card's BaseScan link. */
+    @Published var fillTx: String?
 
-    /** Boot the private reader when Trade opens, so the mixnet is up by the time you review. */
-    func warmAnon() {
-        guard fullAccess, anonState == .idle, let host = controller?.view else { return }
-        anonStartedAt = Date()
-        anon.onState = { [weak self] state in self?.anonChanged(state) }
-        anon.start(in: host)
-    }
-
-    private func anonChanged(_ state: AnonBridge.State) {
-        anonState = state
-        switch state {
-        case .ready(let ms):
-            logAnon("✓ Nym connected" + (ms.map { " · " + Self.seconds($0) } ?? ""), .ok)
-        case .failed(let why):
-            logAnon("✕ Nym: \(why) · reads go direct", .direct)
-        default: break
-        }
-    }
-
-    private func logAnon(_ text: String, _ tone: AnonEntry.Tone) {
-        anonLog.append(AnonEntry(text: text, tone: tone))
-        if anonLog.count > 12 { anonLog.removeFirst() }
-    }
-
-    private func logRead(_ what: String, _ read: AnonBridge.Read) {
-        if let error = read.error {
-            logAnon("✕ \(what) · \(error)", .direct)
-        } else if read.isPrivate {
-            logAnon("✓ \(what) · private · \(Self.seconds(read.ms))", .ok)
-        } else {
-            logAnon("⚠ \(what) · DIRECT\(read.why.map { " (\($0))" } ?? "") · \(Self.seconds(read.ms))", .direct)
-        }
-    }
-
-    static func seconds(_ ms: Int) -> String { String(format: "%.1fs", Double(ms) / 1000) }
-
-    /** Before a trade: the Kall wallet's ETH and USDC and Chainlink's ETH price, in one private batch. */
-    private func readBeforeTrade() {
-        guard let owner = wallet?.address else { return }
-        Task {
-            let reads = await anon.batch([
-                ("eth_getBalance", [owner, "latest"]),
-                ("eth_call", [["to": BaseRead.usdc, "data": BaseRead.balanceOf(owner)], "latest"]),
-                ("eth_call", [["to": BaseRead.ethUsdFeed, "data": BaseRead.latestRoundData], "latest"]),
-            ], waitMs: 15_000)
-            guard reads.count == 3 else { return }
-            let eth = BaseRead.number(reads[0].result, decimals: 18).map { String(format: "%.5f ETH", $0) } ?? "?"
-            let usdc = BaseRead.number(reads[1].result, decimals: 6).map { String(format: "%.2f USDC", $0) } ?? "?"
-            let price = BaseRead.number(reads[2].result, decimals: 8, word: 1).map { "$" + Self.money($0) } ?? "?"
-            logRead("Balance \(eth)", reads[0])
-            logRead("USDC \(usdc)", reads[1])
-            logRead("ETH/USD \(price) (Chainlink)", reads[2])
-        }
-    }
-
-    /** With the quote: the allowance Flash's spender has now, read privately. */
-    private func readAllowance(_ approval: Kallr.Details.Approval?) {
-        guard let approval, let owner = wallet?.address else { return }
-        Task {
-            let reads = await anon.batch([("eth_call", [["to": approval.token, "data": BaseRead.allowance(owner, approval.spender)], "latest"])], waitMs: 15_000)
-            guard let read = reads.first else { return }
-            let decimals = approval.token.lowercased() == BaseRead.usdc.lowercased() ? 6 : 18
-            let amount = BaseRead.number(read.result, decimals: decimals)
-            let shown = amount.map { $0 > 1e12 ? "unlimited" : $0 == 0 ? "0, approve on confirm" : String(format: "%g", $0) } ?? "?"
-            logRead("Allowance \(shown)", read)
-        }
-    }
-
-    /** After a fill: the swap's receipt on Base, read privately. */
-    private func readReceipt(orderId: String?) {
+    private func findFill(orderId: String?) {
+        fillTx = nil
         guard let orderId, let owner = wallet?.address else { return }
         Task {
-            var tx: String?
             for _ in 0..<10 {
-                if let t = await Kallr.fills(orderId: orderId, funder: owner)?.transaction { tx = t; break }
+                if let tx = await Kallr.fills(orderId: orderId, funder: owner)?.transaction {
+                    if lastPlaced?.orderId == orderId { fillTx = tx }
+                    return
+                }
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
-            guard let tx else { logAnon("… No fill on Base yet to check", .info); return }
-            let reads = await anon.batch([("eth_getTransactionReceipt", [tx])], waitMs: 15_000)
-            guard let read = reads.first else { return }
-            let receipt = read.result as? [String: Any]
-            let ok = (receipt?["status"] as? String) == "0x1"
-            let block = BaseRead.number(receipt?["blockNumber"], decimals: 0).map { "block \(Int($0))" } ?? ""
-            logRead("Receipt \(ok ? "success" : "pending") \(block)", read)
         }
     }
 
@@ -644,13 +562,11 @@ final class KeyboardModel: ObservableObject {
         guard blocked == nil, !busy else { return }
         tap(.medium)
         placing = .quoting
-        readBeforeTrade()
         Task {
             let result = payingETH ? await Kallr.swap(usd: usd, dryRun: true) : await Kallr.execute(order, dryRun: true)
             switch result {
             case .success(let quote):
                 placing = .review(quote)
-                readAllowance(quote.details?.approval)
             case .failure(let error):
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
                 placing = .failed(error.localizedDescription)
@@ -670,7 +586,7 @@ final class KeyboardModel: ObservableObject {
             case .success(let placed):
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 lastPlaced = placed
-                readReceipt(orderId: placed.orderId)
+                findFill(orderId: placed.orderId)
                 placing = .done("\(placed.preview.title) · \(placed.preview.get)")
                 if swapping {
                     // The USDC lands a moment after the fill: read the wallet again, then buy with it.
@@ -1044,11 +960,8 @@ private struct TradeTab: View {
                 form
             }
         }
-        // Trade open: follow the coin's price, and start the private reader so it's up by review.
-        .onAppear {
-            model.startLive()
-            model.warmAnon()
-        }
+        // Trade open: follow the coin's price.
+        .onAppear { model.startLive() }
         .onDisappear { model.stopLive() }
         .onChange(of: model.tickerKey) { _, _ in model.startLive() }
     }
@@ -1092,7 +1005,6 @@ private struct TradeTab: View {
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
                         .labelStyle(PostLabel())
                 }
-                AnonStrip(model: model)
                 status
                 Button { model.review() } label: {
                     Text(model.busy ? "GETTING A QUOTE…" : model.blocked ?? reviewTitle)
@@ -1553,7 +1465,6 @@ private struct ReviewCard: View {
             legs
             if let quote { details(quote) } else { working }
             Spacer(minLength: 0)
-            AnonStrip(model: model)
             buttons
         }
         .padding(.horizontal, 8)
@@ -1726,7 +1637,6 @@ private struct DoneCard: View {
             }
             PoweredByDefinitive(height: 9, suffix: "Flash on Base")
             Spacer(minLength: 0)
-            AnonStrip(model: model)
             HStack(spacing: 8) {
                 Button {
                     model.tap()
@@ -1822,49 +1732,6 @@ private struct Sparkline: View {
                 .stroke((values.last ?? 0) >= (values.first ?? 0) ? Kallr.up : Kallr.danger, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
             } else {
                 Rectangle().fill(Kallr.hairline).frame(height: 1).frame(maxHeight: .infinity)
-            }
-        }
-    }
-}
-
-/**
- * Anon-RPC's live log: the keyboard's Base reads around a trade, newest first. Private reads (through
- * the Nym mixnet) in green; any read that went direct in red, never hidden.
- */
-private struct AnonStrip: View {
-    @ObservedObject var model: KeyboardModel
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "shield.lefthalf.filled").font(.system(size: 9, weight: .heavy)).foregroundStyle(Kallr.lime)
-            Text("ANON-RPC").font(.system(size: 8, weight: .heavy)).tracking(0.5).foregroundStyle(Kallr.muted)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    connecting
-                    ForEach(model.anonLog.reversed()) { e in
-                        Text(e.text).font(.system(size: 10, weight: .semibold).monospacedDigit()).lineLimit(1)
-                            .foregroundStyle(e.tone == .ok ? Kallr.up : e.tone == .direct ? Kallr.danger : Kallr.muted)
-                    }
-                    if model.anonLog.isEmpty, !isConnecting {
-                        Text(model.fullAccess ? "Base reads go through the Nym mixnet" : "Turn on Full Access for private reads")
-                            .font(.system(size: 10, weight: .semibold)).foregroundStyle(Kallr.muted).lineLimit(1)
-                    }
-                }
-            }
-            .modifier(NoEdgeBlur())
-        }
-        .frame(height: 16)
-    }
-
-    private var isConnecting: Bool { model.anonState == .loading || model.anonState == .connecting }
-
-    /** "● Connecting privately (Nym) · 12s", ticking while the mixnet boots. */
-    @ViewBuilder private var connecting: some View {
-        if isConnecting {
-            TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                let s = model.anonStartedAt.map { Int(ctx.date.timeIntervalSince($0)) } ?? 0
-                Text("● Connecting privately (Nym) · \(s)s").font(.system(size: 10, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(Kallr.lime).lineLimit(1)
             }
         }
     }

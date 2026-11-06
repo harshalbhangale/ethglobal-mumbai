@@ -141,15 +141,8 @@ export function callExpiration(call: Pick<ScoredCall, "expiresAt">, nowSeconds: 
 
 // ---------- Reads (browser or server) ----------
 
-/**
- * `via` lets a browser route these reads through its own transport: the web app sends them through
- * Anon-RPC to its Arkiv relay (`url`), batched so one mixnet round trip carries several queries.
- */
-export function arkivPublic(accessKey = "", via?: { fetchFn: typeof fetch; url?: string }) {
-  return createPublicClient({
-    chain: rabdi({ accessKey }),
-    transport: via ? http(via.url, { fetchFn: via.fetchFn, timeout: 60_000, retryCount: 1, batch: { wait: 50 } }) : http(),
-  });
+export function arkivPublic(accessKey = "") {
+  return createPublicClient({ chain: rabdi({ accessKey }), transport: http() });
 }
 export type ArkivPublic = ReturnType<typeof arkivPublic>;
 

@@ -211,14 +211,7 @@ enum Kallr {
         let caller: String?
     }
     struct Preview: Codable { let title: String; let kind: String; let pay: String; let get: String; let exits: String; let approval: String }
-    struct Details: Codable {
-        /** The token and spender of the approval the order needs, so the keyboard can read the allowance itself. */
-        struct Approval: Codable { let token: String; let spender: String }
-        let impactPct: Double?
-        let slippagePct: Double?
-        let feeUsd: Double?
-        let approval: Approval?
-    }
+    struct Details: Codable { let impactPct: Double?; let slippagePct: Double?; let feeUsd: Double? }
 
     /** One token's live price on Base and its 24h move, for the keyboard's ticker. */
     struct LivePrice: Codable {

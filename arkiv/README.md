@@ -78,9 +78,6 @@ Honest notes for the Arkiv team (SDK `@arkiv-network/sdk` 1.0.1, Rabdi):
    nothing extends it unless we run a job.
 6. **Small things:** explorer URL formats aren't documented (we read the explorer's JS to find `/tx/` and
    `/entity/`), old docs URLs 404, and query results are `readonly` arrays that trip up React state.
-7. **Through a mixnet:** Arkiv's RPC rejects requests without `content-type: application/json`, and Anon-RPC's Nym
-   worker drops headers, so private reads go through a small read-only relay of ours
-   ([`/api/arkiv/rpc`](../kallr-webapp/app/api/arkiv/rpc/route.ts)).
 
 ## What worked really well
 

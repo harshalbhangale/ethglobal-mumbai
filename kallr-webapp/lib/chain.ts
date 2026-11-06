@@ -1,6 +1,5 @@
 import { createPublicClient, erc20Abi, formatUnits, http, type Address } from "viem";
 import { base } from "viem/chains";
-import { anonFetch } from "./anon-rpc";
 
 export const CHAIN = base;
 
@@ -8,13 +7,9 @@ export const CHAIN = base;
 export const USDC_BASE: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 export const USDC_DECIMALS = 6;
 
-/**
- * Every Base read in the browser (balances, Chainlink prices, receipts) goes through Anon-RPC: see
- * lib/anon-rpc.ts. The longer timeout covers the mixnet's first boot; server-side it's plain fetch.
- */
 export const publicClient = createPublicClient({
   chain: base,
-  transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL || undefined, { fetchFn: anonFetch, timeout: 60_000, retryCount: 1, batch: { wait: 50 } }),
+  transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL || undefined, { batch: { wait: 50 } }),
 });
 
 export type Balances = { eth: string; usdc: string };

@@ -1,7 +1,6 @@
 "use client";
 
 import { PrivyProvider } from "@privy-io/react-auth";
-import { usePathname } from "next/navigation";
 import { base } from "viem/chains";
 import type { ReactNode } from "react";
 
@@ -9,9 +8,7 @@ export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
 export const PRIVY_ENABLED = PRIVY_APP_ID.length > 0;
 
 export function Providers({ children }: { children: ReactNode }) {
-  // The keyboard's hidden Anon-RPC page signs nobody in: keep it light.
-  const path = usePathname();
-  if (!PRIVY_ENABLED || path?.startsWith("/anon-bridge")) return <>{children}</>;
+  if (!PRIVY_ENABLED) return <>{children}</>;
 
   return (
     <PrivyProvider

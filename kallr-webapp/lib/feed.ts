@@ -5,7 +5,6 @@ import { arkivPublic, readOpenCalls, readResults, readTrackedCallers, readTrades
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Address, Hex } from "viem";
 import { extensionFollows, extensionInstalled, readLocal, updateLocal } from "./follows";
-import { anonFetch, arkivRelayUrl } from "./anon-rpc";
 
 /**
  * Everything the feed and caller profiles show, read straight from Arkiv: open calls, settled
@@ -96,7 +95,7 @@ export function useKallrData(address: Address | null) {
       .then(setConfig, () => setError("Couldn’t reach the Kall Markets server."));
   }, []);
 
-  const client = useMemo(() => (config ? arkivPublic(config.accessKey, { fetchFn: anonFetch, url: arkivRelayUrl() }) : null), [config]);
+  const client = useMemo(() => (config ? arkivPublic(config.accessKey) : null), [config]);
 
   const load = useCallback(async () => {
     if (!config || !client) return;
