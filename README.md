@@ -28,21 +28,6 @@ One product, wherever calls show up:
 | **Kall Keyboard** | iPhone and Android, in any chat | Copy a call in Telegram, WhatsApp or X; the keyboard reads it, checks the coin, and trades it in the chat |
 | **Kall Web App** | [kallmarkets.vercel.app/app](https://kallmarkets.vercel.app/app) | The feed of real calls with their verdicts, the callers you follow, your trades from all three places, your wallet |
 
-<p align="center">
-  <img src="docs/screenshots/submission/3-extension-trade-on-x.webp" width="48%" alt="Kall Extension on X: the caller's record and a Flash trade under the post" />
-  <img src="docs/screenshots/submission/4-extension-fake-token-blocked.webp" width="48%" alt="Kall Extension: a fake contract blocked by Chainlink CRE" />
-</p>
-<p align="center">
-  <img src="docs/screenshots/submission/1-keyboard-swap.webp" width="24%" alt="Kall Keyboard: swap on Definitive Flash, right in the chat" />
-  <img src="docs/screenshots/submission/8-keyboard-hold-to-buy.webp" width="24%" alt="Kall Keyboard in a Telegram signal group: hold to buy the call" />
-  <img src="docs/screenshots/submission/2-keyboard-app-history.webp" width="24%" alt="Kall app: every trade from the keyboard, X and the web" />
-</p>
-<p align="center">
-  <img src="docs/screenshots/submission/5-web-app-feed.webp" width="32%" alt="Kall Web App: real calls from X, priced and scored" />
-  <img src="docs/screenshots/submission/6-web-app-history.webp" width="32%" alt="Kall Web App: trades placed on X, the keyboard and the web" />
-  <img src="docs/screenshots/submission/7-web-app-wallet.webp" width="32%" alt="Kall Web App: wallet on Base" />
-</p>
-
 ## Architecture
 
 <p align="center"><img src="docs/architecture.svg" alt="Three apps talk to one Kall server on Vercel, which trades on Definitive Flash, prices and checks with Chainlink (price feeds and CRE), and keeps receipts on Arkiv with post snapshots on Swarm." /></p>
