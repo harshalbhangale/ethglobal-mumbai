@@ -100,7 +100,7 @@ export function Following() {
           placeholder="@handle or profile link"
           className="min-w-0 flex-1 rounded-full border border-rule bg-paper px-4 py-2.5 text-[15px] placeholder:text-slate/80 focus:border-ink focus:outline-none"
         />
-        <button type="submit" disabled={!source} className="rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
+        <button type="submit" disabled={!source} className="rounded-lg bg-lime px-5 py-2.5 text-sm font-semibold text-on-lime disabled:opacity-40">
           Follow
         </button>
       </form>

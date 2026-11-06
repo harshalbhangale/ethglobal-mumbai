@@ -6,7 +6,7 @@ import { AgentProvider } from "@/components/agent";
 import { type Session, WithSession } from "@/components/auth";
 import { FeedSkeleton, Markets, pct, Shell, usePriceMap } from "@/components/feed";
 import { FollowButton } from "@/components/follow-button";
-import { handleGradient, KolAvatar } from "@/components/kol-avatar";
+import { KolAvatar } from "@/components/kol-avatar";
 import { LogoMark } from "@/components/logo";
 import { normalize } from "@/lib/follows";
 import { callerStats, useFollows, useKallrData } from "@/lib/feed";
@@ -82,7 +82,7 @@ function Callers({ session }: { session: Session }) {
         <ul className="mt-4 grid gap-3 px-4 pb-6 sm:grid-cols-2 sm:px-5">
           {rows.map((r, i) => (
             <li key={r.handle} className="rise lift overflow-hidden rounded-3xl border border-rule bg-card" style={{ ["--i" as string]: i }}>
-              <div className="mesh h-16" style={{ backgroundImage: handleGradient(r.handle, 120) }} />
+              <div className="h-12 border-b border-rule bg-raised" />
               <div className="px-4 pb-4">
                 <div className="-mt-7 flex items-end justify-between">
                   <Link href={`/kol/${r.handle}`}>

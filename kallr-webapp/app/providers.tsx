@@ -16,12 +16,12 @@ export function Providers({ children }: { children: ReactNode }) {
       config={{
         loginMethods: ["twitter", "email", "wallet"],
         appearance: {
-          theme: "light",
-          accentColor: "#14213D",
+          theme: "dark",
+          accentColor: "#C6F25A",
           logo: "/icons/icon-192.png",
           walletChainType: "ethereum-only",
           landingHeader: "Sign in to Kallr",
-          loginMessage: "Use your X account so your replies to @Kallr link to your wallet.",
+          loginMessage: "Sign in with X to get your Kallr wallet on Base.",
         },
         embeddedWallets: {
           ethereum: { createOnLogin: "users-without-wallets" },

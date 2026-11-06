@@ -150,7 +150,7 @@ export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | 
         <button
           type="submit"
           disabled={!flash?.ok || busy}
-          className="rounded-full bg-ink px-6 py-3 text-[15px] font-semibold text-white disabled:opacity-40"
+          className="rounded-lg bg-lime px-6 py-3 text-[15px] font-semibold text-on-lime disabled:opacity-40"
         >
           {busy ? "Placing…" : "Place order"}
         </button>
@@ -277,7 +277,7 @@ export function OpenOrders({ orders, error }: { orders: FlashOrder[] | null; err
         <div className="mt-6 rounded-xl border border-dashed border-rule px-6 py-10 text-center">
           <p className="font-semibold">No open orders</p>
           <p className="mx-auto mt-2 max-w-sm text-sm text-slate">
-            Reply “@Kallr copy $2” under a call on X, or type an order above. It shows up here with its
+            Copy a call from the extension on X, the keyboard or the feed. It shows up here with its
             take-profit and stop-loss.
           </p>
         </div>

@@ -35,7 +35,7 @@ export function usePrivySession(): Session {
 }
 
 const buttonClass =
-  "rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-ink-soft disabled:opacity-50";
+  "rounded-lg bg-lime px-5 py-2.5 text-sm font-semibold text-on-lime transition-colors hover:bg-lime-strong disabled:opacity-50";
 
 function PrivySignInButton({ label }: { label: string }) {
   const { ready, authenticated, login } = usePrivy();

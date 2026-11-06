@@ -138,7 +138,7 @@ function Dashboard({ session }: { session: Session | null }) {
                   aria-selected={scope === s}
                   disabled={s === "yours" && !signedIn}
                   onClick={() => setScope(s)}
-                  className={`rounded-full px-3 py-1 disabled:opacity-40 ${scope === s ? "bg-ink text-white" : "text-slate hover:text-ink"}`}
+                  className={`rounded-lg px-3 py-1 disabled:opacity-40 ${scope === s ? "bg-lime text-on-lime" : "text-slate hover:text-ink"}`}
                 >
                   {s === "yours" ? "Yours" : "Everyone"}
                 </button>
