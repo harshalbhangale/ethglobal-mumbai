@@ -201,14 +201,27 @@ export function useFollows() {
 
   useEffect(() => {
     let cancelled = false;
-    const start = () =>
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = () =>
       extensionFollows({ action: "read" })
         .then((list) => !cancelled && (setEntries(list), setViaExtension(true)))
         .catch(() => !cancelled && setEntries(readLocal()));
-    const t = setTimeout(() => (extensionInstalled() ? start() : setEntries(readLocal())), 300);
+    // The extension marks the page as it loads; give it up to 3s before using this browser's list.
+    const wait = (tries: number) => {
+      if (extensionInstalled()) return void read();
+      if (tries <= 0) return void setEntries(readLocal());
+      timer = setTimeout(() => wait(tries - 1), 250);
+    };
+    wait(12);
+    // Following someone on X while this tab is open: pick it up when you come back.
+    const onVisible = () => document.visibilityState === "visible" && extensionInstalled() && void read();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
     return () => {
       cancelled = true;
-      clearTimeout(t);
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
     };
   }, []);
 

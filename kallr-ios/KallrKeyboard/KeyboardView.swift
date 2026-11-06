@@ -119,7 +119,11 @@ final class KeyboardModel: ObservableObject {
     // Orders and wallet
     @Published var orders: [Kallr.Order]?
     @Published var wallet: Kallr.Wallet?
+    /** Why the wallet didn't load (shown with Retry), or that the server has no Kall wallet set up. */
+    @Published var walletProblem: String?
+    @Published var walletNotSetUp = false
     private var polling: Task<Void, Never>?
+    private var walletWatch: Task<Void, Never>?
     @Published var cancelling: Set<String> = []
     @Published var ordersNote: String?
 
@@ -156,8 +160,9 @@ final class KeyboardModel: ObservableObject {
         polling = Task { @MainActor in
             while !Task.isCancelled, tab == .orders {
                 await loadOrders()
-                let open = orders?.contains { $0.open } ?? false
-                try? await Task.sleep(nanoseconds: open ? 5_000_000_000 : 15_000_000_000)
+                // Quick while nothing has loaded yet or an order is working; slow once settled.
+                let fast = orders == nil || (orders?.contains { $0.open } ?? false)
+                try? await Task.sleep(nanoseconds: fast ? 5_000_000_000 : 15_000_000_000)
             }
             polling = nil
         }
@@ -582,6 +587,7 @@ final class KeyboardModel: ObservableObject {
         mode = .panel
         controller?.checkContext()
         if self.tab == .orders { startPolling() }
+        if self.tab == .wallet { watchWallet() }
         Task { await load() }
     }
 
@@ -675,14 +681,48 @@ final class KeyboardModel: ObservableObject {
 
     func load() async {
         async let f = Kallr.feed()
-        async let w = Kallr.wallet()
-        let (feed, wallet) = await (f, w)
+        async let w: Void = loadWallet()
+        let (feed, _) = await (f, w)
         if let feed { self.feed = feed; feedError = nil } else if self.feed == nil { feedError = fullAccess ? "Couldn't reach Kall Markets." : "Turn on Allow Full Access for Kall Keyboard in Settings." }
-        if let wallet { self.wallet = wallet }
+    }
+
+    /** One read of the Kall wallet. A failed read keeps the last good one and says why. */
+    func loadWallet() async {
+        switch await Kallr.readWallet() {
+        case .ok(let w):
+            wallet = w
+            walletProblem = nil
+            walletNotSetUp = false
+        case .notSetUp:
+            if wallet == nil { walletNotSetUp = true }
+        case .failed(let why):
+            if wallet == nil { walletProblem = fullAccess ? why : nil }
+        case .cancelled:
+            break
+        }
+    }
+
+    /** While Wallet is on screen: retry every 4 seconds until it loads, then refresh balances every 20. */
+    func watchWallet() {
+        if let walletWatch, !walletWatch.isCancelled { return }
+        walletWatch = Task { @MainActor in
+            while !Task.isCancelled, mode == .panel, tab == .wallet {
+                await loadWallet()
+                try? await Task.sleep(nanoseconds: wallet == nil ? 4_000_000_000 : 20_000_000_000)
+            }
+            walletWatch = nil
+        }
+    }
+
+    func retryWallet() {
+        tap()
+        walletProblem = nil
+        walletNotSetUp = false
+        Task { await loadWallet() }
     }
 
     func loadOrders() async {
-        if wallet?.address == nil { await load() }
+        if wallet?.address == nil { await loadWallet() }
         guard let address = wallet?.address else { ordersFailed = orders == nil; return }
         // History is Flash's orders joined with their Arkiv trade records (the record's key, the call).
         var fresh = await Kallr.history(wallets: [address])
@@ -877,7 +917,8 @@ private struct TopBar: View {
                     model.tap()
                     withAnimation(.easeOut(duration: 0.15)) { model.tab = t }
                     if t == .orders { model.startPolling() }
-                    if t == .wallet || t == .following { Task { await model.load() } }
+                    if t == .wallet { model.watchWallet() }
+                    if t == .following { Task { await model.load() } }
                 } label: {
                     VStack(spacing: 5) {
                         Text(title(t)).font(.system(size: 14, weight: .heavy))
@@ -2201,7 +2242,9 @@ private struct OrdersTab: View {
                         if orders.isEmpty { Empty(text: "No orders yet. Copy a call from Following, or buy from Trade.") }
                         ForEach(orders, id: \.orderId) { o in OrderRow(order: o, model: model) }
                     } else if model.ordersFailed {
-                        Empty(text: "Couldn't read your orders from Flash. Pull down to try again.")
+                        Empty(text: model.wallet == nil
+                              ? (model.fullAccess ? "Couldn't read your Kall wallet\(model.walletProblem.map { ": \($0)" } ?? ""). Pull down to try again." : "Turn on Allow Full Access for Kall Keyboard in Settings.")
+                              : "Couldn't read your orders from Flash. Pull down to try again.")
                     } else {
                         Empty(text: "Reading your orders from Flash…")
                     }
@@ -2409,12 +2452,27 @@ private struct WalletTab: View {
                 .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
                 Text("Deposit ETH from the Kall Keyboard app (copy the address, or scan its QR), then swap some to USDC there. About $1 of ETH stays for gas. Orders go up to $\(Kallr.fmt(w.maxUsd ?? 25)) each, Base only.")
                     .font(.system(size: 11)).foregroundStyle(Kallr.muted)
+            } else if !model.fullAccess {
+                Empty(text: "Turn on Allow Full Access for Kall Keyboard in Settings.")
+            } else if model.walletNotSetUp {
+                Empty(text: "The Kall wallet isn't set up on Kall Markets yet.")
+            } else if let problem = model.walletProblem {
+                VStack(spacing: 8) {
+                    Empty(text: "Couldn't read your Kall wallet: \(problem).")
+                    Button { model.retryWallet() } label: {
+                        Text("RETRY").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.black)
+                            .frame(width: 96, height: 32).background(Kallr.lime, in: RoundedRectangle(cornerRadius: 7))
+                    }
+                    .buttonStyle(Press())
+                }
+                .frame(maxWidth: .infinity)
             } else {
-                Empty(text: model.fullAccess ? "Reading your Kall wallet…" : "Turn on Allow Full Access for Kall Keyboard in Settings.")
+                Empty(text: "Reading your Kall wallet…")
             }
         }
         .padding(.horizontal, 8)
         .padding(.top, 4)
+        .onAppear { model.watchWallet() }
     }
 }
 

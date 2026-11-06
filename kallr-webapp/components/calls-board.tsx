@@ -142,6 +142,7 @@ export function CallsBoard({
               onCopy={() => onCopy(r)}
               record={recordOf(r.caller)}
               live={prices[r.asset as "ETH" | "BTC"] ?? null}
+              arkiv={"sample" in r && r.sample ? null : `${data.explorer}/entity/${r.id}`}
             />
           ))}
         </ul>
@@ -181,6 +182,7 @@ function PostCard({
   onCopy,
   record,
   live,
+  arkiv,
 }: {
   row: Row;
   fav: boolean;
@@ -189,6 +191,8 @@ function PostCard({
   onCopy: () => void;
   record: string;
   live: number | null;
+  /** This call's read-only record on Arkiv; null for sample calls. */
+  arkiv: string | null;
 }) {
   const up = row.direction === "long";
   const result = row.open ? null : (row as ResultItem);
@@ -255,6 +259,17 @@ function PostCard({
             </>
           )}
           <span className="ml-auto flex items-center gap-2">
+            {arkiv && (
+              <a
+                href={arkiv}
+                target="_blank"
+                rel="noreferrer"
+                title="This call's record on Arkiv"
+                className="rounded-md border border-rule px-2.5 py-1.5 text-xs font-semibold text-slate hover:border-lime hover:text-lime"
+              >
+                Arkiv ↗
+              </a>
+            )}
             <a
               href={`https://x.com/${row.caller}/status/${row.postId}`}
               target="_blank"

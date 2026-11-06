@@ -57,6 +57,7 @@ export async function callerRecordFromArkiv(handle: string) {
   const dir = (v: unknown) => (v === "down" || v === "short" ? "down" : "up") as "up" | "down";
   const calls = [
     ...settled.map((e) => ({
+      key: String(e.$key),
       postId: String(e.postId.value),
       asset: String(e.asset.value),
       direction: dir(e.direction.value),
@@ -68,6 +69,7 @@ export async function callerRecordFromArkiv(handle: string) {
     ...open
       .filter((e) => String(e.caller.value) === h)
       .map((e) => ({
+        key: String(e.$key),
         postId: String(e.postId.value),
         asset: String(e.asset.value),
         direction: dir(e.direction.value),

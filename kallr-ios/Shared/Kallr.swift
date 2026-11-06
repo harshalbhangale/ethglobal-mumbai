@@ -255,6 +255,33 @@ enum Kallr {
 
     static func wallet() async -> Wallet? { await get("api/keyboard/execute") }
 
+    /** Reading the Kall wallet, with why it failed, so the keyboard never sits on "Reading…". */
+    enum WalletRead { case ok(Wallet), notSetUp, failed(String), cancelled }
+
+    static func readWallet() async -> WalletRead {
+        guard let url = URL(string: "api/keyboard/execute", relativeTo: origin) else { return .failed("bad address") }
+        do {
+            let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 15))
+            guard let http = response as? HTTPURLResponse else { return .failed("no answer from Kall Markets") }
+            guard (200..<300).contains(http.statusCode) else { return .failed("Kall Markets answered \(http.statusCode)") }
+            guard let w = try? JSONDecoder().decode(Wallet.self, from: data) else { return .failed("unexpected answer from Kall Markets") }
+            return w.configured && w.address != nil ? .ok(w) : .notSetUp
+        } catch let e as URLError where e.code == .cancelled {
+            return .cancelled
+        } catch is CancellationError {
+            return .cancelled
+        } catch let e as URLError where e.code == .notConnectedToInternet || e.code == .networkConnectionLost {
+            return .failed("no internet connection")
+        } catch let e as URLError where e.code == .timedOut {
+            return .failed("Kall Markets took too long")
+        } catch let e as URLError where [.cannotConnectToHost, .cannotFindHost, .dnsLookupFailed].contains(e.code) {
+            return .failed("can't reach Kall Markets")
+        } catch {
+            let why = error.localizedDescription
+            return .failed(why.hasSuffix(".") ? String(why.dropLast()) : why)
+        }
+    }
+
     struct KeyboardOrder: Codable {
         let token: String
         let kind: String

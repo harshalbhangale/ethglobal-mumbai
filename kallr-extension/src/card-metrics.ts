@@ -5,6 +5,8 @@
  */
 
 export type SeenCall = {
+  /** The call's read-only record on Arkiv, when it came from there. */
+  key?: string;
   postId: string;
   asset: string;
   direction: "up" | "down";
