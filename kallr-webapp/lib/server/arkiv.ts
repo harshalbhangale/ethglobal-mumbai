@@ -170,3 +170,17 @@ export async function settleDueCalls(nowSeconds: number) {
   }
   return { settled, due: due.length, configured: true };
 }
+
+/** Calls whose deadline has passed, in the shape the Chainlink CRE scorer reads (kall-cre/score-calls). */
+export async function dueCallsForCre(nowSeconds: number) {
+  if (!writer) return [];
+  const due = await readDueCalls(writer.reader, writer.address, nowSeconds);
+  return due.map((c) => ({
+    postId: c.postId.value,
+    handle: c.caller.value,
+    asset: c.asset.value,
+    direction: c.direction.value === "down" ? "down" : "up",
+    postedAt: Number(c.postedAt.value),
+    expiresAt: Number(c.deadline.value),
+  }));
+}

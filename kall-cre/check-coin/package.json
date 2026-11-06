@@ -1,0 +1,9 @@
+{
+  "name": "kall-check-coin",
+  "private": true,
+  "type": "module",
+  "main": "main.ts",
+  "scripts": { "postinstall": "bunx cre-setup" },
+  "dependencies": { "@chainlink/cre-sdk": "^1.6.0", "viem": "2.34.0" },
+  "devDependencies": { "typescript": "^5.9.0" }
+}
