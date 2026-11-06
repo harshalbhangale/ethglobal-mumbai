@@ -95,10 +95,15 @@ export async function kallWalletOf(userId: string): Promise<{ id: string; addres
 }
 
 /** Signs and sends from a user's Kall wallet through Privy's wallet API, on Base. */
-export function privySigner(walletId: string, address: Hex): ServerSigner {
+export function privySigner(walletId: string, address: Hex): ServerSigner & { signMessage: (message: string) => Promise<Hex> } {
   const rpc = <T>(body: Record<string, unknown>) => privy<{ data: T }>(`/wallets/${encodeURIComponent(walletId)}/rpc`, body).then((r) => r.data);
   return {
     address,
+    /** A plain-text message signature (EIP-191), e.g. Flash's cancel message. */
+    async signMessage(message) {
+      const { signature } = await rpc<{ signature: Hex }>({ method: "personal_sign", params: { message, encoding: "utf-8" } });
+      return signature;
+    },
     async signTypedData(json) {
       const t = JSON.parse(json) as { domain: Record<string, unknown>; types: unknown; primaryType: string; message: unknown };
       const domain = { ...t.domain, ...(t.domain.chainId !== undefined ? { chainId: Number(t.domain.chainId) } : {}) };
