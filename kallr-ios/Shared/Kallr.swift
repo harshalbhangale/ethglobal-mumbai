@@ -211,7 +211,25 @@ enum Kallr {
         let caller: String?
     }
     struct Preview: Codable { let title: String; let kind: String; let pay: String; let get: String; let exits: String; let approval: String }
-    struct Details: Codable { let impactPct: Double?; let slippagePct: Double?; let feeUsd: Double? }
+    struct Details: Codable {
+        /** The token and spender of the approval the order needs, so the keyboard can read the allowance itself. */
+        struct Approval: Codable { let token: String; let spender: String }
+        let impactPct: Double?
+        let slippagePct: Double?
+        let feeUsd: Double?
+        let approval: Approval?
+    }
+
+    /** One token's live price on Base and its 24h move, for the keyboard's ticker. */
+    struct LivePrice: Codable {
+        let symbol: String
+        let price: Double
+        let change24h: Double?
+        let source: String
+    }
+
+    /** `key` is ETH, BTC or a token's contract address. */
+    static func livePrice(_ key: String) async -> LivePrice? { await get("api/tokens/price?key=\(key)") }
     /** A dry run (the review card) or a placed order. */
     struct Placed: Codable { let orderId: String?; let preview: Preview; let details: Details?; let approvals: [String]? }
 

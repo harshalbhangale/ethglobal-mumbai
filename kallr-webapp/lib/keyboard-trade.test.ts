@@ -1,15 +1,7 @@
 import { buildQuoteRequest, flashOrderInputSchema, NATIVE_ASSET } from "@kallr/integrations/definitive";
 import { describe, expect, it } from "vitest";
 import { firstCashtag } from "./keyboard";
-import {
-  buildKeyboardOrder,
-  buildSwapOrder,
-  ethForUsd,
-  keyboardOrderSchema,
-  keyboardSwapSchema,
-  maxSwapUsd,
-  priceString,
-} from "./keyboard-trade";
+import { approvalTarget, buildKeyboardOrder, buildSwapOrder, ethForUsd, keyboardOrderSchema, keyboardSwapSchema, maxSwapUsd, priceString } from "./keyboard-trade";
 
 const funder = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 const PEPE = "0x6982508145454Ce325dDbE47a25d4ec3d2311933";
@@ -86,5 +78,18 @@ describe("swap ETH to USDC", () => {
     expect(keyboardSwapSchema.safeParse({ usd: "12.5" }).success).toBe(true);
     expect(keyboardSwapSchema.safeParse({ usd: "0.5" }).success).toBe(false);
     expect(keyboardSwapSchema.safeParse({ usd: "1.234" }).success).toBe(false);
+  });
+});
+
+describe("approvalTarget", () => {
+  it("reads the token and spender from an ERC-20 approve, and nothing from anything else", () => {
+    const spender = "1111111254eeb25477b68fb85ed929f73a960582";
+    const data = `0x095ea7b3${"0".repeat(24)}${spender}${"f".repeat(64)}`;
+    expect(approvalTarget({ to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", data })).toEqual({
+      token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      spender: `0x${spender}`,
+    });
+    expect(approvalTarget({ to: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", data: "0xa9059cbb00" })).toBeNull();
+    expect(approvalTarget(null)).toBeNull();
   });
 });

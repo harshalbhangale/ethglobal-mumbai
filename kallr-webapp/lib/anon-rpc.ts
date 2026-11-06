@@ -158,9 +158,19 @@ function directFetch(input: RequestInfo | URL, init?: RequestInit, why?: string)
  * Server-side (no window) it is plain fetch.
  */
 export async function anonFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  if (typeof window === "undefined" || !ENABLED) return fetch(input, init);
+  return (await fetchVia(input, init)).res;
+}
+
+type Via = { via: "anon" | "direct"; why: string | null };
+
+/** `anonFetch`, also saying whether the read went through the worker or direct, and why. */
+async function fetchVia(input: RequestInfo | URL, init?: RequestInit): Promise<{ res: Response } & Via> {
+  if (typeof window === "undefined" || !ENABLED) return { res: await fetch(input, init), via: "direct", why: "Anon-RPC is off" };
   const w = await start();
-  if (!w || status.state === "failed") return directFetch(input, init);
+  if (!w || status.state === "failed") {
+    const why = status.error ? `worker failed: ${status.error}` : "worker failed";
+    return { res: await directFetch(input, init, why), via: "direct", why };
+  }
 
   // The caller's own abort (viem's timeout) still applies; ours bounds a worker that never boots.
   const timeout = AbortSignal.timeout(READ_TIMEOUT_MS);
@@ -173,7 +183,7 @@ export async function anonFetch(input: RequestInfo | URL, init?: RequestInit): P
     if (trace.length > 20) trace.shift();
     const n = status.anonymized;
     set({ anonymized: n + 1, avgMs: Math.round(((status.avgMs ?? ms) * n + ms) / (n + 1)) });
-    return res;
+    return { res, via: "anon", why: null };
   } catch (e) {
     // The caller gave up: don't retry behind their back.
     if (init?.signal?.aborted) throw e;
@@ -186,8 +196,77 @@ export async function anonFetch(input: RequestInfo | URL, init?: RequestInit): P
         return "?";
       }
     })();
-    return directFetch(input, init, `${host}: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`);
+    const why = `${host}: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`;
+    return { res: await directFetch(input, init, why), via: "direct", why };
   }
+}
+
+/** True once the worker is ready, false if it fails or isn't ready within `ms`. */
+function whenReady(ms: number): Promise<boolean> {
+  if (status.state === "ready") return Promise.resolve(true);
+  void start();
+  return new Promise((resolve) => {
+    const done = (ok: boolean) => {
+      clearTimeout(timer);
+      unsubscribe();
+      resolve(ok);
+    };
+    const timer = setTimeout(() => done(status.state === "ready"), ms);
+    const unsubscribe = subscribeAnonRpc(() => {
+      if (status.state === "ready") done(true);
+      else if (status.state === "failed") done(false);
+    });
+  });
+}
+
+export type AnonRead = {
+  result: unknown;
+  error: string | null;
+  via: "anon" | "direct";
+  /** Why it went direct; null when it went through the worker. */
+  why: string | null;
+  /** The read itself, after any wait for the worker. */
+  ms: number;
+  /** How long it waited for the worker to be ready. */
+  waitedMs: number;
+};
+
+/**
+ * One JSON-RPC read, reporting how it went. It waits up to `waitMs` for the worker; if it isn't ready
+ * by then the read goes direct and says so, so a caller is never held up by the mixnet's boot.
+ */
+export async function anonRpcRead(url: string, method: string, params: unknown[], waitMs = 20_000): Promise<AnonRead> {
+  const [one] = await anonRpcBatch(url, [{ method, params }], waitMs);
+  return one!;
+}
+
+/**
+ * Several JSON-RPC reads as one batch: one round trip through the mixnet instead of one each (the
+ * worker carries one request at a time). Each answer reports how the batch went.
+ */
+export async function anonRpcBatch(url: string, calls: Array<{ method: string; params: unknown[] }>, waitMs = 20_000): Promise<AnonRead[]> {
+  const body = calls.map((c, i) => ({ jsonrpc: "2.0", id: i + 1, method: c.method, params: c.params }));
+  const init: RequestInit = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body.length === 1 ? body[0] : body) };
+  const t0 = performance.now();
+  const ready = typeof window !== "undefined" && ENABLED ? await whenReady(waitMs) : false;
+  const waitedMs = Math.round(performance.now() - t0);
+  const t1 = performance.now();
+  let sent: { res: Response } & Via;
+  if (ready) {
+    sent = await fetchVia(url, init);
+  } else {
+    const why = !ENABLED ? "Anon-RPC is off" : status.state === "failed" ? `worker failed: ${status.error ?? "unknown"}` : `Nym not connected after ${Math.round(waitMs / 1000)}s`;
+    sent = { res: await directFetch(url, init, why), via: "direct", why };
+  }
+  const ms = Math.round(performance.now() - t1);
+  type Answer = { id?: number; result?: unknown; error?: { message?: string } };
+  const json = (await sent.res.json().catch(() => null)) as Answer | Answer[] | null;
+  const answers = Array.isArray(json) ? json : json ? [json] : [];
+  return calls.map((_, i) => {
+    const a = answers.find((x) => x.id === i + 1) ?? (answers.length === 1 && calls.length === 1 ? answers[0] : undefined);
+    const error = a?.error?.message ?? (a ? null : sent.res.ok ? "no answer" : `HTTP ${sent.res.status}`);
+    return { result: a?.result ?? null, error, via: sent.via, why: sent.why, ms, waitedMs };
+  });
 }
 
 /**
