@@ -155,7 +155,8 @@ See [arkiv/swarm.md](arkiv/swarm.md).
 ## Chrome extension
 
 ```sh
-npm run build -w @kallr/extension                                       # for http://localhost:3000
+npm run build -w @kallr/extension                                       # for https://kallr.vercel.app
+npm run build:local -w @kallr/extension                                 # for http://localhost:3000
 KALLR_APP_ORIGIN=https://your-app.example npm run build -w @kallr/extension
 ```
 

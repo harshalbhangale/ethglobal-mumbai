@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { AgentProvider, useAgent } from "@/components/agent";
+import { AgentProvider } from "@/components/agent";
 import { type Session, WithSession } from "@/components/auth";
 import { CountUp, FeedPost, FeedSkeleton, Markets, pct, RailCard, Shell, Tabs, usePriceMap } from "@/components/feed";
 import { FollowButton } from "@/components/follow-button";
 import { handleGradient, KolAvatar } from "@/components/kol-avatar";
 import { LogoMark } from "@/components/logo";
-import { callerStats, type FeedItem, itemTime, useFollows, useKallrData } from "@/lib/feed";
+import { callerStats, copyCall, type FeedItem, itemTime, useFollows, useKallrData } from "@/lib/feed";
 
 /** A caller's profile: their record from Arkiv, open calls, settled calls and what you copied. */
 
@@ -38,7 +38,6 @@ function Profile({ session }: { session: Session }) {
   const data = useKallrData(session.authenticated ? session.address : null);
   const follows = useFollows();
   const prices = usePriceMap();
-  const agent = useAgent();
   const [tab, setTab] = useState<Tab>("calls");
 
   const calls = useMemo(() => data.calls.filter((c) => c.caller === handle), [data.calls, handle]);
@@ -47,6 +46,7 @@ function Profile({ session }: { session: Session }) {
   const stats = callerStats(results, calls);
   const shown: FeedItem[] = (tab === "calls" ? [...calls, ...results] : tab === "results" ? results : copied).sort((a, b) => itemTime(b) - itemTime(a));
   const lastCall = calls[0];
+  const lastCopy = lastCall ? copyCall(lastCall) : null;
 
   // Streak strip: last settled calls as colored squares, oldest to newest.
   const strip = [...results].sort((a, b) => a.deadline - b.deadline).slice(-14);
@@ -117,15 +117,17 @@ function Profile({ session }: { session: Session }) {
           <Big label="Open now" value={stats.open} format={(n) => String(Math.round(n))} color="#f2a93b" />
         </div>
 
-        {lastCall && (
-          <button
-            type="button"
-            onClick={() => agent.open(`copy @${handle} ${lastCall.direction === "long" ? "buy" : "sell"} $50 ${lastCall.asset} now tp 10% sl 5%`)}
-            className="mesh mt-4 w-full rounded-2xl py-3 font-semibold text-white"
+        {lastCall && lastCopy && "href" in lastCopy && (
+          <Link
+            href={lastCopy.href}
+            className="mesh mt-4 block w-full rounded-2xl py-3 text-center font-semibold text-white"
             style={{ backgroundImage: "linear-gradient(120deg,#14213d,#7c3aed,#1d9bf0,#14213d)" }}
           >
             Copy latest call · {lastCall.direction.toUpperCase()} {lastCall.asset}
-          </button>
+          </Link>
+        )}
+        {lastCopy && "reason" in lastCopy && (
+          <p className="mt-4 rounded-2xl bg-paper py-3 text-center text-sm text-slate">Latest call: {lastCopy.reason}</p>
         )}
       </div>
 

@@ -1,8 +1,9 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { build } from "esbuild";
 
-// The web app the extension talks to: KALLR_APP_ORIGIN=https://your-app.vercel.app npm run build
-const origin = new URL(process.env.KALLR_APP_ORIGIN ?? "http://localhost:3000").origin;
+// The web app the extension talks to: the live app by default, `npm run build:local` for localhost:3000,
+// or KALLR_APP_ORIGIN=https://your-app.example npm run build.
+const origin = new URL(process.env.KALLR_APP_ORIGIN || "https://kallr.vercel.app").origin;
 if (!origin.startsWith("https://") && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))
   throw new Error("Use an HTTPS app origin, or localhost for development.");
 

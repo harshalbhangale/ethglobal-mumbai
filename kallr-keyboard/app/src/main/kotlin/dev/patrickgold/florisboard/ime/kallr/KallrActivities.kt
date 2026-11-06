@@ -95,6 +95,7 @@ class KallrTradeActivity : ComponentActivity() {
     companion object {
         private const val EXTRA_ORDER = "kallr.order"
         fun open(context: Context, order: KeyboardOrder) {
+            KallrPanelState.resumeOn(Tab.Swap)
             context.startActivity(
                 Intent(context, KallrTradeActivity::class.java)
                     .putExtra(EXTRA_ORDER, KallrTrader.encode(order))
@@ -193,7 +194,11 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
                             onClick = {
                                 scope.launch {
                                     KallrTrader.place(context, order) { step -> state = SheetState.Working(step) }.fold(
-                                        onSuccess = { state = SheetState.Done(it, p.title) },
+                                        onSuccess = {
+                                            // Back in the chat, the panel opens on Positions so the new order is right there.
+                                            KallrPanelState.resumeOn(Tab.Positions)
+                                            state = SheetState.Done(it, p.title)
+                                        },
                                         onFailure = { state = SheetState.Failed(it.message ?: "The order didn't go through.", s.wallet) },
                                     )
                                 }
@@ -243,6 +248,7 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
 class KallrWalletActivity : ComponentActivity() {
     companion object {
         fun open(context: Context) {
+            KallrPanelState.resumeOn(KallrPanelState.tab)
             context.startActivity(Intent(context, KallrWalletActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }

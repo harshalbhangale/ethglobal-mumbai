@@ -96,14 +96,47 @@ export function openDesk(url: string) {
  */
 export function send<T>(message: Record<string, unknown>): Promise<T | null> {
   try {
-    if (!globalThis.chrome?.runtime?.id) return Promise.resolve(null);
+    if (!globalThis.chrome?.runtime?.id) {
+      showReloadNotice();
+      return Promise.resolve(null);
+    }
     return chrome.runtime
       .sendMessage(message)
       .then((value: unknown) => (value && typeof value === "object" && "error" in value ? null : (value as T)))
-      .catch(() => null);
+      .catch((err: unknown) => {
+        if (/context invalidated/i.test(String((err as Error)?.message ?? err))) showReloadNotice();
+        return null;
+      });
   } catch {
+    showReloadNotice();
     return Promise.resolve(null);
   }
+}
+
+let reloadNoticeShown = false;
+
+/**
+ * After the extension is updated or reloaded, this tab's old script can't reach Kallr any more.
+ * Say so once, with a Reload button, instead of cards silently not appearing.
+ */
+function showReloadNotice() {
+  if (reloadNoticeShown || typeof document === "undefined" || !document.body) return;
+  reloadNoticeShown = true;
+  const bar = document.createElement("div");
+  bar.setAttribute("role", "status");
+  bar.style.cssText =
+    "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;gap:12px;" +
+    "padding:10px 12px 10px 16px;border-radius:999px;background:#14213d;color:#fff;font:500 14px/1.3 system-ui,sans-serif;" +
+    "box-shadow:0 12px 32px rgba(20,33,61,.35)";
+  const text = document.createElement("span");
+  text.textContent = "Kallr was updated. Reload this tab to keep using it.";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "Reload";
+  button.style.cssText = "border:0;border-radius:999px;padding:6px 14px;background:#2f6bff;color:#fff;font:600 13px system-ui,sans-serif;cursor:pointer";
+  button.addEventListener("click", () => location.reload());
+  bar.append(text, button);
+  document.body.append(bar);
 }
 
 export type Metric = {

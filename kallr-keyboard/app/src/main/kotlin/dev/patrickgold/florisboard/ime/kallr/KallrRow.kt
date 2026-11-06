@@ -77,14 +77,24 @@ fun KallrRow() {
     LaunchedEffect(reference, typed) {
         if (reference == null && typed == null) {
             s.result = null
+            s.lastLookup = null
             return@LaunchedEffect
         }
+        // Back from the confirm sheet or sign-in with the same clipboard: keep the panel as the user left it.
+        val key = "$reference\u0000$typed"
+        if (key == s.lastLookup && s.result != null) return@LaunchedEffect
         delay(400) // wait for typing to settle
         val r = Kallr.lookup(context, reference, typed)
         s.result = r
+        if (r != null) s.lastLookup = key
         s.aiNote = null
         s.extraTrade = null
-        r?.trade?.let { s.token = it.token }
+        // A new message starts from its own coin, never the last one's (or ETH when it has none we can buy).
+        s.token = r?.trade?.token ?: "ETH"
+        val named = (r?.call?.asset ?: r?.ai?.symbol)?.uppercase()
+        if (r != null && r.trade == null && r.fake == null && r.token == null && named != null && named != "ETH" && named != "BTC") {
+            s.aiNote = "Couldn't find a liquid \$$named on Base, so this is set to ETH."
+        }
         // The AI's read of the message or typed words ("buy 20 bucks of degen if it dips 10%").
         r?.prefill?.let { s.apply(it, null) }
         typed?.let { t ->
@@ -102,6 +112,8 @@ fun KallrRow() {
     val headline = when {
         fake != null -> warning
         warning != null -> "${r?.token?.symbol ?: "Token"}: $warning"
+        // No direction means the AI read it as a joke, a question or commentary, not a call.
+        r?.call == null && r?.ai != null && r.ai.direction == null -> r.ai.summary
         r?.call == null && r?.ai != null -> "Trade it · ${r.ai.summary}"
         r?.call != null -> "Trade @${r.post?.handle ?: "this"}'s call · ${r.call.line}"
         r?.post != null && r.trade != null -> "Trade @${r.post.handle}'s $${r.trade.symbol} call"
@@ -134,9 +146,10 @@ fun KallrRow() {
                 )
                 r?.record?.line?.let { Text(it, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
+            // A warning opens the panel to explain it; it never offers "Trade" next to a fake contract.
             Box(
-                Modifier.background(KallrBlue, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 5.dp),
-            ) { Text("Trade", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+                Modifier.background(if (warning != null) Danger else KallrBlue, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 5.dp),
+            ) { Text(if (warning != null) "Why?" else "Trade", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
         }
     }
 }

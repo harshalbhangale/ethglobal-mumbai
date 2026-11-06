@@ -360,7 +360,12 @@ class FlorisImeService : LifecycleInputMethodService() {
         if (info == null) return
         val editorInfo = FlorisEditorInfo.wrap(info)
         activeState.batchEdit {
-            if (activeState.imeUiMode != ImeUiMode.CLIPBOARD || prefs.clipboard.historyHideOnNextTextField.get()) {
+            // Kallr: coming back from sign-in, the confirm sheet or the mic prompt reopens the trade panel.
+            val kallrTab = dev.patrickgold.florisboard.ime.kallr.KallrPanelState.takeResume()
+            if (kallrTab != null) {
+                dev.patrickgold.florisboard.ime.kallr.KallrPanelState.tab = kallrTab
+                activeState.imeUiMode = ImeUiMode.KALLR
+            } else if (activeState.imeUiMode != ImeUiMode.CLIPBOARD || prefs.clipboard.historyHideOnNextTextField.get()) {
                 activeState.imeUiMode = ImeUiMode.TEXT
             }
             activeState.isSelectionMode = editorInfo.initialSelection.isSelectionMode

@@ -10,7 +10,7 @@ import { KolAvatar } from "@/components/kol-avatar";
 import { Logo } from "@/components/logo";
 import { AssetIcon, SOURCE_STYLE, SourceIcon, TradeAvatar } from "@/components/trade-icons";
 import { type Balances, formatAmount, getBalances, shortAddress } from "@/lib/chain";
-import type { CallItem, FeedItem, ResultItem, TradeItem } from "@/lib/feed";
+import { type CallItem, copyCall, type FeedItem, type ResultItem, type TradeItem } from "@/lib/feed";
 
 export const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 10 ? 2 : n < 1000 ? 2 : 0 });
@@ -200,7 +200,7 @@ function Head({ handle, time, extra, sample }: { handle: string; time: number; e
 }
 
 function CallPost({ c, price }: { c: CallItem; price: number | null }) {
-  const agent = useAgent();
+  const copy = copyCall(c);
   const moveBps = c.entry && price ? ((price - c.entry) / c.entry) * 10000 * (c.direction === "long" ? 1 : -1) : null;
   const span = c.deadline - c.postedAt;
   const done = Math.min(1, Math.max(0, (Date.now() / 1000 - c.postedAt) / span));
@@ -236,13 +236,16 @@ function CallPost({ c, price }: { c: CallItem; price: number | null }) {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => agent.open(`copy @${c.caller} ${c.direction === "long" ? "buy" : "sell"} $50 ${c.asset} now tp 10% sl 5%`)}
-            className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-white transition-transform hover:scale-105"
-          >
-            Copy call
-          </button>
+          {"href" in copy ? (
+            <Link
+              href={copy.href}
+              className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-white transition-transform hover:scale-105"
+            >
+              Copy call
+            </Link>
+          ) : (
+            <span className="rounded-full bg-paper px-3 py-1.5 text-xs text-slate">{copy.reason}</span>
+          )}
           <a href={`https://x.com/${c.caller}/status/${c.postId}`} target="_blank" rel="noreferrer" className="rounded-full px-3 py-1.5 text-sm text-slate hover:bg-sky/10 hover:text-sky">
             View on X ↗
           </a>

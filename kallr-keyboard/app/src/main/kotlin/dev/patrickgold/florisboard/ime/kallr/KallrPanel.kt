@@ -84,6 +84,23 @@ internal val AMOUNTS = listOf("1", "5", "20", "50")
 internal val LIMITS = listOf(-3.0, -5.0, -10.0)
 internal val TWAPS = listOf(10 to "10 min", 60 to "1 hour", 240 to "4 hours")
 
+/** Flash spreads a TWAP over 5 minutes to 30 days. */
+private const val TWAP_MIN = 5
+private const val TWAP_MAX = 30 * 24 * 60
+
+/** "10 min", "2 hours", "1 day 6 hours": any duration the AI or voice heard, not only the presets. */
+internal fun twapLabel(minutes: Int): String {
+    TWAPS.firstOrNull { it.first == minutes }?.let { return it.second }
+    val d = minutes / 1440
+    val h = minutes % 1440 / 60
+    val m = minutes % 60
+    return listOfNotNull(
+        d.takeIf { it > 0 }?.let { if (it == 1) "1 day" else "$it days" },
+        h.takeIf { it > 0 }?.let { if (it == 1) "1 hour" else "$it hours" },
+        m.takeIf { it > 0 }?.let { "$it min" },
+    ).joinToString(" ")
+}
+
 internal enum class Tab(val label: String) { Swap("Swap"), Positions("Positions"), Wallet("Wallet") }
 
 /** What the suggestion row and the panel share: the call you copied and the order you're building. */
@@ -103,7 +120,27 @@ internal object KallrPanelState {
     var aiNote by mutableStateOf<String?>(null)
 
     val symbol: String get() =
-        (result?.trade?.takeIf { it.token == token } ?: extraTrade?.takeIf { it.token == token })?.symbol ?: token
+        (result?.trade?.takeIf { it.token == token } ?: extraTrade?.takeIf { it.token == token })?.symbol
+            ?: if (token.startsWith("0x")) short(token) else token
+
+    /** The clipboard or typed text the row last looked up, so coming back doesn't redo it and reset the panel. */
+    var lastLookup: String? = null
+
+    private var resumeTab: Tab? = null
+    private var resumeUntil = 0L
+
+    /** Reopen the panel on [tab] when the user comes back from one of Kallr's screens (sign-in, confirm, mic). */
+    fun resumeOn(tab: Tab) {
+        resumeTab = tab
+        resumeUntil = System.currentTimeMillis() + 3 * 60_000
+    }
+
+    /** The tab to reopen on, once, if the user left the panel for a Kallr screen in the last three minutes. */
+    fun takeResume(): Tab? {
+        val t = resumeTab?.takeIf { System.currentTimeMillis() < resumeUntil }
+        resumeTab = null
+        return t
+    }
 
     /** Fill the order from what the AI read in a message, typed words or voice. */
     fun apply(prefill: AmPrefill?, trade: AmTrade?) {
@@ -115,7 +152,7 @@ internal object KallrPanelState {
         prefill.usd?.let { usd = if (it % 1.0 == 0.0) it.toInt().toString() else "%.2f".format(it) }
         when (prefill.kind) {
             "limit" -> { kind = Kind.Limit; prefill.limitPct?.let { limitPct = if (it > 0) -it else it } }
-            "twap" -> { kind = Kind.Twap; prefill.twapMinutes?.let { twapMinutes = it } }
+            "twap" -> { kind = Kind.Twap; prefill.twapMinutes?.let { twapMinutes = it.coerceIn(TWAP_MIN, TWAP_MAX) } }
             "swap" -> kind = Kind.Swap
         }
         if (prefill.tpPct != null && prefill.slPct != null) {
@@ -166,16 +203,25 @@ private fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope
 }
 
 @Composable
-private fun PrimaryButton(label: String, onClick: () -> Unit) {
+private fun PrimaryButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
-            .background(KallrBlue, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .background(if (enabled) KallrBlue else Muted.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(vertical = 11.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
+    ) {
+        Text(
+            label,
+            color = if (enabled) Color.White else themeText(),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 @Composable
@@ -185,7 +231,7 @@ private fun FlashFooter() {
         fontSize = 11.sp,
         color = Muted,
         textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
     )
 }
 
@@ -248,74 +294,84 @@ private fun SwapTab(wallet: String?) {
     val s = KallrPanelState
     val r = s.result
     val trade = r?.trade
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        // The call you copied, or how to bring one in.
-        Card {
-            r?.fake?.let { f ->
-                Text(
-                    "Fake \$${f.claimed} contract, not the real one (real: ${short(f.real)}). No buy for it.",
-                    color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 2,
-                )
-            }
-            if (r?.call == null) r?.ai?.summary?.let {
-                Text(it, color = themeText(), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-            s.aiNote?.let { Text(it, color = Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-            when {
-                r?.call != null || r?.post != null -> {
+    // Everything above the button scrolls; the button stays in reach on every phone size.
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+            // The call you copied, or how to bring one in.
+            Card {
+                r?.fake?.let { f ->
                     Text(
-                        r.call?.line ?: "@${r.post!!.handle}" + (trade?.let { " · $${it.symbol}" } ?: ""),
-                        color = themeText(), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        "Fake \$${f.claimed} contract, not the real one (real: ${short(f.real)}). No buy for it.",
+                        color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 2,
                     )
-                    r.record?.line?.let { Text(it, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 }
-                r?.token != null -> {
-                    Text(r.token.line, color = themeText(), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    r.token.warnings.firstOrNull()?.let { Text("$it. No buy for it.", color = Danger, fontSize = 12.sp, maxLines = 2) }
+                if (r?.call == null) r?.ai?.summary?.let {
+                    Text(it, color = themeText(), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-                r?.ai != null || s.aiNote != null -> {}
-                else -> Text(
-                    "Copy a call (X link or a \$TICKER message) to trade it here, or hold the mic and say an order.",
-                    color = Muted, fontSize = 12.sp,
-                )
+                s.aiNote?.let { Text(it, color = Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                when {
+                    r?.call != null || r?.post != null -> {
+                        Text(
+                            r.call?.line ?: "@${r.post!!.handle}" + (trade?.let { " · $${it.symbol}" } ?: ""),
+                            color = themeText(), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                        r.record?.line?.let { Text(it, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    }
+                    r?.token != null -> {
+                        Text(r.token.line, color = themeText(), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        r.token.warnings.firstOrNull()?.let { Text("$it. No buy for it.", color = Danger, fontSize = 12.sp, maxLines = 2) }
+                    }
+                    r?.ai != null || s.aiNote != null -> {}
+                    else -> Text(
+                        "Copy a call (X link or a \$TICKER message) to trade it here, or hold the mic and say an order.",
+                        color = Muted, fontSize = 12.sp,
+                    )
+                }
             }
-        }
-        MicButton()
-        ChipRow {
-            trade?.takeIf { it.token != "ETH" && it.token != "BTC" }?.let { t -> Chip("$${t.symbol}", s.token == t.token) { s.token = t.token } }
-            s.extraTrade?.takeIf { it.token != "ETH" && it.token != "BTC" && it.token != trade?.token }?.let { t ->
-                Chip("$${t.symbol}", s.token == t.token) { s.token = t.token }
-            }
-            Chip("ETH", s.token == "ETH") { s.token = "ETH" }
-            Chip("BTC", s.token == "BTC") { s.token = "BTC" }
-            Spacer(Modifier.width(8.dp))
-            Kind.entries.forEach { k -> Chip(k.label, s.kind == k) { s.kind = k } }
-        }
-        ChipRow {
-            AMOUNTS.forEach { a -> Chip("$$a", s.usd == a) { s.usd = a } }
-            if (s.usd !in AMOUNTS) Chip("$${s.usd}", true) {}
-            when (s.kind) {
-                Kind.Limit -> {
-                    Spacer(Modifier.width(8.dp))
-                    LIMITS.forEach { p -> Chip("${p.fmt()}%", s.limitPct == p) { s.limitPct = p } }
+            MicButton()
+            ChipRow {
+                trade?.takeIf { it.token != "ETH" && it.token != "BTC" }?.let { t -> Chip("$${t.symbol}", s.token == t.token) { s.token = t.token } }
+                s.extraTrade?.takeIf { it.token != "ETH" && it.token != "BTC" && it.token != trade?.token }?.let { t ->
+                    Chip("$${t.symbol}", s.token == t.token) { s.token = t.token }
                 }
-                Kind.Twap -> {
-                    Spacer(Modifier.width(8.dp))
-                    TWAPS.forEach { (m, label) -> Chip(label, s.twapMinutes == m) { s.twapMinutes = m } }
-                }
-                Kind.Swap -> {}
+                Chip("ETH", s.token == "ETH") { s.token = "ETH" }
+                Chip("BTC", s.token == "BTC") { s.token = "BTC" }
+                Spacer(Modifier.width(8.dp))
+                Kind.entries.forEach { k -> Chip(k.label, s.kind == k) { s.kind = k } }
             }
-        }
-        ChipRow {
-            EXITS.forEach { e -> Chip(e.label, s.exits.label == e.label) { s.exits = e } }
-            if (EXITS.none { it.label == s.exits.label }) Chip(s.exits.label, true) {}
+            ChipRow {
+                AMOUNTS.forEach { a -> Chip("$$a", s.usd == a) { s.usd = a } }
+                if (s.usd !in AMOUNTS) Chip("$${s.usd}", true) {}
+                when (s.kind) {
+                    Kind.Limit -> {
+                        Spacer(Modifier.width(8.dp))
+                        LIMITS.forEach { p -> Chip("${p.fmt()}%", s.limitPct == p) { s.limitPct = p } }
+                    }
+                    Kind.Twap -> {
+                        Spacer(Modifier.width(8.dp))
+                        TWAPS.forEach { (m, label) -> Chip(label, s.twapMinutes == m) { s.twapMinutes = m } }
+                        if (TWAPS.none { it.first == s.twapMinutes }) Chip(twapLabel(s.twapMinutes), true) {}
+                    }
+                    Kind.Swap -> {}
+                }
+            }
+            ChipRow {
+                EXITS.forEach { e -> Chip(e.label, s.exits.label == e.label) { s.exits = e } }
+                if (EXITS.none { it.label == s.exits.label }) Chip(s.exits.label, true) {}
+            }
         }
         val what = when (s.kind) {
             Kind.Swap -> "Buy $${s.usd} of ${s.symbol}"
             Kind.Limit -> "Limit buy $${s.usd} of ${s.symbol} at ${s.limitPct.fmt()}%"
-            Kind.Twap -> "Buy $${s.usd} of ${s.symbol} over ${TWAPS.first { it.first == s.twapMinutes }.second}"
+            Kind.Twap -> "Buy $${s.usd} of ${s.symbol} over ${twapLabel(s.twapMinutes)}"
         }
-        PrimaryButton(if (wallet == null) "Sign in to trade" else what) {
+        // A fake contract or a risky token on screen means no Buy button next to it, whatever coin is selected.
+        val blocked = when {
+            r?.fake != null -> "No buy: fake \$${r.fake.claimed} contract"
+            r?.token?.warnings?.isNotEmpty() == true -> "No buy: risky token"
+            else -> null
+        }
+        PrimaryButton(blocked ?: if (wallet == null) "Sign in to trade" else what, enabled = blocked == null) {
             if (wallet == null) {
                 KallrWalletActivity.open(context)
             } else {

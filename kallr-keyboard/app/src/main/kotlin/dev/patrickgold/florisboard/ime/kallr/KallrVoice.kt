@@ -28,6 +28,7 @@ object KallrVoice {
     /** Starts recording; false if the mic isn't allowed yet (the permission screen opens). */
     fun start(context: Context): Boolean {
         if (!hasPermission(context)) {
+            KallrPanelState.resumeOn(Tab.Swap)
             context.startActivity(Intent(context, KallrMicPermissionActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return false
         }

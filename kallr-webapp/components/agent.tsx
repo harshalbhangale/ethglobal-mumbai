@@ -137,7 +137,7 @@ function saveSchedules(list: Plan[]) {
 
 type Stage = { kind: "idle" } | { kind: "processing"; plan: Plan; step: number } | { kind: "receipt"; plan: Plan };
 
-const STEPS = ["Reading your instruction", "Pricing on Chainlink · Base", "Routing on Definitive Flash", "Writing the schedule"];
+const STEPS = ["Reading your instruction", "Pricing on Chainlink · Base", "Checking the route on Definitive Flash", "Saving the plan"];
 
 function AgentWindow({ open, onOpenChange, prefill }: { open: boolean; onOpenChange: (o: boolean) => void; prefill: string | null }) {
   const [input, setInput] = useState("");
@@ -214,7 +214,7 @@ function AgentWindow({ open, onOpenChange, prefill }: { open: boolean; onOpenCha
         <div className="flex-1">
           <p className="font-display font-semibold">Kallr agent</p>
           <p className="flex items-center gap-1.5 text-xs text-white/75">
-            <span className="live-dot text-mint" /> Schedules trades in plain words
+            <span className="rounded-full bg-white/20 px-1.5 py-px text-[10px] font-semibold tracking-wide uppercase">Preview</span> Plans trades in plain words · nothing is placed
           </p>
         </div>
         <button type="button" onClick={() => onOpenChange(false)} aria-label="Minimize" className="rounded-full p-2 hover:bg-white/15">
@@ -249,9 +249,9 @@ function AgentWindow({ open, onOpenChange, prefill }: { open: boolean; onOpenCha
                 </button>
               ))}
             </div>
-            <h3 className="mt-6 mb-2 text-xs font-semibold tracking-wide text-slate uppercase">Scheduled</h3>
+            <h3 className="mt-6 mb-2 text-xs font-semibold tracking-wide text-slate uppercase">Saved plans</h3>
             {schedules.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-rule px-4 py-6 text-center text-sm text-slate">Nothing scheduled yet.</p>
+              <p className="rounded-2xl border border-dashed border-rule px-4 py-6 text-center text-sm text-slate">No saved plans yet.</p>
             ) : (
               <ul className="space-y-2">
                 {schedules.map((p, i) => (
@@ -338,7 +338,7 @@ export function Processing({ plan, step }: { plan: Plan; step: number }) {
         </span>
         <div>
           <p className="font-display font-semibold">
-            {plan.side === "buy" ? "Buying" : "Selling"} {usd(plan.amountUsd, 0)} of {plan.asset}
+            Plan: {plan.side === "buy" ? "buy" : "sell"} {usd(plan.amountUsd, 0)} of {plan.asset}
           </p>
           <p className="text-xs text-slate">“{plan.text}”</p>
         </div>
@@ -365,7 +365,7 @@ export function Processing({ plan, step }: { plan: Plan; step: number }) {
 
 const CONFETTI = ["#7c3aed", "#1d9bf0", "#10b981", "#f2a93b", "#f43f5e"];
 
-export function Receipt({ plan, stampText = "Scheduled" }: { plan: Plan; stampText?: string }) {
+export function Receipt({ plan, stampText = "Saved" }: { plan: Plan; stampText?: string }) {
   const qty = plan.estPrice ? plan.amountUsd / plan.estPrice : null;
   const pieces = useMemo(
     () =>
@@ -426,7 +426,7 @@ export function Receipt({ plan, stampText = "Scheduled" }: { plan: Plan; stampTe
             className="mx-auto mt-5 h-10 w-4/5"
             style={{ background: "repeating-linear-gradient(90deg,#14213d 0 2px,transparent 2px 4px,#14213d 4px 5px,transparent 5px 8px,#14213d 8px 11px,transparent 11px 12px)" }}
           />
-          <p className="mt-2 text-center text-[10px] text-slate">Not executed yet · runs from your wallet when due</p>
+          <p className="mt-2 text-center text-[10px] text-slate">Preview · saved in this browser, not placed. To trade, use Copy call or the desk.</p>
 
           <span className="stamp absolute right-4 bottom-24 rounded-lg border-[3px] border-mint px-2.5 py-1 font-display text-lg font-bold tracking-wider text-mint uppercase">
             {stampText}

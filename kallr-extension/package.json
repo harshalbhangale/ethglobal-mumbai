@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
+    "build:local": "KALLR_APP_ORIGIN=http://localhost:3000 node build.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

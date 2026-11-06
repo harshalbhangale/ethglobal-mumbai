@@ -66,6 +66,17 @@ type Config = { writer: Hex | null; accessKey: string; explorer?: string };
 /** Calls are stored as up/down (see callValues); older or hand-written entities may say short. */
 export const toDirection = (v: unknown): Direction => (v === "down" || v === "short" ? "short" : "long");
 
+/**
+ * Copying a call opens the real desk, prefilled with $1 and exits, where the user reviews and signs.
+ * Only long ETH/BTC calls can be copied: the desk buys on Base, and a short would mean selling what you hold.
+ */
+export function copyCall(c: { caller: string; postId: string; asset: string; direction: Direction }): { href: string } | { reason: string } {
+  if (c.direction !== "long") return { reason: "Short call · can't copy shorts yet" };
+  if (c.asset !== "ETH" && c.asset !== "BTC") return { reason: `$${c.asset} isn't tradable on Base yet` };
+  const q = new URLSearchParams({ order: `copy $1 of ${c.asset} tp 10% sl 5%`, post: c.postId, caller: c.caller });
+  return { href: `/app?${q}` };
+}
+
 export type TrackedCaller = { handle: string; focus: string };
 
 const num = (v: unknown) => (v === undefined || v === null || v === "" ? null : Number(v));
