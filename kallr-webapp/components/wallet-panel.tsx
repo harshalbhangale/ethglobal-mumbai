@@ -3,40 +3,141 @@
 import { usePrivy, useSigners } from "@privy-io/react-auth";
 import { useCallback, useEffect, useState } from "react";
 import type { Address } from "viem";
-import type { Session } from "@/components/auth";
-import { formatAmount, getBalances, shortAddress, type Balances } from "@/lib/chain";
+import { type Session, useTradingWallet } from "@/components/auth";
+import { CoinIcon, Receive, Send } from "@/components/move-funds";
+import { shortAddress } from "@/lib/chain";
 import { clearXTrading, extensionInstalled, readXTrading, setXTrading } from "@/lib/extension";
+import { formatCoin, type Holding, type WalletView } from "@/lib/transfer";
 
 const BASESCAN = "https://basescan.org/address/";
 
 /** Kall's signer on Privy: lets the server sign trades from X with your Kall wallet once you allow it. */
 const SIGNER_ID = process.env.NEXT_PUBLIC_PRIVY_SIGNER_ID ?? "";
 
+/** Everything the wallet holds on Base, from /api/wallet, refreshed every 20s and after a send. */
+function useWalletView(address: Address) {
+  const [view, setView] = useState<WalletView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/wallet?address=${address}`);
+      const body = (await res.json()) as WalletView & { error?: string };
+      if (!res.ok) throw new Error(body.error);
+      setView(body);
+      setError(null);
+    } catch {
+      setError("Couldn't read your balances on Base. Retrying…");
+    }
+  }, [address]);
+  useEffect(() => {
+    setView(null);
+    refresh();
+    const id = setInterval(refresh, 20_000);
+    return () => clearInterval(id);
+  }, [refresh]);
+  return { view, error, refresh };
+}
+
+const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 /**
  * The wallet you trade from: your Kall wallet (Privy's embedded wallet, the default) or MetaMask if
- * you switched. Its balances on Base, how to fund it, and trading from X.
+ * you switched. What it's worth, Receive and Send, every coin it holds, and trading from X.
  */
 export function WalletPanel({ session }: { session: Session }) {
+  const { wallet } = useTradingWallet();
   if (!session.address) return <p className="p-6 text-sm text-slate">Setting up your wallet…</p>;
+  return <WalletBody session={session} address={session.address} wallet={wallet} />;
+}
+
+function WalletBody({ session, address, wallet }: { session: Session; address: Address; wallet: ReturnType<typeof useTradingWallet>["wallet"] }) {
+  const { view, error, refresh } = useWalletView(address);
+  const [action, setAction] = useState<"receive" | "send" | null>(null);
   const metamask = session.signing === "metamask";
+  const toggle = (a: "receive" | "send") => setAction((now) => (now === a ? null : a));
+  const button = (a: "receive" | "send") =>
+    `flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-colors sm:flex-none sm:px-6 ${
+      action === a ? "bg-lime text-on-lime" : "border border-rule bg-paper hover:border-rule-strong"
+    }`;
+
   return (
     <section aria-labelledby="wallet-heading" className="rounded-lg border border-rule bg-card p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="wallet-heading" className="font-display text-xl font-semibold">
           {metamask ? "MetaMask" : "Your Kall wallet"}
         </h2>
-        <CopyAddress address={session.address} />
+        <CopyAddress address={address} />
       </div>
       <p className="mt-1 text-sm text-slate">
-        {metamask
-          ? "Your own wallet. MetaMask asks you to confirm each order."
-          : "Made when you signed in with X. It signs your orders on Base with no pop-ups."}
+        {metamask ? "Your own wallet. MetaMask asks you to confirm each order." : "Made when you signed in with X. It signs your orders on Base with no pop-ups."}
       </p>
-      <Balances address={session.address} />
-      <Deposit address={session.address} />
+
+      <p className="mt-6 text-sm text-slate">Total balance</p>
+      <p className="font-display mt-1 text-4xl font-semibold tracking-tight tabular-nums">{view ? usd(view.totalUsd) : "…"}</p>
+      {error && <p className="mt-1 text-sm text-down">{error}</p>}
+
+      <div className="mt-5 flex gap-2">
+        <button type="button" aria-expanded={action === "receive"} onClick={() => toggle("receive")} className={button("receive")}>
+          <span aria-hidden="true">↓</span> Receive
+        </button>
+        <button type="button" aria-expanded={action === "send"} onClick={() => toggle("send")} className={button("send")}>
+          <span aria-hidden="true">↑</span> Send
+        </button>
+      </div>
+      {action === "receive" && <Receive address={address} onClose={() => setAction(null)} />}
+      {action === "send" && <Send wallet={wallet} view={view} onSent={refresh} onClose={() => setAction(null)} />}
+
+      <Assets view={view} onReceive={() => setAction("receive")} />
       <Signing session={session} />
       {session.kallAddress && <TradeFromX kallAddress={session.kallAddress} />}
     </section>
+  );
+}
+
+/** Every coin the wallet holds: logo, name, amount and value. */
+function Assets({ view, onReceive }: { view: WalletView | null; onReceive: () => void }) {
+  if (!view) return <div className="mt-6 h-24 animate-pulse rounded-lg bg-paper" />;
+  const shown = view.holdings.filter((h) => Number(h.balance) > 0 || h.address === null || h.symbol === "USDC");
+  const eth = view.holdings.find((h) => h.address === null);
+  const lowGas = eth !== undefined && Number(eth.balance) < 0.0001;
+  return (
+    <div className="mt-6 border-t border-rule pt-5">
+      <h3 className="text-sm font-semibold text-slate">Assets</h3>
+      <ul className="mt-2 divide-y divide-rule">
+        {shown.map((h) => (
+          <AssetRow key={h.address ?? "eth"} h={h} />
+        ))}
+      </ul>
+      {view.totalUsd === 0 ? (
+        <p className="mt-3 text-sm text-slate">
+          Empty on Base.{" "}
+          <button type="button" onClick={onReceive} className="font-semibold text-ink underline underline-offset-4">
+            Receive
+          </button>{" "}
+          USDC to trade and about $1 of ETH for gas.
+        </p>
+      ) : lowGas ? (
+        <p className="mt-3 text-sm text-slate">Add about $1 of ETH on Base for gas.</p>
+      ) : null}
+    </div>
+  );
+}
+
+function AssetRow({ h }: { h: Holding }) {
+  return (
+    <li className="flex items-center gap-3 py-3">
+      <CoinIcon holding={h} size={32} />
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold">{h.symbol}</span>
+        <span className="block truncate text-xs text-slate">{h.name ?? h.symbol}</span>
+      </span>
+      <span className="text-right">
+        <span className="block font-semibold tabular-nums">{h.valueUsd === null ? "—" : usd(h.valueUsd)}</span>
+        <span className="block text-xs text-slate tabular-nums">
+          {formatCoin(h.balance)} {h.symbol}
+        </span>
+      </span>
+    </li>
   );
 }
 
@@ -175,78 +276,5 @@ function CopyAddress({ address }: { address: Address }) {
         Basescan ↗
       </a>
     </span>
-  );
-}
-
-function Balances({ address }: { address: Address }) {
-  const [balances, setBalances] = useState<Balances | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    setError(null);
-    try {
-      setBalances(await getBalances(address));
-    } catch {
-      setError("Couldn’t read balances from Base. Try again in a moment.");
-    }
-  }, [address]);
-
-  useEffect(() => {
-    setBalances(null);
-    refresh();
-    const id = setInterval(refresh, 20_000);
-    return () => clearInterval(id);
-  }, [refresh]);
-
-  const empty = balances !== null && Number(balances.usdc) === 0 && Number(balances.eth) === 0;
-  const lowGas = balances !== null && Number(balances.eth) < 0.0001;
-
-  return (
-    <>
-      <dl className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-md bg-rule">
-        <div className="bg-card p-4">
-          <dt className="text-sm text-slate">USDC</dt>
-          <dd className="font-display mt-1 text-3xl font-semibold tracking-tight tabular-nums">{balances ? `$${formatAmount(balances.usdc)}` : "…"}</dd>
-        </div>
-        <div className="bg-card p-4">
-          <dt className="text-sm text-slate">ETH</dt>
-          <dd className="font-display mt-1 text-3xl font-semibold tracking-tight tabular-nums">{balances ? formatAmount(balances.eth, 5) : "…"}</dd>
-        </div>
-      </dl>
-      {error ? (
-        <p className="mt-3 text-sm text-down">{error}</p>
-      ) : empty ? (
-        <p className="mt-3 text-sm text-slate">Empty on Base. Deposit below to start.</p>
-      ) : lowGas ? (
-        <p className="mt-3 text-sm text-slate">Add about $1 of ETH on Base for gas.</p>
-      ) : null}
-    </>
-  );
-}
-
-/** Add funds: the address on Base, and the one rule that matters. */
-function Deposit({ address }: { address: Address }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {}
-  };
-  return (
-    <div className="mt-6 border-t border-rule pt-5">
-      <h3 className="font-semibold">Deposit</h3>
-      <p className="mt-1 text-sm text-slate">Send USDC to trade and about $1 of ETH for gas, on Base only.</p>
-      <p className="mt-3 font-mono text-sm break-all text-ink">{address}</p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" onClick={copy} className="rounded-md bg-lime px-4 py-2 text-sm font-semibold text-on-lime hover:bg-lime-strong">
-          {copied ? "Copied" : "Copy address"}
-        </button>
-        <a href={`${BASESCAN}${address}`} target="_blank" rel="noreferrer" className="rounded-md px-4 py-2 text-sm font-semibold text-slate hover:text-ink">
-          Basescan ↗
-        </a>
-      </div>
-    </div>
   );
 }
