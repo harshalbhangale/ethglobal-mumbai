@@ -2507,6 +2507,18 @@ private struct WalletTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let w = model.wallet, let address = w.address {
+                let linked = Kallr.link != nil
+                HStack(spacing: 6) {
+                    Text(linked ? "YOUR KALL WALLET" : "SHARED DEMO WALLET").font(.system(size: 10, weight: .heavy))
+                        .foregroundStyle(linked ? Kallr.lime : Kallr.muted)
+                    Spacer(minLength: 0)
+                    if !linked {
+                        Button { model.openLink(Kallr.linkPage) } label: {
+                            Text("Sign in with X ↗").font(.system(size: 12, weight: .bold)).foregroundStyle(Kallr.lime)
+                        }
+                        .buttonStyle(Press())
+                    }
+                }
                 HStack(spacing: 8) {
                     Balance(label: "ETH", value: w.ethValue.map { String(format: "%.5f", $0) } ?? "…")
                     Balance(label: "USDC", value: w.usdcValue.map { String(format: "%.2f", $0) } ?? "…")
@@ -2526,7 +2538,7 @@ private struct WalletTab: View {
                 }
                 .padding(10)
                 .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
-                Text("Deposit, swap and withdraw in the Kall app. Up to $\(Kallr.fmt(w.maxUsd ?? 25)) per order, Base only.")
+                Text("Deposit and swap in the Kall app. Up to $\(Kallr.fmt(w.maxUsd ?? 25)) per order, Base only.")
                     .font(.system(size: 11)).foregroundStyle(Kallr.muted)
             } else if !model.fullAccess {
                 Empty(text: "Turn on Allow Full Access for Kall Keyboard in Settings.")

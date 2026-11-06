@@ -3,6 +3,7 @@
 
 import Foundation
 import SwiftUI
+import Security
 import UIKit
 
 enum Kallr {
@@ -275,13 +276,60 @@ enum Kallr {
         struct Balances: Codable { let eth: String; let usdc: String }
         let configured: Bool
         let address: String?
+        /** "kall" for your own linked Kall wallet, "shared" for the old shared keyboard wallet. */
+        var wallet: String? = nil
         let maxUsd: Double?
         let balances: Balances?
         var usdcValue: Double? { balances.flatMap { Double($0.usdc) } }
+        /** More than dust: worth moving (ETH beyond what a transfer's gas costs). */
+        var holdsFunds: Bool { (usdcValue ?? 0) >= 0.01 || (ethValue ?? 0) > 0.0001 }
         var ethValue: Double? { balances.flatMap { Double($0.eth) } }
     }
 
     static func wallet() async -> Wallet? { await get("api/keyboard/execute") }
+    /** The old shared keyboard wallet, whatever is linked: what's left to move to your Kall wallet. */
+    static func sharedWallet() async -> Wallet? { await get("api/keyboard/execute", linked: false) }
+
+    // MARK: Your Kall wallet, linked
+
+    /**
+     * The key from linking your Kall wallet (the Privy wallet you got signing in with X, the same one the
+     * web app and X use): the web app's /app/keyboard-link sends it back as kallmarkets://link?key=…&address=…
+     * &expires=…. Kept in a keychain group the app and the keyboard share.
+     */
+    struct Link: Codable {
+        let key: String
+        let address: String
+        /** Unix milliseconds. */
+        let expires: Double
+        var live: Bool { expires > Date().timeIntervalSince1970 * 1000 }
+    }
+
+    static var link: Link? {
+        guard let data = SharedKeychain.read("kall.link"), let l = try? JSONDecoder().decode(Link.self, from: data), l.live else { return nil }
+        return l
+    }
+
+    /** Where linking starts: sign in with X, allow Kall's signer once, come back to the app. */
+    static var linkPage: URL { origin.appendingPathComponent("app/keyboard-link") }
+
+    /** Saves the link from kallmarkets://link…; false when the URL isn't one. */
+    @discardableResult
+    static func handleLink(_ url: URL) -> Bool {
+        guard url.scheme == "kallmarkets", url.host == "link",
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return false }
+        func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+        guard let key = value("key"), !key.isEmpty, let address = value("address"),
+              address.range(of: "^0x[0-9a-fA-F]{40}$", options: .regularExpression) != nil,
+              let expires = value("expires").flatMap(Double.init) else { return false }
+        guard let data = try? JSONEncoder().encode(Link(key: key, address: address, expires: expires)) else { return false }
+        return SharedKeychain.write("kall.link", data)
+    }
+
+    static func unlink() { SharedKeychain.delete("kall.link") }
+
+    /** What keyboard trades sign with: your Kall wallet's key once linked, else this build's token (the old shared wallet). */
+    static var bearer: String { link?.key ?? Secrets.execToken }
 
     /** Reading the Kall wallet, with why it failed, so the keyboard never sits on "Reading…". */
     enum WalletRead { case ok(Wallet), notSetUp, failed(String), cancelled }
@@ -396,7 +444,10 @@ enum Kallr {
     struct Withdrawal: Codable { let asset: String; let amount: String; let to: String; let usd: Double?; let tx: String? }
     private struct WithdrawBody: Codable { let asset: String; let amount: String; let to: String; let dryRun: Bool }
 
-    /** Send ETH or USDC from the Kall wallet to the user's own address on Base. With dryRun it only checks. */
+    /**
+     * Send ETH or USDC from the old shared keyboard wallet to an address on Base, such as your own Kall
+     * wallet once it's linked. With dryRun it only checks. Always the build token: it's that wallet's way out.
+     */
     static func withdraw(asset: String, amount: String, to: String, dryRun: Bool) async -> Swift.Result<Withdrawal, Failure> {
         var request = URLRequest(url: origin.appendingPathComponent("api/keyboard/withdraw"), timeoutInterval: 60)
         request.httpMethod = "POST"
@@ -418,7 +469,7 @@ enum Kallr {
         var request = URLRequest(url: origin.appendingPathComponent(path), timeoutInterval: 120)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.setValue("Bearer \(Secrets.execToken)", forHTTPHeaderField: "authorization")
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "authorization")
         request.httpBody = try? JSONEncoder().encode(body)
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -436,7 +487,7 @@ enum Kallr {
         var request = URLRequest(url: origin.appendingPathComponent("api/keyboard/cancel"), timeoutInterval: 30)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.setValue("Bearer \(Secrets.execToken)", forHTTPHeaderField: "authorization")
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "authorization")
         request.httpBody = try? JSONEncoder().encode(["orderId": orderId])
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -573,9 +624,14 @@ enum Kallr {
         return await get("api/flash/orders/\(orderId)\(q)")
     }
 
-    private static func get<T: Decodable>(_ path: String) async -> T? {
+    private static func get<T: Decodable>(_ path: String, linked: Bool = true) async -> T? {
         guard let url = URL(string: path, relativeTo: origin) else { return nil }
-        guard let (data, response) = try? await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 20)),
+        var request = URLRequest(url: url, timeoutInterval: 20)
+        // Keyboard routes act on your own Kall wallet when the request carries its key.
+        if linked, path.hasPrefix("api/keyboard/"), let key = link?.key {
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "authorization")
+        }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
         return try? JSONDecoder().decode(T.self, from: data)
     }
@@ -615,4 +671,36 @@ enum Deposit {
     }
 
     static func anyWallet(_ path: String) -> URL? { URL(string: "ethereum:\(path)") }
+}
+
+/** A keychain group the app and the keyboard share (KallKeychainGroup in both Info.plists). */
+enum SharedKeychain {
+    private static var group: String? { Bundle.main.object(forInfoDictionaryKey: "KallKeychainGroup") as? String }
+
+    private static func query(_ account: String) -> [String: Any] {
+        var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                kSecAttrService as String: "com.buddyharshal.kallr",
+                                kSecAttrAccount as String: account]
+        if let group { q[kSecAttrAccessGroup as String] = group }
+        return q
+    }
+
+    static func read(_ account: String) -> Data? {
+        var q = query(account)
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var out: AnyObject?
+        return SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess ? out as? Data : nil
+    }
+
+    @discardableResult
+    static func write(_ account: String, _ data: Data) -> Bool {
+        delete(account)
+        var q = query(account)
+        q[kSecValueData as String] = data
+        q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        return SecItemAdd(q as CFDictionary, nil) == errSecSuccess
+    }
+
+    static func delete(_ account: String) { SecItemDelete(query(account) as CFDictionary) }
 }
