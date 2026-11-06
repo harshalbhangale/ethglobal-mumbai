@@ -1,30 +1,157 @@
 "use client";
 
+import { usePrivy, useSigners } from "@privy-io/react-auth";
 import { useCallback, useEffect, useState } from "react";
 import type { Address } from "viem";
 import type { Session } from "@/components/auth";
 import { formatAmount, getBalances, shortAddress, type Balances } from "@/lib/chain";
+import { clearXTrading, extensionInstalled, readXTrading, setXTrading } from "@/lib/extension";
 
 const BASESCAN = "https://basescan.org/address/";
 
+/** Kall's signer on Privy: lets the server sign trades from X with your Kall wallet once you allow it. */
+const SIGNER_ID = process.env.NEXT_PUBLIC_PRIVY_SIGNER_ID ?? "";
+
 /**
- * Your Kall wallet: the embedded wallet Privy made when you signed in, its balances on Base, and
- * how to fund it.
+ * The wallet you trade from: your Kall wallet (Privy's embedded wallet, the default) or MetaMask if
+ * you switched. Its balances on Base, how to fund it, and trading from X.
  */
 export function WalletPanel({ session }: { session: Session }) {
   if (!session.address) return <p className="p-6 text-sm text-slate">Setting up your wallet…</p>;
+  const metamask = session.signing === "metamask";
   return (
     <section aria-labelledby="wallet-heading" className="rounded-lg border border-rule bg-card p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="wallet-heading" className="font-display text-xl font-semibold">
-          Your Kall wallet
+          {metamask ? "MetaMask" : "Your Kall wallet"}
         </h2>
         <CopyAddress address={session.address} />
       </div>
-      <p className="mt-1 text-sm text-slate">Made when you signed in with X. It signs your orders on Base, and only you can use it.</p>
+      <p className="mt-1 text-sm text-slate">
+        {metamask
+          ? "Your own wallet. MetaMask asks you to confirm each order."
+          : "Made when you signed in with X. It signs your orders on Base with no pop-ups."}
+      </p>
       <Balances address={session.address} />
       <Deposit address={session.address} />
+      <Signing session={session} />
+      {session.kallAddress && <TradeFromX kallAddress={session.kallAddress} />}
     </section>
+  );
+}
+
+/** Which wallet signs: the Kall wallet by default, MetaMask if you prefer your own. */
+function Signing({ session }: { session: Session }) {
+  const metamask = session.signing === "metamask";
+  return (
+    <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-5">
+      <div className="min-w-0">
+        <h3 className="font-semibold">Signing</h3>
+        <p className="mt-1 text-sm text-slate">
+          {metamask ? "MetaMask signs your trades. Your Kall wallet is still there." : "Your Kall wallet signs by default. Prefer your own wallet?"}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={metamask ? session.signWithKall : session.signWithMetaMask}
+        className="rounded-md border border-rule px-3 py-1.5 text-sm font-semibold hover:border-rule-strong"
+      >
+        {metamask ? "Use Kall wallet" : "Use MetaMask"}
+      </button>
+    </div>
+  );
+}
+
+type XState = "checking" | "no-extension" | "off" | "busy" | "on";
+
+/**
+ * Trade from X with the Kall wallet: adds Kall's signer to the wallet on Privy and hands the extension
+ * a key for it, so a trade on the X card signs on the server with no pop-up. Off removes both.
+ */
+function TradeFromX({ kallAddress }: { kallAddress: Address }) {
+  const { getAccessToken } = usePrivy();
+  const { addSigners, removeSigners } = useSigners();
+  const [state, setState] = useState<XState>("checking");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    // The extension marks the page once its bridge loads.
+    const t = setTimeout(() => {
+      if (!extensionInstalled()) return setState("no-extension");
+      readXTrading()
+        .then((x) => alive && setState(x && x.address.toLowerCase() === kallAddress.toLowerCase() ? "on" : "off"))
+        .catch(() => alive && setState("no-extension"));
+    }, 300);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [kallAddress]);
+
+  const turnOn = async () => {
+    setState("busy");
+    setError(null);
+    try {
+      await addSigners({ address: kallAddress, signers: [{ signerId: SIGNER_ID }] }).catch((e: unknown) => {
+        // Already added on an earlier visit: carry on.
+        if (!/already/i.test(e instanceof Error ? e.message : "")) throw e;
+      });
+      const res = await fetch("/api/x/key", { method: "POST", headers: { authorization: `Bearer ${await getAccessToken()}` } });
+      const body = (await res.json().catch(() => ({}))) as { key?: string; address?: string; expires?: number; error?: string };
+      if (!res.ok || !body.key || !body.address || !body.expires) throw new Error(body.error ?? "Couldn't turn it on. Try again.");
+      await setXTrading(body.key, body.address, body.expires);
+      setState("on");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't turn it on. Try again.");
+      setState("off");
+    }
+  };
+
+  const turnOff = async () => {
+    setState("busy");
+    setError(null);
+    try {
+      await clearXTrading();
+      await removeSigners({ address: kallAddress });
+      setState("off");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't turn it off. Try again.");
+      setState("on");
+    }
+  };
+
+  const text: Record<XState, string> = {
+    checking: "Checking the extension…",
+    "no-extension": "Add the Kall extension to Chrome to trade right under a call on X.",
+    off: "Trade right under a call on X: your Kall wallet signs on Kall's server, no pop-ups. Small orders only, and you can turn it off any time.",
+    busy: "One moment…",
+    on: "On. Trades from the X card sign with your Kall wallet.",
+  };
+  return (
+    <div className="mt-6 border-t border-rule pt-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="font-semibold">Trade from X</h3>
+          <p className="mt-1 text-sm text-slate">{SIGNER_ID ? text[state] : "Not set up on this server yet."}</p>
+        </div>
+        {SIGNER_ID && (state === "off" || state === "on" || state === "busy") && (
+          <button
+            type="button"
+            disabled={state === "busy"}
+            onClick={state === "on" ? turnOff : turnOn}
+            className={
+              state === "on"
+                ? "rounded-md border border-rule px-3 py-1.5 text-sm font-semibold text-slate hover:text-ink disabled:opacity-50"
+                : "rounded-md bg-lime px-3 py-1.5 text-sm font-semibold text-on-lime hover:bg-lime-strong disabled:opacity-50"
+            }
+          >
+            {state === "on" ? "Turn off" : "Turn on"}
+          </button>
+        )}
+      </div>
+      {error && <p className="mt-2 text-sm text-down">{error}</p>}
+    </div>
   );
 }
 

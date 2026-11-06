@@ -454,7 +454,11 @@ export function TradeTicket({
         )}
       </form>
 
-      <p className="px-1 text-xs leading-relaxed text-slate">Your Kall wallet signs each order. Only you can use it; Kall Markets never holds your keys.</p>
+      <p className="px-1 text-xs leading-relaxed text-slate">
+        {wallet?.walletClientType === "metamask"
+          ? "MetaMask signs each order: confirm it there. Kall Markets never holds your keys."
+          : "Your Kall wallet signs each order, with no pop-ups. Kall Markets never holds its keys."}
+      </p>
     </div>
   );
 }

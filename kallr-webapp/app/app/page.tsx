@@ -5,7 +5,7 @@ import { FollowButton } from "@/components/follow-button";
 import { shortAddress } from "@/lib/chain";
 import { OPEN_STATUSES } from "@kallr/integrations/definitive";
 import { Logo, LogoMark } from "@/components/logo";
-import { SignInButton, type Session, useKallWallet, WithSession } from "@/components/auth";
+import { SignInButton, type Session, useTradingWallet, WithSession } from "@/components/auth";
 import { DownloadApp } from "@/components/download-app";
 import { InstallButton } from "@/components/install-button";
 import { CallsBoard, type Row, type Scope } from "@/components/calls-board";
@@ -91,7 +91,7 @@ function SignInCard({ what }: { what: string }) {
 function Terminal({ session }: { session: Session }) {
   const [view, setView] = useView();
   const signedIn = session.authenticated;
-  const wallet = useKallWallet();
+  const { wallet } = useTradingWallet();
   const flashOrders = useFlashOrders(signedIn ? session.address : null);
   const data = useKallrData(signedIn ? session.address : null);
   const follows = useFollows();
@@ -301,7 +301,7 @@ function AccountCard({ session, onWallet }: { session: Session; onWallet: () => 
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{session.handle ? `@${session.handle}` : "Signed in"}</p>
           <button type="button" onClick={onWallet} className="block truncate text-xs text-slate hover:text-ink">
-            {session.address ? shortAddress(session.address) : "Kall wallet"} · Base
+            {session.signing === "metamask" ? "MetaMask" : "Kall wallet"}{session.address ? ` ${shortAddress(session.address)}` : ""} · Base
           </button>
         </div>
       </div>

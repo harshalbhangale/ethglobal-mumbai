@@ -1,6 +1,7 @@
 "use client";
 
 import { type WatchlistEntry, watchlistLimit, watchlistSchema } from "@kallr/domain";
+import { bridge } from "./extension";
 
 /**
  * Who you follow on Kallr. With the extension installed the list lives there (so following
@@ -11,10 +12,7 @@ import { type WatchlistEntry, watchlistLimit, watchlistSchema } from "@kallr/dom
 export type FollowCommand = { action: "read" } | { action: "add" | "remove"; handle: string };
 export type FollowSource = "extension" | "browser";
 
-const REQUEST = "kallr-follows-request";
-const RESPONSE = "kallr-follows-response";
 const LOCAL_KEY = "kallr.follows.v1";
-const TIMEOUT_MS = 2500;
 
 export const HANDLE = /^[a-z0-9_]{1,15}$/;
 
@@ -23,29 +21,7 @@ export function normalize(input: string): string | null {
   return HANDLE.test(handle) ? handle : null;
 }
 
-export function extensionInstalled() {
-  return typeof document !== "undefined" && document.documentElement.dataset.kallrExtension === "1";
-}
-
-/** One request through the extension's app bridge. Rejects when it isn't installed or doesn't answer. */
-function bridge(payload: Record<string, unknown>): Promise<unknown> {
-  const nonce = crypto.randomUUID();
-  return new Promise((resolve, reject) => {
-    const onMessage = (event: MessageEvent) => {
-      if (event.origin !== location.origin || event.source !== window) return;
-      if (event.data?.type !== RESPONSE || event.data.nonce !== nonce) return;
-      clearTimeout(timer);
-      window.removeEventListener("message", onMessage);
-      resolve(event.data.value);
-    };
-    const timer = setTimeout(() => {
-      window.removeEventListener("message", onMessage);
-      reject(new Error("Extension not connected"));
-    }, TIMEOUT_MS);
-    window.addEventListener("message", onMessage);
-    window.postMessage({ type: REQUEST, nonce, ...payload }, location.origin);
-  });
-}
+export { extensionInstalled } from "./extension";
 
 export async function extensionFollows(command: FollowCommand): Promise<WatchlistEntry[]> {
   const parsed = watchlistSchema.safeParse(await bridge(command));

@@ -14,7 +14,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
-        // Sign in with X (or email). No browser wallets: every trade uses the embedded wallet Privy makes.
+        // Sign in with X (or email). Trades use the embedded Kall wallet; MetaMask can be connected in Wallet.
         loginMethods: ["twitter", "email"],
         appearance: {
           theme: "dark",

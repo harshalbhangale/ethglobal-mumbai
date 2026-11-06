@@ -14,10 +14,17 @@ const manifest = JSON.parse(await readFile("public/manifest.json", "utf8"));
 manifest.host_permissions = [`${origin}/*`];
 // The follow-list bridge runs only on the app this build talks to.
 manifest.content_scripts.push({ matches: [`${origin}/*`], js: ["app-bridge.js"], run_at: "document_start" });
+// Wallet bridge in X's page, where MetaMask / Rabby inject window.ethereum.
+manifest.content_scripts.push({
+  matches: ["https://x.com/*", "https://twitter.com/*"],
+  js: ["wallet-bridge.js"],
+  world: "MAIN",
+  run_at: "document_start",
+});
 await writeFile("dist/manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
 
 await build({
-  entryPoints: ["src/content.ts", "src/background.ts", "src/app-bridge.ts", "src/popup.ts"],
+  entryPoints: ["src/content.ts", "src/background.ts", "src/app-bridge.ts", "src/wallet-bridge.ts", "src/popup.ts"],
   outdir: "dist",
   bundle: true,
   format: "iife",

@@ -4,8 +4,9 @@ import { send } from "./dom";
 
 /**
  * App-only bridge: lets the Kallr web app read and change who this browser follows, kept by
- * the extension. Runs only on the app's own origin, answers only same-window messages from that
- * origin with a fresh nonce, and carries follow commands only. No Privy tokens, X cookies or keys.
+ * the extension, and hand over the key for trading from X with the Kall wallet. Runs only on the
+ * app's own origin and answers only same-window messages from that origin with a fresh nonce. The key
+ * goes in and is never read back out; no Privy tokens, X cookies or wallet keys pass through here.
  */
 
 export const REQUEST = "kallr-follows-request";
@@ -24,6 +25,11 @@ export function handleBridgeMessage(event: MessageEvent) {
     if (typeof message.enabled !== "boolean") return;
     return void send<unknown>({ type: "mirror", enabled: message.enabled }).then(reply);
   }
+  // Trading from X: the app stores, reads (wallet and expiry only) or forgets the key.
+  if (message.action === "x-key-read") return void send<unknown>({ type: "x-key", op: "read" }).then(reply);
+  if (message.action === "x-key-clear") return void send<unknown>({ type: "x-key", op: "clear" }).then(reply);
+  if (message.action === "x-key-set")
+    return void send<unknown>({ type: "x-key", op: "set", key: message.key, address: message.address, expires: message.expires }).then(reply);
   const command = watchlistCommandSchema.safeParse(
     message.action === "read" ? { action: "read" } : { action: message.action, handle: message.handle },
   );

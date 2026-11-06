@@ -1,38 +1,96 @@
 "use client";
 
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { useConnectWallet, usePrivy, useWallets } from "@privy-io/react-auth";
 import type { Address } from "viem";
-import type { ReactNode } from "react";
+import { type ReactNode, useSyncExternalStore } from "react";
 import { PRIVY_ENABLED } from "@/app/providers";
+
+/** Which wallet signs trades: the Kall wallet unless you switch to MetaMask in Wallet. */
+export type SigningWallet = "kall" | "metamask";
 
 export type Session = {
   ready: boolean;
   authenticated: boolean;
   handle: string | null;
-  /** Your Kall wallet on Base: the embedded wallet Privy made when you signed in. */
+  /** The wallet that trades: your Kall wallet, or MetaMask when you chose it. */
   address: Address | null;
+  signing: SigningWallet;
+  /** Your Kall wallet: the embedded wallet Privy made when you signed in. */
+  kallAddress: Address | null;
+  /** Connect MetaMask (if needed) and sign with it from now on. */
+  signWithMetaMask: () => void;
+  /** Back to the Kall wallet. */
+  signWithKall: () => void;
   login: () => void;
   logout: () => Promise<void>;
 };
 
-/** The embedded wallet, the only one Kall Markets trades from. */
-export function useKallWallet() {
+// The choice is per browser; the Kall wallet is the default.
+const CHOICE_KEY = "kallr.signing";
+const CHOICE_EVENT = "kallr-signing";
+const readChoice = (): SigningWallet => {
+  try {
+    return localStorage.getItem(CHOICE_KEY) === "metamask" ? "metamask" : "kall";
+  } catch {
+    return "kall";
+  }
+};
+function saveChoice(choice: SigningWallet) {
+  try {
+    if (choice === "kall") localStorage.removeItem(CHOICE_KEY);
+    else localStorage.setItem(CHOICE_KEY, choice);
+  } catch {}
+  window.dispatchEvent(new Event(CHOICE_EVENT));
+}
+function subscribe(onChange: () => void) {
+  window.addEventListener(CHOICE_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(CHOICE_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+/**
+ * The wallet that signs trades, and which one it is. MetaMask only when you chose it and it's
+ * connected; otherwise the Kall wallet, which signs without pop-ups.
+ */
+export function useTradingWallet() {
   const { wallets } = useWallets();
-  return wallets.find((w) => w.walletClientType === "privy") ?? null;
+  const choice = useSyncExternalStore(subscribe, readChoice, () => "kall" as const);
+  const kall = wallets.find((w) => w.walletClientType === "privy") ?? null;
+  const metamask = wallets.find((w) => w.walletClientType === "metamask") ?? null;
+  return choice === "metamask" && metamask ? { wallet: metamask, signing: "metamask" as const, kall } : { wallet: kall, signing: "kall" as const, kall };
 }
 
 /** Reads the Privy session. Only call inside components rendered when PRIVY_ENABLED is true. */
 export function usePrivySession(): Session {
   const { ready, authenticated, user, login, logout } = usePrivy();
-  const wallet = useKallWallet();
-  const address = (wallet?.address ?? user?.wallet?.address ?? null) as Address | null;
+  const { wallets } = useWallets();
+  const { wallet, signing, kall } = useTradingWallet();
+  const { connectWallet } = useConnectWallet({
+    onSuccess: ({ wallet: connected }) => {
+      if (connected.walletClientType === "metamask") saveChoice("metamask");
+    },
+  });
+  const kallAddress = (kall?.address ?? user?.wallet?.address ?? null) as Address | null;
   return {
     ready,
     authenticated,
     handle: user?.twitter?.username ?? user?.email?.address ?? null,
-    address,
+    address: (wallet?.address as Address | undefined) ?? kallAddress,
+    signing,
+    kallAddress,
+    signWithMetaMask: () => {
+      if (wallets.some((w) => w.walletClientType === "metamask")) saveChoice("metamask");
+      else connectWallet({ walletList: ["metamask"] });
+    },
+    signWithKall: () => saveChoice("kall"),
     login,
-    logout,
+    logout: async () => {
+      saveChoice("kall");
+      await logout();
+    },
   };
 }
 

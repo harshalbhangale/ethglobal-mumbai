@@ -4,6 +4,7 @@ import { mergeHistory } from "./post";
 import { applyObservations, mirrorEnabled, setMirror } from "./follow-sync";
 import { migrateStorage } from "./migrate-storage";
 import { readWatchlist, updateWatchlist } from "./watchlist-storage";
+import { placeWithKall, setSigner, xKey, xStatus } from "./x-trading";
 
 // Follows saved before the rename move to the Kallr keys.
 void migrateStorage().catch(() => {});
@@ -22,8 +23,15 @@ type Request =
   | { type: "watchlist"; command: unknown }
   | { type: "observe-follows"; viewer: string; observations: Array<{ handle: string; following: boolean }> }
   | { type: "mirror"; enabled?: boolean }
+  | { type: "flash-quote"; order: unknown }
+  | { type: "flash-order"; order: unknown; signatures: unknown; context?: unknown }
   | { type: "token-search"; query: unknown }
-  | { type: "cre-coin"; token: unknown; claimed: unknown };
+  | { type: "flash-order-status"; orderId: unknown; funder?: unknown }
+  | { type: "cre-coin"; token: unknown; claimed: unknown }
+  | { type: "x-status" }
+  | { type: "signer"; signer: unknown }
+  | { type: "x-order"; order: unknown; caller?: unknown }
+  | { type: "x-key"; op: unknown; key?: unknown; address?: unknown; expires?: unknown };
 
 const HANDLE = /^[a-z0-9_]{1,15}$/;
 
@@ -60,6 +68,20 @@ async function watchlist(raw: unknown) {
   return command.action === "read" ? { entries: await readWatchlist() } : updateWatchlist(command);
 }
 
+/**
+ * Relays a Flash quote or submit to the app, which validates the order, holds the API key and talks
+ * to Definitive. Errors come back as { failed } so the card can show Flash's own message.
+ */
+async function flashCall(path: "/api/flash/quote" | "/api/flash/order", body: unknown) {
+  const res = await fetch(`${appOrigin}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json().catch(() => ({}))) as { error?: string };
+  return res.ok ? json : { failed: json.error ?? `Flash request failed (${res.status})` };
+}
+
 async function prices() {
   const res = await fetch(`${appOrigin}/api/prices`);
   if (!res.ok) throw new Error(`API ${res.status}`);
@@ -69,8 +91,8 @@ async function prices() {
 chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
   const url = sender.tab?.url ?? "";
   const fromX = /^https:\/\/(x|twitter)\.com\//.test(url);
-  // The app's bridge may only manage follows; everything else is for x.com tabs.
-  const fromApp = url.startsWith(`${appOrigin}/`) && (message?.type === "watchlist" || message?.type === "mirror");
+  // The app's bridge may only manage follows and the X key; everything else is for x.com tabs.
+  const fromApp = url.startsWith(`${appOrigin}/`) && (message?.type === "watchlist" || message?.type === "mirror" || message?.type === "x-key");
   if (!fromX && !fromApp) return;
   let job: Promise<unknown>;
   if (message?.type === "after-market") {
@@ -121,6 +143,26 @@ chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
     job = watchlist(message.command);
   } else if (message?.type === "mirror" && fromApp) {
     job = typeof message.enabled === "boolean" ? setMirror(message.enabled) : mirrorEnabled().then((enabled) => ({ enabled }));
+  } else if (message?.type === "flash-quote" && fromX) {
+    job = flashCall("/api/flash/quote", { order: message.order });
+  } else if (message?.type === "flash-order" && fromX) {
+    job = flashCall("/api/flash/order", {
+      order: message.order,
+      signatures: message.signatures,
+      context: message.context,
+    });
+  } else if (message?.type === "flash-order-status" && fromX && typeof message.orderId === "string" && /^[0-9a-f-]{36}$/i.test(message.orderId)) {
+    // Flash finds an order by its funder wallet too; the card knows it from placing the order.
+    const funder = typeof message.funder === "string" && /^0x[0-9a-fA-F]{40}$/.test(message.funder) ? `?funder=${message.funder}` : "";
+    job = fetch(`${appOrigin}/api/flash/orders/${message.orderId}${funder}`).then((r) => (r.ok ? r.json() : { status: null, fills: [] }));
+  } else if (message?.type === "x-key" && fromApp) {
+    job = xKey(message);
+  } else if (message?.type === "x-status" && fromX) {
+    job = xStatus();
+  } else if (message?.type === "signer" && fromX) {
+    job = setSigner(message.signer);
+  } else if (message?.type === "x-order" && fromX) {
+    job = placeWithKall(message.order, message.caller ?? null);
   } else if (message?.type === "observe-follows" && fromX && Array.isArray(message.observations)) {
     const observations = message.observations.filter(
       (o) => o && typeof o.handle === "string" && typeof o.following === "boolean",
