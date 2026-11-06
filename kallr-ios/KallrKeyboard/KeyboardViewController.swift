@@ -39,6 +39,23 @@ final class KeyboardViewController: UIInputViewController {
 
     func modeChanged(_ mode: KeyboardModel.Mode) { updateHeight() }
 
+    /**
+     * Opens a link in Safari. A keyboard has no UIApplication of its own, but with Allow Full Access the
+     * host app's is on the responder chain. Returns false when iOS gives us no way to open it.
+     */
+    @discardableResult
+    func openURL(_ url: URL) -> Bool {
+        var responder: UIResponder? = self
+        while let r = responder {
+            if let app = r as? UIApplication {
+                app.open(url, options: [:], completionHandler: nil)
+                return true
+            }
+            responder = r.next
+        }
+        return false
+    }
+
     func updateHeight() {
         height?.constant = model.mode == .typing ? Self.typingHeight : model.picking ? Self.pickerHeight : Self.panelHeight
         view.setNeedsLayout()

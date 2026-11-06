@@ -147,15 +147,51 @@ final class KeyboardModel: ObservableObject {
     func caller(of orderId: String) -> String? { feed?.trades?.first { $0.flashOrderId == orderId }?.caller }
 
     /** While Orders is open and something is working, re-read Flash every 5 seconds. */
+    /** Re-reads orders while Orders is on screen. Calling it again while it runs is a no-op, so the tab tap
+     * and the view's onAppear don't cancel each other's request (which left the list stuck on "Reading"). */
     func startPolling() {
-        polling?.cancel()
+        if let polling, !polling.isCancelled { return }
         polling = Task { @MainActor in
             while !Task.isCancelled, tab == .orders {
                 await loadOrders()
                 let open = orders?.contains { $0.open } ?? false
                 try? await Task.sleep(nanoseconds: open ? 5_000_000_000 : 15_000_000_000)
             }
+            polling = nil
         }
+    }
+
+    /** The order opened from Orders, and each order's fills (transaction, venues) once read. */
+    @Published var openedOrder: Kallr.Order?
+    @Published var fills: [String: Kallr.Fills] = [:]
+    @Published var ordersFailed = false
+
+    func openOrder(_ o: Kallr.Order) {
+        tap()
+        openedOrder = o
+        if fills[o.orderId] == nil {
+            Task { @MainActor in
+                if let f = await Kallr.fills(orderId: o.orderId, funder: o.funderAddress ?? wallet?.address) { fills[o.orderId] = f }
+            }
+        }
+    }
+
+    /** Opens a link in Safari; if iOS won't, copies it instead and says so. */
+    func openLink(_ url: URL) {
+        tap()
+        if controller?.openURL(url) != true {
+            UIPasteboard.general.string = url.absoluteString
+            ordersNote = "Link copied. Paste it in Safari."
+        }
+    }
+
+    /** Explore: the caller whose calls are open. */
+    @Published var exploreCaller: String?
+    /** Every call Kall Markets has from this caller, newest first: open ones and settled ones. */
+    func calls(of handle: String) -> [Item] {
+        (openItems + settledItems)
+            .filter { $0.caller.lowercased() == handle.lowercased() }
+            .sorted { ($0.postedAt ?? 0) > ($1.postedAt ?? 0) }
     }
 
     // MARK: Live price
@@ -611,8 +647,14 @@ final class KeyboardModel: ObservableObject {
     }
 
     func loadOrders() async {
-        guard let address = wallet?.address else { await load(); return }
-        orders = await Kallr.orders(funder: address)
+        if wallet?.address == nil { await load() }
+        guard let address = wallet?.address else { ordersFailed = orders == nil; return }
+        if let fresh = await Kallr.orders(funder: address) {
+            orders = fresh
+            ordersFailed = false
+        } else if orders == nil {
+            ordersFailed = true
+        }
     }
 
 
@@ -852,7 +894,9 @@ private struct FollowingTab: View {
 
                 if model.checking || model.note != nil || model.cre != nil || model.copied?.headline(typed: nil) != nil { CopiedBanner(model: model) }
 
-                if model.scope == .explore { ExploreList(model: model) } else { FollowingList(model: model) }
+                if model.scope == .explore {
+                    if let handle = model.exploreCaller { CallerCalls(handle: handle, model: model) } else { ExploreList(model: model) }
+                } else { FollowingList(model: model) }
             }
         }
     }
@@ -1028,6 +1072,7 @@ private struct ExploreList: View {
                                     .font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(1)
                             }
                             Spacer(minLength: 4)
+                            Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).foregroundStyle(Kallr.muted)
                             let on = model.follows.contains(c.handle)
                             Button { model.toggleFollow(c.handle) } label: {
                                 Text(on ? "FOLLOWING" : "FOLLOW").font(.system(size: 10, weight: .heavy))
@@ -1039,6 +1084,8 @@ private struct ExploreList: View {
                             .buttonStyle(Press())
                         }
                         .padding(.vertical, 7)
+                        .contentShape(Rectangle())
+                        .onTapGesture { model.tap(); model.exploreCaller = c.handle }
                         .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline).frame(height: 1) }
                     }
                 } else {
@@ -1048,6 +1095,47 @@ private struct ExploreList: View {
             .padding(.horizontal, 8)
         }
         .refreshable { await model.refresh() }
+    }
+}
+
+/** A caller from Explore: their record and every call Kall Markets has from them, open and settled. */
+private struct CallerCalls: View {
+    let handle: String
+    @ObservedObject var model: KeyboardModel
+
+    private var caller: Kallr.FeedCaller? { model.feed?.callers?.first { $0.handle.lowercased() == handle.lowercased() } }
+
+    var body: some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 10) {
+                Button { model.tap(); model.exploreCaller = nil } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 14, weight: .bold)).foregroundStyle(Kallr.bone)
+                        .frame(width: 34, height: 34).background(Kallr.keyDark, in: Circle())
+                }
+                .buttonStyle(Press())
+                .accessibilityLabel("Back to Explore")
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("@\(handle)").font(.system(size: 14, weight: .heavy)).foregroundStyle(Kallr.bone)
+                    if let c = caller {
+                        Text([c.settled > 0 ? "\(c.hits) of \(c.settled) right" : "No settled calls yet", c.open > 0 ? "\(c.open) open" : nil, c.focus].compactMap { $0 }.joined(separator: " · "))
+                            .font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+                let on = model.follows.contains(handle)
+                SmallButton(label: on ? "FOLLOWING" : "FOLLOW") { model.toggleFollow(handle) }
+            }
+            .padding(.horizontal, 14)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    let items = model.calls(of: handle)
+                    if items.isEmpty { Empty(text: "No calls from @\(handle) on Arkiv yet.") }
+                    ForEach(items) { item in CallCard(item: item, model: model) }
+                }
+                .padding(.horizontal, 14)
+            }
+            .refreshable { await model.refresh() }
+        }
     }
 }
 
@@ -1986,47 +2074,191 @@ private struct OrdersTab: View {
     @ObservedObject var model: KeyboardModel
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                HStack {
-                    Section(title: "YOUR KALL WALLET ORDERS")
-                    PoweredByDefinitive(height: 8, suffix: "Flash").padding(.top, 6)
-                }
-                if let note = model.ordersNote { Text(note).font(.system(size: 11)).foregroundStyle(Kallr.muted).frame(maxWidth: .infinity, alignment: .leading) }
-                if let orders = model.orders {
-                    if orders.isEmpty { Empty(text: "No orders yet. Copy a call from Calls, or buy from Trade.") }
-                    ForEach(orders, id: \.orderId) { o in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(o.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
-                                let sub = [model.caller(of: o.orderId).map { "from @\($0)'s call" }, o.exits].compactMap { $0 }.joined(separator: " · ")
-                                if !sub.isEmpty { Text(sub).font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(1) }
-                            }
-                            Spacer()
-                            if o.open, o.orderType != "bracket" {
-                                Button { model.cancel(o.orderId) } label: {
-                                    Text(model.cancelling.contains(o.orderId) ? "…" : "CANCEL").font(.system(size: 10, weight: .heavy)).foregroundStyle(Kallr.danger)
-                                        .padding(.horizontal, 8).frame(height: 22)
-                                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Kallr.danger.opacity(0.5)))
-                                }
-                                .buttonStyle(Press())
-                            }
-                            Text(o.statusLabel).font(.system(size: 10, weight: .heavy))
-                                .foregroundStyle(o.open ? Kallr.black : o.statusLabel == "FILLED" ? Kallr.lime : Kallr.muted)
-                                .padding(.horizontal, 8).frame(height: 22)
-                                .background(o.open ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 5))
-                        }
-                        .padding(.vertical, 8)
-                        .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline).frame(height: 1) }
+        if let o = model.openedOrder {
+            OrderDetail(order: o, model: model)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    HStack {
+                        Section(title: "YOUR KALL WALLET ORDERS")
+                        PoweredByDefinitive(height: 8, suffix: "Flash").padding(.top, 6)
                     }
-                } else {
-                    Empty(text: "Reading your orders from Flash…")
+                    if let note = model.ordersNote { Text(note).font(.system(size: 11)).foregroundStyle(Kallr.muted).frame(maxWidth: .infinity, alignment: .leading) }
+                    if let orders = model.orders {
+                        if orders.isEmpty { Empty(text: "No orders yet. Copy a call from Following, or buy from Trade.") }
+                        ForEach(orders, id: \.orderId) { o in OrderRow(order: o, model: model) }
+                    } else if model.ordersFailed {
+                        Empty(text: "Couldn't read your orders from Flash. Pull down to try again.")
+                    } else {
+                        Empty(text: "Reading your orders from Flash…")
+                    }
                 }
+                .padding(.horizontal, 8)
             }
-            .padding(.horizontal, 8)
+            .refreshable { await model.loadOrders() }
+            .onAppear { model.startPolling() }
         }
-        .refreshable { await model.loadOrders() }
-        .onAppear { model.startPolling() }
+    }
+}
+
+/** One order: the coin, what happened, when, and its status. Tap opens it. */
+private struct OrderRow: View {
+    let order: Kallr.Order
+    @ObservedObject var model: KeyboardModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            TokenIcon(symbol: order.symbol, size: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(order.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
+                let sub = order.filledLine ?? [model.caller(of: order.orderId).map { "from @\($0)'s call" }, order.exits].compactMap { $0 }.joined(separator: " · ")
+                Text([sub, order.placedAgo].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.system(size: 11)).foregroundStyle(order.filledLine != nil ? Kallr.lime : Kallr.muted).lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            if order.open, order.orderType != "bracket" {
+                Button { model.cancel(order.orderId) } label: {
+                    Text(model.cancelling.contains(order.orderId) ? "…" : "CANCEL").font(.system(size: 10, weight: .heavy)).foregroundStyle(Kallr.danger)
+                        .padding(.horizontal, 8).frame(height: 22)
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Kallr.danger.opacity(0.5)))
+                }
+                .buttonStyle(Press())
+            }
+            Text(order.statusLabel).font(.system(size: 10, weight: .heavy))
+                .foregroundStyle(order.open ? Kallr.black : order.statusLabel == "FILLED" ? Kallr.lime : Kallr.muted)
+                .padding(.horizontal, 8).frame(height: 22)
+                .background(order.open ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 5))
+            Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).foregroundStyle(Kallr.muted)
+        }
+        .padding(.vertical, 9)
+        .contentShape(Rectangle())
+        .onTapGesture { model.openOrder(order) }
+        .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline).frame(height: 1) }
+    }
+}
+
+/** An order in full: what was swapped for what, at what price, from where, and its Base transaction. */
+private struct OrderDetail: View {
+    let order: Kallr.Order
+    @ObservedObject var model: KeyboardModel
+
+    private var fills: Kallr.Fills? { model.fills[order.orderId] }
+    private var tx: String? { fills?.transaction }
+    private var txURL: URL? { tx.flatMap { URL(string: "https://basescan.org/tx/\($0)") } }
+    private var arkivURL: URL? { order.arkivKey.flatMap { URL(string: "https://rabdi.explorer.arkiv.network/entity/\($0)") } }
+
+    private func num(_ s: String?) -> Double? { s.flatMap(Double.init) }
+    private func amount(_ v: Double) -> String { v.formatted(.number.precision(.significantDigits(1...6))) }
+    /** Sells spend the coin and get USDC; buys spend USDC and get the coin. */
+    private var paid: (String, String)? {
+        let f = order.filled
+        if order.side == "sell" { return (num(f?.targetAmount).map(amount) ?? order.qty, order.symbol) }
+        return (num(f?.contraAmount).map { String(format: "%.2f", $0) } ?? order.qty, "USDC")
+    }
+    private var got: (String, String)? {
+        let f = order.filled
+        if order.side == "sell" { return num(f?.contraAmount).map { (String(format: "%.4f", $0), "USDC") } }
+        return num(f?.targetAmount).map { (amount($0), order.symbol) }
+    }
+    private var source: String {
+        switch order.source {
+        case "keyboard": return "Kall Keyboard"
+        case "extension": return "X, with the Kall Extension"
+        case "desk": return "Kall Web App"
+        default: return "Kall Keyboard"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Button { model.tap(); model.openedOrder = nil } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 15, weight: .bold)).foregroundStyle(Kallr.bone)
+                        .frame(width: 36, height: 36).background(Kallr.keyDark, in: Circle())
+                }
+                .buttonStyle(Press())
+                .accessibilityLabel("Back to orders")
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(order.title).font(.system(size: 14, weight: .heavy)).foregroundStyle(Kallr.bone).lineLimit(1)
+                    Text([source, order.placedAgo].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Text(order.statusLabel).font(.system(size: 10, weight: .heavy))
+                    .foregroundStyle(order.open ? Kallr.black : Kallr.lime)
+                    .padding(.horizontal, 8).frame(height: 22)
+                    .background(order.open ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 5))
+            }
+            .padding(.horizontal, 10)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 8) {
+                    // You paid → you got, like a swap.
+                    VStack(spacing: 0) {
+                        if let paid { leg("You paid", paid.0, paid.1) }
+                        Rectangle().fill(Kallr.hairline).frame(height: 1).padding(.leading, 46)
+                        if let got { leg("You got", got.0, got.1) } else { leg("You get", "…", order.side == "sell" ? "USDC" : order.symbol) }
+                    }
+                    .padding(.horizontal, 10)
+                    .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 12))
+
+                    VStack(spacing: 0) {
+                        row("Price", num(order.filled?.averagePrice).map { "$" + $0.formatted(.number.precision(.fractionLength(2))) } ?? "—")
+                        row("Route", fills?.venues.map { "\($0) · via Definitive" } ?? "Definitive Flash")
+                        if let caller = order.caller ?? model.caller(of: order.orderId) { row("Copied", "@\(caller)'s call") }
+                        if let exits = order.exits { row("Exits", exits) }
+                        row("Transaction", tx.map { "\($0.prefix(10))…\($0.suffix(6))" } ?? (order.open ? "When it fills" : "Reading…"))
+                    }
+                    .padding(.horizontal, 10)
+                    .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 12))
+
+                    if let txURL {
+                        Button { model.openLink(txURL) } label: {
+                            Label("Open on Basescan", systemImage: "arrow.up.right.square")
+                                .font(.system(size: 14, weight: .heavy)).foregroundStyle(Kallr.black)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(Press())
+                    }
+                    if let arkivURL {
+                        Button { model.openLink(arkivURL) } label: {
+                            Text("Trade record on Arkiv ↗").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.bone)
+                                .frame(maxWidth: .infinity, minHeight: 40)
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Kallr.hairline))
+                        }
+                        .buttonStyle(Press())
+                    }
+                    if let note = model.ordersNote { Text(note).font(.system(size: 11)).foregroundStyle(Kallr.muted) }
+                    PoweredByDefinitive(height: 8, suffix: "Flash on Base").padding(.vertical, 4)
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
+            }
+            .modifier(NoEdgeBlur())
+        }
+        .padding(.top, 4)
+    }
+
+    private func leg(_ label: String, _ value: String, _ symbol: String) -> some View {
+        HStack(spacing: 12) {
+            TokenIcon(symbol: symbol, size: 34)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label.uppercased()).font(.system(size: 10, weight: .heavy)).foregroundStyle(Kallr.muted)
+                Text("\(value) \(symbol)").font(.system(size: 20, weight: .black).monospacedDigit()).foregroundStyle(Kallr.bone).lineLimit(1).minimumScaleFactor(0.6)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 9)
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: 12)).foregroundStyle(Kallr.muted)
+            Spacer(minLength: 8)
+            Text(value).font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(Kallr.bone).lineLimit(1)
+        }
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) { Rectangle().fill(Kallr.hairline.opacity(0.6)).frame(height: 1) }
     }
 }
 
