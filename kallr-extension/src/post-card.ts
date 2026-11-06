@@ -3,7 +3,7 @@ import { addFollowBadge } from "./creator-badge";
 import { el, send, shadowHost } from "./dom";
 import { flashCard } from "./flash-card";
 import { identityFromHref, mightBeCall } from "./post";
-import { claimedTicker, TOKEN_CARD_CSS, tokenCheckCard } from "./token-card";
+import { claimedTicker, type CreVerdict, TOKEN_CARD_CSS, tokenCheckCard } from "./token-card";
 import { findXTicker, mountTickerButton } from "./x-ticker";
 
 /**
@@ -51,11 +51,18 @@ export async function decorate(article: HTMLElement) {
   // card, so a ticker copy is never offered next to a possibly fake token.
   const tokenCheck = answer?.checks?.token ?? null;
   if (tokenCheck) {
+    const claimed = claimedTicker(post.text);
     const { host, root } = shadowHost("kallr-host");
     host.dataset.postId = post.postId;
-    root.append(el("style", {}, TOKEN_CARD_CSS), tokenCheckCard(tokenCheck, claimedTicker(post.text)));
+    const card = tokenCheckCard(tokenCheck, claimed, claimed ? "pending" : null);
+    root.append(el("style", {}, TOKEN_CARD_CSS), card);
     article.querySelector(".kallr-host")?.remove();
     post.textNode.after(host);
+    if (claimed) {
+      // Chainlink CRE checks the contract against the coin the post names; its verdict replaces the line.
+      const cre = await send<CreVerdict>({ type: "cre-coin", token: tokenCheck.address, claimed });
+      if (host.isConnected) card.replaceWith(tokenCheckCard(tokenCheck, claimed, cre && cre.checked ? cre : null));
+    }
     return;
   }
 

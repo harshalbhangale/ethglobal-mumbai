@@ -25,7 +25,8 @@ type Request =
   | { type: "flash-quote"; order: unknown }
   | { type: "flash-order"; order: unknown; signatures: unknown; context?: unknown }
   | { type: "token-search"; query: unknown }
-  | { type: "flash-order-status"; orderId: unknown; funder?: unknown };
+  | { type: "flash-order-status"; orderId: unknown; funder?: unknown }
+  | { type: "cre-coin"; token: unknown; claimed: unknown };
 
 const HANDLE = /^[a-z0-9_]{1,15}$/;
 
@@ -103,6 +104,30 @@ chrome.runtime.onMessage.addListener((message: Request, sender, respond) => {
       inflight.get(key) ??
       fetch(`${appOrigin}/api/tokens/search?q=${encodeURIComponent(q)}`)
         .then((r) => (r.ok ? r.json() : { tokens: [] }))
+        .finally(() => inflight.delete(key));
+    inflight.set(key, job);
+  } else if (
+    message?.type === "cre-coin" &&
+    fromX &&
+    /^0x[0-9a-fA-F]{40}$/.test(String(message.token)) &&
+    /^[A-Za-z][A-Za-z0-9]{0,11}$/.test(String(message.claimed))
+  ) {
+    const key = `cre:${String(message.token).toLowerCase()}:${String(message.claimed).toUpperCase()}`;
+    const q = `token=${message.token}&claimed=${encodeURIComponent(String(message.claimed))}`;
+    job =
+      inflight.get(key) ??
+      fetch(`${appOrigin}/api/cre/coin?${q}`)
+        .then((r) => (r.ok ? r.json() : { checked: false }))
+        .then((v) =>
+          v.checked || !v.canRun
+            ? v
+            : fetch(`${appOrigin}/api/cre/coin`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ token: message.token, claimed: message.claimed }),
+              }).then((r) => (r.ok ? r.json() : { checked: false })),
+        )
+        .catch(() => ({ checked: false }))
         .finally(() => inflight.delete(key));
     inflight.set(key, job);
   } else if (message?.type === "caller-record" && HANDLE.test(message.handle)) {
