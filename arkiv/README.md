@@ -101,4 +101,3 @@ Honest notes for the Arkiv team (SDK `@arkiv-network/sdk` 1.0.1, Rabdi):
 - [`kallr-webapp/lib/server/arkiv.ts`](../kallr-webapp/lib/server/arkiv.ts): writes (calls, results, trades)
 - [`kallr-webapp/lib/server/swarm.ts`](../kallr-webapp/lib/server/swarm.ts): post snapshots
 - [`kallr-webapp/app/api/arkiv/score`](../kallr-webapp/app/api/arkiv/score): settles expired calls (daily cron)
-- [`kallr-swarm/`](../kallr-swarm): the dashboard as a static page on Swarm, reading Arkiv with no server

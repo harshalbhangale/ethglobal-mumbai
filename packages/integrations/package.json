@@ -10,7 +10,6 @@
     "./token-references": "./src/token-references.ts",
     "./definitive": "./src/definitive.ts",
     "./after-market": "./src/after-market.ts",
-    "./x-api": "./src/x-api.ts",
     "./safety-checks": "./src/safety-checks.ts",
     "./arkiv": "./src/arkiv.ts"
   },

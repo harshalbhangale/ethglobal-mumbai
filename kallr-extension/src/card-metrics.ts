@@ -1,7 +1,7 @@
 /**
  * Statistics for the call card, from the caller's calls this browser has seen and the API scored.
  * Pure functions: no DOM, no chrome APIs. Detected calls are not registered calls, so nothing here
- * assigns a tier; tiers come with server-stored calls (PLAN.md step 5b).
+ * assigns a tier; tiers come with server-stored calls.
  */
 
 export type SeenCall = {

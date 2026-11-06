@@ -5,6 +5,7 @@ const R = new URL("..", import.meta.url).pathname;
 const b64 = async (p, t) => `data:${t};base64,${(await readFile(R + p)).toString("base64")}`;
 const DEF = await b64("kallr-webapp/public/sponsors/definitive.svg", "image/svg+xml");
 const ARK = await b64("kallr-webapp/public/sponsors/arkiv.png", "image/png");
+const LINK = await b64("kallr-webapp/public/sponsors/chainlink.svg", "image/svg+xml");
 const MARK = await b64("kallr-webapp/public/brand/mark.png", "image/png");
 
 const W = 1600, H = 1180;
@@ -40,7 +41,7 @@ ${t(W - 60, 76, "Don’t trust. Check the caller. Trade it.", 18, LIME, 600, "en
 // 1. Where calls show up → three surfaces
 const surf = [
   ["Kall Extension", "Chrome, on X", ["Card under every call", "Caller record + trade in place"]],
-  ["Kall Keyboard", "Android · iOS", ["Copy a call in any chat", "Trade without leaving it"]],
+  ["Kall Keyboard", "iPhone · Android", ["Copy a call in any chat", "Trade without leaving it"]],
   ["Kall Web App", "kallmarkets.vercel.app", ["Callers, real posts, verdicts", "Orders, wallet, every proof"]],
 ];
 t; s += t(60, 150, "1 · WHERE CALLS SHOW UP", 13, MUTE, 600);
@@ -54,44 +55,63 @@ s += t(60, 396, "2 · ONE SERVER", 13, MUTE, 600);
 s += box(60, 414, 1480, 196, { stroke: LIME, sw: 2, fill: "#111511" });
 s += t(92, 458, "Kall API", 24, TEXT, 700) + t(208, 458, "one Next.js server on Vercel · every app talks to it, keys never leave it", 15, MUTE);
 let cx = 92;
-["AI call reader", "Call check (fake contracts)", "Flash quote + order relay", "Price benchmark", "Caller records", "Receipt writer"].forEach((c, i) => {
+["AI call reader", "Coin check", "Flash quote + order relay", "Chainlink prices", "Caller records", "Receipt writer"].forEach((c, i) => {
   s += chip(cx, 480, c, i === 2); cx += c.length * 8.2 + 44;
 });
 s += lines(92, 552, ["Reads a post → real call? long or short? → checks the coin → prices it → quotes it → relays your signed order → writes the receipt."], 15, 26, TEXT);
-s += t(92, 584, "Clients only sign. The server holds the Definitive and Arkiv keys.", 14, MUTE);
+s += t(92, 584, "Clients only sign. The server holds the Definitive and Arkiv keys; Chainlink CRE nodes check coins and score calls on their own.", 14, MUTE);
 for (let i = 0; i < 3; i++) s += arrow(300 + i * 500, 318, 300 + i * 500, 414);
 
-// 3. Built on
+// 3. Built on: three columns
 s += t(60, 690, "3 · BUILT ON", 13, MUTE, 600);
 const cols = [
-  { x: 60, w: 600, hot: true },
-  { x: 680, w: 860 },
+  { x: 60, w: 480, hot: true },
+  { x: 560, w: 480 },
+  { x: 1060, w: 480 },
 ];
-const [d, a] = cols;
-for (const c of cols) s += box(c.x, 708, c.w, 360, { stroke: c.hot ? LIME : RULE, sw: c.hot ? 2.5 : 1.5 });
-s += arrow(500, 610, d.x + 300, 708, "quote · order");
-s += arrow(1000, 610, a.x + 210, 708, "calls · results · trades");
+const [d, c, a] = cols;
+for (const k of cols) s += box(k.x, 708, k.w, 360, { stroke: k.hot ? LIME : RULE, sw: k.hot ? 2.5 : 1.5 });
+s += arrow(300, 610, d.x + 240, 708, "quote · order");
+s += arrow(800, 610, c.x + 240, 708, "prices · verdicts");
+s += arrow(1300, 610, a.x + 240, 708, "calls · results · trades");
 
 // Definitive
-s += `<image href="${DEF}" x="${d.x + 28}" y="734" width="230" height="26"/>`;
+s += `<image href="${DEF}" x="${d.x + 28}" y="734" width="200" height="23"/>`;
 s += t(d.x + d.w - 28, 754, "EVERY TRADE", 13, LIME, 700, "end");
-s += t(d.x + 28, 800, "Definitive Flash", 22, TEXT, 700) + t(d.x + 198, 800, "· the only way Kall trades", 15, MUTE);
-const steps = ["Quote", "Approve", "Sign (EIP-712)", "Order", "Fill"];
+s += t(d.x + 28, 800, "Definitive Flash", 22, TEXT, 700);
 let sx = d.x + 28;
-steps.forEach((st, i) => { s += chip(sx, 822, st, true); sx += st.length * 8.2 + 28 + (i < 4 ? 22 : 0); if (i < 4) s += t(sx - 16, 843, "→", 15, LIME, 700, "middle"); });
+["Quote", "Sign", "Order", "Fill"].forEach((st, i) => { s += chip(sx, 822, st, true); sx += st.length * 8.2 + 28 + (i < 3 ? 22 : 0); if (i < 3) s += t(sx - 16, 843, "→", 15, LIME, 700, "middle"); });
 s += lines(d.x + 28, 896, [
-  "Best route across Base’s venues, MEV protected",
-  "Price impact, slippage and fee shown before you sign",
-  "Kall wallet (Privy) signs, no pop-ups; MetaMask if you pick it",
-  "Fill returns the Basescan tx and the venues used",
+  "Best route across Base’s venues",
+  "Impact, slippage and fee before you sign",
+  "Approvals sized to the order, never unlimited",
+  "Market, limit, TWAP, take-profit, stop-loss",
+  "Fill returns the Basescan tx and venues",
+], 15, 30, TEXT);
+
+// Chainlink
+s += `<image href="${LINK}" x="${c.x + 28}" y="730" width="150" height="32"/>`;
+s += t(c.x + c.w - 28, 754, "THE TRUTH", 13, LIME, 700, "end");
+s += t(c.x + 28, 800, "Prices and verdicts", 22, TEXT, 700);
+s += chip(c.x + 28, 822, "Price feeds on Base") + chip(c.x + 28, 864, "CRE · check-coin", true) + chip(c.x + 218, 864, "CRE · score-calls", true);
+s += lines(c.x + 28, 940, [
+  "Entry price at the minute of the post",
+  "CRE nodes agree, sign, write the verdict",
+  "KallVerdicts contract on Base Sepolia",
+  "A fake coin is blocked before any trade",
 ], 15, 30, TEXT);
 
 // Arkiv
 s += `<image href="${ARK}" x="${a.x + 28}" y="728" width="132" height="33"/>`;
 s += t(a.x + a.w - 28, 754, "RECEIPTS", 13, LIME, 700, "end");
 s += t(a.x + 28, 800, "Read-only records", 22, TEXT, 700);
-["kallr.calls", "kallr.call-results", "kallr.trades", "kallr.tracked-callers"].forEach((c, i) => { s += chip(a.x + 28 + (i % 2) * 168, 822 + Math.floor(i / 2) * 42, c); });
-s += lines(a.x + 28, 940, ["A miss can’t be edited or deleted", "Every caller’s record is public", "Arkiv Rabdi testnet · chain 7794095"], 15, 30, TEXT);
+["kallr.calls", "kallr.call-results", "kallr.trades", "kallr.tracked-callers"].forEach((k, i) => { s += chip(a.x + 28 + (i % 2) * 150, 822 + Math.floor(i / 2) * 42, k); });
+s += lines(a.x + 28, 940, [
+  "A miss can’t be edited or deleted",
+  "Each trade is owned by the trader",
+  "Posts snapshotted to Swarm",
+  "Arkiv Rabdi testnet · chain 7794095",
+], 15, 30, TEXT);
 
 // Base strip
 s += box(60, 1092, 1480, 56, { r: 28, fill: "#111511" });

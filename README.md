@@ -6,30 +6,11 @@
 
 **[kallmarkets.vercel.app](https://kallmarkets.vercel.app)** · [Android app (APK)](https://kall-markets-downloads-308324916322.s3.ap-south-1.amazonaws.com/apps/kall-keyboard.apk) · Built at ETHGlobal Mumbai 2026 · Not financial advice
 
-## Screenshots
-
-<p align="center">
-  <img src="docs/screenshots/submission/1-keyboard-swap.webp" width="24%" alt="Kall Keyboard: swap on Definitive Flash, right in the chat" />
-  <img src="docs/screenshots/submission/2-keyboard-app-history.webp" width="24%" alt="Kall app: every trade from the keyboard, X and the web" />
-  <img src="docs/screenshots/submission/8-keyboard-hold-to-buy.webp" width="24%" alt="Kall Keyboard in a Telegram signal group: hold to buy the call on Definitive Flash" />
-</p>
-<p align="center">
-  <img src="docs/screenshots/submission/3-extension-trade-on-x.webp" width="48%" alt="Kall Extension on X: the caller's record and a Flash trade under the post" />
-</p>
-<p align="center">
-  <img src="docs/screenshots/submission/4-extension-fake-token-blocked.webp" width="48%" alt="Kall Extension: a fake contract blocked by Chainlink CRE" />
-  <img src="docs/screenshots/submission/5-web-app-feed.webp" width="48%" alt="Kall Web App: real calls from X, priced and scored" />
-</p>
-<p align="center">
-  <img src="docs/screenshots/submission/6-web-app-history.webp" width="48%" alt="Kall Web App: history of trades placed on X, the keyboard and the web" />
-  <img src="docs/screenshots/submission/7-web-app-wallet.webp" width="48%" alt="Kall Web App: wallet on Base" />
-</p>
-
 ## Why we built it
 
 Crypto runs on calls. Someone posts "$ETH, be more bullish" to 300,000 followers, and money moves. If it works,
 it becomes a screenshot and an ad for a paid group. If it fails, the post quietly disappears. Followers only see
-the wins.
+the wins, and in the replies a "contract address" for the coin is waiting: one wrong paste and the money is gone.
 
 We had already built an extension that let you trade straight from a post on X. Watching people use it, the
 trade was the easy part. The first question was always: *is this person ever right?* Nobody could answer,
@@ -37,57 +18,83 @@ because the only record lives on the caller's own timeline, where they decide wh
 
 So before you can trade a call, Kall Markets shows its receipt.
 
-## What it does
+## What it is
 
-Every call we see is priced at the minute it was posted (Chainlink on Base), scored when its time is up, and
-written to [Arkiv](https://arkiv.network) as a read-only record. The post itself is snapshotted to
-[Swarm](https://www.ethswarm.org), so deleting the tweet doesn't delete the record. Then you can trade it right
-there, through [Definitive Flash](https://definitive.fi) on Base, signed in your own wallet.
+One product, wherever calls show up:
 
 | | Where | What you do |
 | --- | --- | --- |
-| **Kall Web App** | [kallmarkets.vercel.app/app](https://kallmarkets.vercel.app/app) | The feed of real calls with their verdicts, the callers you follow, the trade ticket, your orders and wallet |
 | **Kall Extension** | Chrome, on X | A card under every call: the caller's record, a fake-contract check, and a trade you sign without leaving the post |
-| **Kall Keyboard** | Android and iPhone, in any chat | Copy a call in Telegram, WhatsApp or X; the keyboard reads it, checks the caller, and trades it in the chat |
+| **Kall Keyboard** | iPhone and Android, in any chat | Copy a call in Telegram, WhatsApp or X; the keyboard reads it, checks the coin, and trades it in the chat |
+| **Kall Web App** | [kallmarkets.vercel.app/app](https://kallmarkets.vercel.app/app) | The feed of real calls with their verdicts, the callers you follow, your trades from all three places, your wallet |
 
-<p align="center"><img src="docs/flow.svg" alt="The extension, keyboard and web app send each call to one server: read, check, price, trade on Definitive Flash, record on Arkiv, score." /></p>
+<p align="center">
+  <img src="docs/screenshots/submission/3-extension-trade-on-x.webp" width="48%" alt="Kall Extension on X: the caller's record and a Flash trade under the post" />
+  <img src="docs/screenshots/submission/4-extension-fake-token-blocked.webp" width="48%" alt="Kall Extension: a fake contract blocked by Chainlink CRE" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/submission/1-keyboard-swap.webp" width="24%" alt="Kall Keyboard: swap on Definitive Flash, right in the chat" />
+  <img src="docs/screenshots/submission/8-keyboard-hold-to-buy.webp" width="24%" alt="Kall Keyboard in a Telegram signal group: hold to buy the call" />
+  <img src="docs/screenshots/submission/2-keyboard-app-history.webp" width="24%" alt="Kall app: every trade from the keyboard, X and the web" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/submission/5-web-app-feed.webp" width="32%" alt="Kall Web App: real calls from X, priced and scored" />
+  <img src="docs/screenshots/submission/6-web-app-history.webp" width="32%" alt="Kall Web App: trades placed on X, the keyboard and the web" />
+  <img src="docs/screenshots/submission/7-web-app-wallet.webp" width="32%" alt="Kall Web App: wallet on Base" />
+</p>
 
-1. **Read.** An AI reader decides if a post is a real call and which way it points. Sarcasm, questions and
-   looking back don't count.
-2. **Check.** A coin named next to a contract that isn't that coin gets "Call check failed" and no trade.
-3. **Price.** Entry is the Chainlink price on Base at the minute of the post.
+## Architecture
+
+<p align="center"><img src="docs/architecture.svg" alt="Three apps talk to one Kall server on Vercel, which trades on Definitive Flash, prices and checks with Chainlink (price feeds and CRE), and keeps receipts on Arkiv with post snapshots on Swarm." /></p>
+
+Three apps, one server, three rails. Every call goes down the same line:
+
+1. **Read.** An AI reader decides whether a post is a real call, long or short, and which coin. Sarcasm,
+   questions and hindsight don't count.
+2. **Check the coin.** Chainlink CRE's `check-coin` workflow: every node reads the contract's symbol on Base and
+   asks which Base token is the real one for that ticker. They must agree; the signed verdict goes to our
+   `KallVerdicts` contract. A fake coin gets "Call check failed" and no trade.
+3. **Price.** Entry is the Chainlink price feed on Base at the minute of the post.
 4. **Trade.** Definitive Flash quotes (price impact, slippage and fee shown first), you sign, it fills on Base,
-   and you get the Basescan receipt and the route Flash took.
-5. **Record.** The call, its snapshot and the trade go to Arkiv and Swarm.
-6. **Score.** When the call's time is up it's a hit or a miss with its real return, and the caller's record
-   updates everywhere.
+   and you get the Basescan transaction and the route Flash took.
+5. **Record.** The call and the trade are written to Arkiv as read-only records; the post is snapshotted to Swarm,
+   so deleting the tweet doesn't delete the record.
+6. **Score.** When the call's time is up, CRE's `score-calls` workflow takes the price at the post and at the
+   deadline across nodes, signs a hit or a miss with its real return, and the caller's record updates in all
+   three apps.
 
-## What each sponsor does here
+| Sponsor | What it does in Kall | Code |
+| --- | --- | --- |
+| **Definitive Flash** | Every trade: market, limit, TWAP, take-profit and stop-loss. Approvals sized to the order, never unlimited; the API key never leaves the server | **[docs/DEFINITIVE.md](docs/DEFINITIVE.md)** · [`definitive.ts`](packages/integrations/src/definitive.ts), [`/api/flash`](kallr-webapp/app/api/flash) · [our feedback](feedback/definitive.md) |
+| **Chainlink** | Price feeds on Base for entry and exit prices; CRE workflows for coin checks and call scores, written to `KallVerdicts` on Base Sepolia | **[docs/CHAINLINK.md](docs/CHAINLINK.md)** · [`kall-cre/`](kall-cre), [`/api/cre`](kallr-webapp/app/api/cre) |
+| **Arkiv** | Calls, results, trades and tracked callers as read-only entities anyone can query; each trade owned by its trader | **[arkiv/README.md](arkiv/README.md)** · [`arkiv.ts`](packages/integrations/src/arkiv.ts) |
 
-- **Definitive Flash: every trade.** Market, limit and TWAP orders with take-profit and stop-loss attached.
-  Approvals are sized to the order, never unlimited; the API key stays on our server. Code:
-  [`definitive.ts`](packages/integrations/src/definitive.ts), [`/api/flash`](kallr-webapp/app/api/flash).
-  How we use it and who signs: **[docs/DEFINITIVE.md](docs/DEFINITIVE.md)**. Our notes for the team:
-  [feedback/definitive.md](feedback/definitive.md).
-- **Arkiv: the receipts.** Calls, results, trades and the callers we track, read-only so nobody can edit a miss,
-  and readable by anyone without asking us. The whole story, schema and what got in our way:
-  **[arkiv/README.md](arkiv/README.md)**.
-- **Chainlink: the checks.** A CRE workflow decides whether the coin in a post is the real one (fakes can't be
-  traded) and another scores calls; both sign their answer onto a contract on Base Sepolia. Price feeds on Base
-  give every call its entry and exit. How it works and what's still simulated: **[docs/CHAINLINK.md](docs/CHAINLINK.md)**.
+Also: Swarm (post snapshots), Privy (sign in with X, embedded wallet on Base), GoPlus and Dexscreener (token checks).
 
-Also: Privy (sign in with X, embedded wallet), GoPlus and Dexscreener (token checks).
+## Proof: the real transactions
 
-## Proof it runs
+**Definitive Flash, Base mainnet.** One trade from each app, all filled:
 
-Everything Kall writes is created by one wallet, `0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53`, on Arkiv's
-Rabdi testnet. Anyone can list it:
+| From | Trade | Fill on Base | Route |
+| --- | --- | --- | --- |
+| Kall Keyboard (iPhone) | Sold 0.000449 ETH for $0.97 at $2,171.03 | [`0x89b678a1…`](https://basescan.org/tx/0x89b678a1f56a290db3976813b14d83c9799ee3ad5a6fc63e17287e6c35a8a0f1) | Uniswap v2 |
+| Kall Extension on X, copying @lookonchain | Sold 0.0001 ETH for $0.20 at $2,045.26 | [`0x76e5c879…`](https://basescan.org/tx/0x76e5c879019ee12da786b34831c0f114012959cb4d8fc798438f5ce1a1c1b24e) | Uniswap v2 |
+| Kall Web App | Sold 0.0003 ETH for $0.66 at $2,188.95 | [`0xafa4f440…`](https://basescan.org/tx/0xafa4f4403abd459f9ddd51feda70b8dc5211518e92765a7c43061d3fdfc1e5db) | Uniswap v3 |
 
-```
-arkiv.schema = str('kallr.call-results') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)
-```
+**Chainlink CRE, Base Sepolia.** `KallVerdicts` at
+[`0x6bf7fd3d…3c88bc52`](https://sepolia.basescan.org/address/0x6bf7fd3d5fa88090f30293aabf81565c3f88bc52).
+Four coin checks, each signed by the workflow and written through Chainlink's forwarder:
 
-A few real calls from X and how they ended:
+| Claimed | Contract checked | Verdict | Transaction |
+| --- | --- | --- | --- |
+| $DEGEN | `0x4ed4…efed` (DEGEN) | Real | [`0x5582d3ba…`](https://sepolia.basescan.org/tx/0x5582d3ba9fa5515c5161273941e7933b009f8c194b32b2d1d82cc9a3bc991954) |
+| $DEGEN | `0x8335…2913` (that's USDC) | Fake: wrong coin | [`0xb09b70b7…`](https://sepolia.basescan.org/tx/0xb09b70b744b238884270835d76dba63764c88e73148f1fc00e5cf16aae97d39f) |
+| $TOSHI | `0x8544…4a8c` | Fake: impostor, real one is `0xac1b…b2b4` | [`0x07091f3b…`](https://sepolia.basescan.org/tx/0x07091f3be329eae796dd14d9319b42aeeabd8394594b550590492b96e73d3002) |
+| $TOSHI | `0xac1b…b2b4` (TOSHI) | Real | [`0x694d07a3…`](https://sepolia.basescan.org/tx/0x694d07a3c4a5d1fea84e7df551a2859b08663173732be5862bb052532e3f448c) |
+
+**Arkiv, Rabdi testnet.** Everything is created by one writer,
+`0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53`. The keyboard and X trades above have Arkiv records owned by their
+traders ([`0x4c7fbbec…`](https://rabdi.explorer.arkiv.network/entity/0x4c7fbbecfcbc5b9a7dc0ef34a5d964324ea7a77aa2b7af70ed3d3cd7e6d0ab0f) and [`0x36f6a32c…`](https://rabdi.explorer.arkiv.network/entity/0x36f6a32c46223fb9e192958508282018b2b376bb6b39ba1039e93056a9f0ac14)). Real calls from X and how they ended:
 
 | Post on X | Result | Arkiv |
 | --- | --- | --- |
@@ -96,7 +103,13 @@ A few real calls from X and how they ended:
 | [@CryptoKaleo: "$ETH Up only."](https://x.com/CryptoKaleo/status/2118005120076234811) | ETH miss −6.47% | [`0xe1488385…`](https://rabdi.explorer.arkiv.network/tx/0xe14883858ab96299246ca9bf4b4bbcecc4c97f3336aeebb1e5087bcdca80daf4) |
 | [@CryptoKaleo: "$100K+ IS A MAGNET"](https://x.com/CryptoKaleo/status/2118004723597169006) | BTC miss −5.11% | [`0x5346935d…`](https://rabdi.explorer.arkiv.network/tx/0x5346935d9436733485fd9be452f14d3ba05d18a38b60cccf1c7dad0ede1af769) |
 
+Anyone can list them:
+`arkiv.schema = str('kallr.call-results') AND $creator = addr(0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53)`.
 Yes, the famous accounts miss a lot. That's the point.
+
+**Swarm.** [@CryptoKaleo's "Buy more Bitcoin."](https://x.com/CryptoKaleo/status/2118301291923329528) →
+[Arkiv `0x6277fe4a…`](https://rabdi.explorer.arkiv.network/tx/0x6277fe4ad3d91f45d6932829e3b75ff2eb3b2dad828584ae31de453fbac38cbc)
+→ [Swarm snapshot `ead89c2a…`](https://api.gateway.ethswarm.org/bzz/ead89c2aeed4dbcf16a7d65094692e1a4ad4d70a95a380832867a286d101de3e/).
 
 ## Run it
 
@@ -108,27 +121,31 @@ npm test
 ```
 
 - **Extension:** `npm run build -w @kallr/extension`, then `chrome://extensions` → Load unpacked → `kallr-extension/dist`.
-- **Android keyboard:** [download the APK](https://kall-markets-downloads-308324916322.s3.ap-south-1.amazonaws.com/apps/kall-keyboard.apk), or build it: [kallr-keyboard/KALLR.md](kallr-keyboard/KALLR.md).
-- **iPhone keyboard:** build from Xcode: [kallr-ios/README.md](kallr-ios/README.md).
+- **Chainlink CRE:** with the [CRE CLI](https://docs.chain.link/cre), from `kall-cre/`:
+  `cre workflow simulate check-coin --target staging-settings --broadcast`. The contract is in `kall-cre/contracts`.
+- **Android:** [download the APK](https://kall-markets-downloads-308324916322.s3.ap-south-1.amazonaws.com/apps/kall-keyboard.apk), or build it: [kallr-keyboard/KALLR.md](kallr-keyboard/KALLR.md).
+- **iPhone:** build from Xcode: [kallr-ios/README.md](kallr-ios/README.md).
 
-Every variable is listed in [`kallr-webapp/.env.example`](kallr-webapp/.env.example). Without the optional
-keys the app still runs; the feature that needs one says so.
+Every variable is in [`kallr-webapp/.env.example`](kallr-webapp/.env.example); without the optional keys the app
+still runs and the feature that needs one says so.
 
 ```
-kallr-webapp/      Next.js web app and API (landing, /app, /trades)
+kallr-webapp/      Next.js web app and the one server (landing, /app, every API)
 kallr-extension/   Chrome extension for X
-kallr-keyboard/    Android keyboard (FlorisBoard fork)
-kallr-ios/         iPhone app and keyboard (SwiftUI)
-kallr-swarm/       the /trades dashboard as a static page on Swarm
-packages/          order parsing, call scoring, Definitive, Arkiv, checks
-arkiv/             everything about how we use Arkiv
+kall-cre/          Chainlink CRE workflows (check-coin, score-calls) and the KallVerdicts contract
+kallr-ios/         iPhone app and Kall Keyboard (SwiftUI)
+kallr-keyboard/    Android Kall Keyboard (FlorisBoard fork)
+packages/          shared code: order parsing, call scoring, Definitive, Arkiv, token checks
+arkiv/             how we use Arkiv, and what got in our way
+docs/              CHAINLINK.md and DEFINITIVE.md: how we use each, the architecture diagram, brand, screenshots
+feedback/          notes for the Definitive team
 ```
 
 ## Not done yet
 
+- The CRE workflows run through the CRE CLI's simulator, which signs and broadcasts real reports to `KallVerdicts`;
+  they aren't deployed to a live Chainlink DON yet, and `score-calls` hasn't written its first score on chain.
 - The iPhone keyboard trades from a small demo wallet our server holds (capped per order), not the user's own.
-- The Swarm dashboard page waits for the public gateway's approval; the post snapshots themselves are served.
-- The X bot works in dry run; we're not running it live.
 
 ## What we reused
 

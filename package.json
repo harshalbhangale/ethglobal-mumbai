@@ -2,11 +2,10 @@
   "name": "kallr",
   "version": "0.1.0",
   "private": true,
-  "description": "Kallr: tag @Kallr under any crypto call on X to see its after market, copy it with one reply, and get a call back when your exits hit.",
+  "description": "Kall Markets: every crypto call priced, scored and kept on Arkiv, then traded in one tap on Definitive Flash.",
   "workspaces": [
     "kallr-webapp",
     "kallr-extension",
-    "kallr-xbot",
     "packages/*"
   ],
   "scripts": {
@@ -15,7 +14,6 @@
     "start": "npm run start -w @kallr/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
-    "x-bot": "npm start -w @kallr/x-bot",
     "brand": "node scripts/make-brand.mjs"
   },
   "devDependencies": {
