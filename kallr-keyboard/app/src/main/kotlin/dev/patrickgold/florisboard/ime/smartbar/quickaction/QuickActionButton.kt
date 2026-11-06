@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import dev.patrickgold.florisboard.ime.kallr.flowTint
 import dev.patrickgold.compose.tooltip.PlainTooltip
 import dev.patrickgold.florisboard.FlorisImeService
 import dev.patrickgold.florisboard.ime.keyboard.ComputingEvaluator
@@ -133,11 +134,12 @@ fun QuickActionButton(
                                 selector = selector,
                             ) {
                                 if (action.data.code == dev.patrickgold.florisboard.ime.text.key.KeyCode.IME_UI_MODE_KALLR) {
-                                    // Kallr: the Trade button stands out in Kallr blue, like the emoji key does.
+                                    // Kallr: the Trade button carries Kallr's moving gradient, so it reads as the way in.
                                     androidx.compose.material3.Icon(
                                         imageVector = imageVector,
                                         contentDescription = "Trade",
-                                        tint = dev.patrickgold.florisboard.ime.kallr.KallrBlue,
+                                        tint = androidx.compose.ui.graphics.Color.White,
+                                        modifier = Modifier.flowTint(),
                                     )
                                 } else {
                                     SnyggIcon(imageVector = imageVector)

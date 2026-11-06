@@ -16,6 +16,17 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -31,9 +42,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,13 +49,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -66,7 +74,19 @@ val KallrBlue = Color(0xFF2F6BFF)
 fun KallrTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
     MaterialTheme(
-        colorScheme = if (dark) darkColorScheme(primary = KallrBlue) else lightColorScheme(primary = KallrBlue),
+        colorScheme = if (dark) {
+            darkColorScheme(
+                primary = KallrBlue, secondary = KallrViolet,
+                background = Color(0xFF0B1020), surface = Color(0xFF111833), surfaceVariant = Color(0xFF1A2340),
+                onSurface = Color(0xFFF4F6FB), onSurfaceVariant = Color(0xFF9AA3C2),
+            )
+        } else {
+            lightColorScheme(
+                primary = KallrBlue, secondary = KallrViolet,
+                surface = Color.White, surfaceVariant = Color(0xFFEEF1F8),
+                onSurface = KallrInk, onSurfaceVariant = Color(0xFF6B7591),
+            )
+        },
         content = content,
     )
 }
@@ -115,6 +135,41 @@ class KallrTradeActivity : ComponentActivity() {
     }
 }
 
+/** The sheet's grab handle, in Kallr's moving gradient. */
+@Composable
+private fun SheetHandle() {
+    Box(Modifier.fillMaxWidth().padding(bottom = 14.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.width(44.dp).height(5.dp).flowBackground(RoundedCornerShape(50)))
+    }
+}
+
+/** What's happening, over a gradient bar that keeps moving until it's done. */
+@Composable
+private fun Progress(text: String) {
+    Column {
+        Text(text, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(12.dp))
+        Box(
+            Modifier.fillMaxWidth().height(5.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50)),
+        ) { Box(Modifier.fillMaxWidth().height(5.dp).flowBackground(RoundedCornerShape(50), durationMs = 1100)) }
+    }
+}
+
+/** A mint check that springs in when an order lands. */
+@Composable
+private fun DoneMark() {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val scale by animateFloatAsState(if (shown) 1f else 0.3f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessLow), label = "kallr-done")
+    Box(
+        Modifier
+            .size(52.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .background(Brush.linearGradient(listOf(KallrMint, KallrSky)), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) { Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp)) }
+}
+
 private sealed interface SheetState {
     data object SignIn : SheetState
     data object Loading : SheetState
@@ -153,12 +208,10 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
             tonalElevation = 2.dp,
         ) {
-            Column(Modifier.padding(20.dp).navigationBarsPadding()) {
+            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 20.dp).navigationBarsPadding()) {
+                SheetHandle()
                 when (val s = state) {
-                    SheetState.Loading -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.padding(end = 12.dp).height(20.dp))
-                        Text("Pricing ${order.symbol ?: "your order"} on Flash…")
-                    }
+                    SheetState.Loading -> Progress("Pricing ${order.symbol ?: "your order"} on Flash…")
                     SheetState.SignIn -> {
                         Text("Sign in to trade", fontSize = 18.sp, fontWeight = FontWeight.Medium)
                         Text(
@@ -166,14 +219,14 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
                             modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Button(onClick = {
+                        FlowButton("Sign in with X") {
                             scope.launch {
                                 KallrWallet.signInWithX(context).fold(
                                     onSuccess = { load() },
                                     onFailure = { state = SheetState.Failed(it.message ?: "Sign-in didn't finish.", null) },
                                 )
                             }
-                        }, modifier = Modifier.fillMaxWidth()) { Text("Sign in with X") }
+                        }
                     }
                     is SheetState.Ready -> {
                         val p = s.quote.preview
@@ -190,8 +243,7 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
                         Line("Approval", p.approval)
                         Line("Wallet", "Embedded · ${short(s.wallet)}")
                         Spacer(Modifier.height(14.dp))
-                        Button(
-                            onClick = {
+                        FlowButton("Confirm and sign") {
                                 scope.launch {
                                     KallrTrader.place(context, order) { step -> state = SheetState.Working(step) }.fold(
                                         onSuccess = {
@@ -202,41 +254,37 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
                                         onFailure = { state = SheetState.Failed(it.message ?: "The order didn't go through.", s.wallet) },
                                     )
                                 }
-                            },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = KallrBlue),
-                        ) { Text("Confirm and sign", fontSize = 16.sp) }
+                        }
                         PoweredByFlash()
                     }
-                    is SheetState.Working -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.padding(end = 12.dp).height(20.dp))
-                        Text(s.step.label)
-                    }
+                    is SheetState.Working -> Progress(s.step.label)
                     is SheetState.Done -> {
+                        DoneMark()
+                        Spacer(Modifier.height(12.dp))
                         Text("Order placed on Base", fontSize = 18.sp, fontWeight = FontWeight.Medium)
                         Text(
                             "${s.title} · Flash order ${s.orderId.take(10)}… · it shows on your Kallr trades.",
                             modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedButton(onClick = {
                                 val share = "${s.title} via Kallr" + (order.caller?.let { ", copying @$it's call" } ?: "") + ". Flash on Base."
                                 val cm = context.getSystemService(ClipboardManager::class.java)
                                 cm?.setPrimaryClip(ClipData.newPlainText("Kallr", share))
                                 Toast.makeText(context, "Copied. Paste it in the chat.", Toast.LENGTH_SHORT).show()
                                 onClose()
-                            }) { Text("Copy to share") }
-                            Button(onClick = onClose, colors = ButtonDefaults.buttonColors(containerColor = KallrBlue)) { Text("Done") }
+                            }, modifier = Modifier.weight(1f).height(48.dp)) { Text("Copy to share") }
+                            FlowButton("Done", modifier = Modifier.weight(1f), onClick = onClose)
                         }
                         PoweredByFlash()
                     }
                     is SheetState.Failed -> {
                         Text("Couldn't place it", fontSize = 18.sp, fontWeight = FontWeight.Medium)
                         Text(s.message, modifier = Modifier.padding(top = 6.dp, bottom = 14.dp), color = MaterialTheme.colorScheme.error)
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(onClick = onClose) { Text("Close") }
-                            Button(onClick = { scope.launch { load() } }) { Text("Try again") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedButton(onClick = onClose, modifier = Modifier.weight(1f).height(48.dp)) { Text("Close") }
+                            FlowButton("Try again", modifier = Modifier.weight(1f)) { scope.launch { load() } }
                         }
                     }
                 }
@@ -282,7 +330,8 @@ private fun WalletScreen() {
     LaunchedEffect(Unit) { refresh() }
 
     Column(Modifier.systemBarsPadding().padding(24.dp)) {
-        Text("Kallr wallet", fontSize = 24.sp, fontWeight = FontWeight.Medium)
+        FlowLine(Modifier.padding(bottom = 18.dp).width(56.dp), height = 4.dp)
+        Text("Kallr wallet", fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
         Text(
             "Trade calls from your keyboard, in X, Telegram or any app. Same wallet as the Kallr desk.",
             modifier = Modifier.padding(top = 6.dp, bottom = 20.dp),
@@ -293,15 +342,13 @@ private fun WalletScreen() {
                 "This build has no Privy app configured. Rebuild with -PprivyAppId and -PprivyClientId.",
                 color = MaterialTheme.colorScheme.error,
             )
-            busy -> CircularProgressIndicator()
-            address == null -> Button(onClick = {
+            busy -> Progress("Opening your wallet…")
+            address == null -> FlowButton("Sign in with X") {
                 scope.launch {
                     error = null
                     KallrWallet.signInWithX(context).onFailure { error = it.message ?: "Sign-in didn't finish." }
                     refresh()
                 }
-            }, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = KallrBlue)) {
-                Text("Sign in with X")
             }
             else -> {
                 val a = address!!
@@ -370,15 +417,13 @@ private fun ShareSheet(text: String, onClose: () -> Unit) {
 
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)).clickable { onClose() }, contentAlignment = Alignment.BottomCenter) {
         Surface(Modifier.fillMaxWidth().clickable(enabled = false) {}, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), tonalElevation = 2.dp) {
-            Column(Modifier.padding(20.dp).navigationBarsPadding()) {
-                Text("Kallr · check this call", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 20.dp).navigationBarsPadding()) {
+                SheetHandle()
+                Text("Kallr · check this call", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 val r = result
                 when {
-                    loading -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.padding(end = 12.dp).height(20.dp))
-                        Text("Reading it…")
-                    }
+                    loading -> Progress("Reading it…")
                     r == null -> Text("Couldn't check that. Is the Kallr server reachable?", color = MaterialTheme.colorScheme.error)
                     else -> {
                         r.fake?.let {
@@ -406,23 +451,18 @@ private fun ShareSheet(text: String, onClose: () -> Unit) {
                             }
                         } else {
                             Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("1", "5", "20").forEach { a ->
-                                    if (usd == a) Button(onClick = {}, colors = ButtonDefaults.buttonColors(containerColor = KallrBlue)) { Text("\$$a") }
-                                    else OutlinedButton(onClick = { usd = a }) { Text("\$$a") }
-                                }
+                            val chipText = MaterialTheme.colorScheme.onSurface
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                listOf("1", "5", "20").forEach { a -> FlowChip("\$$a", usd == a, chipText) { usd = a } }
                                 val e = exits
-                                if (e != null) {
-                                    Button(onClick = { exits = null }, colors = ButtonDefaults.buttonColors(containerColor = KallrBlue)) {
-                                        Text("TP ${e.first.fmt()}% · SL ${e.second.fmt()}%")
-                                    }
-                                } else {
-                                    OutlinedButton(onClick = { exits = 10.0 to 5.0 }) { Text("No exits") }
-                                }
+                                FlowChip(
+                                    if (e != null) "TP ${e.first.fmt()}% · SL ${e.second.fmt()}%" else "No exits",
+                                    e != null,
+                                    chipText,
+                                ) { exits = if (e != null) null else 10.0 to 5.0 }
                             }
                             Spacer(Modifier.height(10.dp))
-                            Button(
-                                onClick = {
+                            FlowButton(if (wallet == null) "Sign in to trade" else "Buy \$$usd of ${trade.symbol}") {
                                     if (wallet == null) {
                                         KallrWalletActivity.open(context)
                                     } else {
@@ -441,10 +481,7 @@ private fun ShareSheet(text: String, onClose: () -> Unit) {
                                         )
                                         onClose()
                                     }
-                                },
-                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = KallrBlue),
-                            ) { Text(if (wallet == null) "Sign in to trade" else "Buy \$$usd of ${trade.symbol}", fontSize = 16.sp) }
+                            }
                         }
                     }
                 }

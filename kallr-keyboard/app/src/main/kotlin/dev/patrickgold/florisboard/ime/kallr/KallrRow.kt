@@ -11,7 +11,7 @@ package dev.patrickgold.florisboard.ime.kallr
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,12 +20,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -84,7 +85,12 @@ fun KallrRow() {
         val key = "$reference\u0000$typed"
         if (key == s.lastLookup && s.result != null) return@LaunchedEffect
         delay(400) // wait for typing to settle
-        val r = Kallr.lookup(context, reference, typed)
+        s.loading = true
+        val r = try {
+            Kallr.lookup(context, reference, typed)
+        } finally {
+            s.loading = false
+        }
         s.result = r
         if (r != null) s.lastLookup = key
         s.aiNote = null
@@ -118,9 +124,12 @@ fun KallrRow() {
         r?.call != null -> "Trade @${r.post?.handle ?: "this"}'s call · ${r.call.line}"
         r?.post != null && r.trade != null -> "Trade @${r.post.handle}'s $${r.trade.symbol} call"
         r?.post != null -> "@${r.post.handle}: not a call we can price"
+        s.loading && reference != null -> "Reading what you copied…"
+        s.loading && typed != null -> "Reading your order…"
         typed != null -> "Trade it: $typed"
         else -> null
     }
+    val shape = RoundedCornerShape(12.dp)
 
     AnimatedVisibility(visible = headline != null, enter = VerticalEnterTransition, exit = VerticalExitTransition) {
         Row(
@@ -128,12 +137,16 @@ fun KallrRow() {
                 .fillMaxWidth()
                 .height(FlorisImeSizing.smartbarHeight)
                 .padding(horizontal = 8.dp, vertical = 4.dp)
-                .background(themeText().copy(alpha = 0.06f), RoundedCornerShape(10.dp))
-                .clickable {
+                .clip(shape)
+                .background(themeText().copy(alpha = 0.06f))
+                // A warning gets a still red edge; a call gets the moving Kallr gradient.
+                .then(if (warning != null) Modifier.border(1.dp, Danger.copy(alpha = 0.6f), shape) else Modifier.flowBorder(1.5.dp, shape))
+                .shimmer(s.loading)
+                .pressable {
                     s.tab = Tab.Swap
                     keyboardManager.activeState.imeUiMode = ImeUiMode.KALLR
                 }
-                .padding(horizontal = 10.dp),
+                .padding(start = 12.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -148,8 +161,10 @@ fun KallrRow() {
             }
             // A warning opens the panel to explain it; it never offers "Trade" next to a fake contract.
             Box(
-                Modifier.background(if (warning != null) Danger else KallrBlue, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 5.dp),
-            ) { Text(if (warning != null) "Why?" else "Trade", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+                Modifier
+                    .then(if (warning != null) Modifier.background(Danger, RoundedCornerShape(50)) else Modifier.flowBackground(RoundedCornerShape(50)))
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+            ) { Text(if (warning != null) "Why?" else "Trade", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
         }
     }
 }

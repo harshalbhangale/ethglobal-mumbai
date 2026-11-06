@@ -13,6 +13,27 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,22 +60,21 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,7 +87,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.florisboard.lib.snygg.ui.SnyggColumn
@@ -123,6 +142,9 @@ internal object KallrPanelState {
         (result?.trade?.takeIf { it.token == token } ?: extraTrade?.takeIf { it.token == token })?.symbol
             ?: if (token.startsWith("0x")) short(token) else token
 
+    /** True while the row is asking Kallr about the copied message or typed order. */
+    var loading by mutableStateOf(false)
+
     /** The clipboard or typed text the row last looked up, so coming back doesn't redo it and reset the panel. */
     var lastLookup: String? = null
 
@@ -169,18 +191,7 @@ internal fun short(a: String) = "${a.take(6)}…${a.takeLast(4)}"
 internal fun themeText(): Color = rememberSnyggThemeQuery("smartbar-candidate-word-text").foreground(default = Color(0xFF202124))
 
 @Composable
-internal fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(50)
-    Box(
-        Modifier
-            .padding(end = 6.dp)
-            .then(if (selected) Modifier.background(KallrBlue, shape) else Modifier.border(1.dp, Muted.copy(alpha = 0.5f), shape))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        Text(label, color = if (selected) Color.White else themeText(), fontSize = 13.sp, fontWeight = FontWeight.Medium)
-    }
-}
+internal fun Chip(label: String, selected: Boolean, onClick: () -> Unit) = FlowChip(label, selected, themeText(), onClick)
 
 @Composable
 private fun ChipRow(content: @Composable () -> Unit) {
@@ -190,49 +201,44 @@ private fun ChipRow(content: @Composable () -> Unit) {
     ) { content() }
 }
 
+/** A soft panel with a hairline that fades from Kallr blue to violet to nothing. */
 @Composable
 private fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
     Column(
         modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
-            .background(themeText().copy(alpha = 0.06f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .background(themeText().copy(alpha = 0.05f), shape)
+            .border(1.dp, Brush.linearGradient(listOf(KallrBlue.copy(alpha = 0.45f), KallrViolet.copy(alpha = 0.25f), Color.Transparent)), shape)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
         content = content,
     )
 }
 
 @Composable
 private fun PrimaryButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .background(if (enabled) KallrBlue else Muted.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = 11.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label,
-            color = if (enabled) Color.White else themeText(),
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
+    FlowButton(
+        label,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+        enabled = enabled,
+        height = 46.dp,
+        disabledText = themeText().copy(alpha = 0.7f),
+        onClick = onClick,
+    )
 }
 
 @Composable
 private fun FlashFooter() {
-    Text(
-        "Powered by Flash · Definitive · on Base",
-        fontSize = 11.sp,
-        color = Muted,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-    )
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Bolt, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp).flowTint())
+        Spacer(Modifier.width(3.dp))
+        Text("Powered by Flash · Definitive · on Base", fontSize = 11.sp, color = Muted)
+    }
 }
 
 @Composable
@@ -246,43 +252,83 @@ fun KallrInputLayout() {
         elementName = FlorisImeUi.Media.elementName,
         modifier = Modifier.fillMaxWidth().height(FlorisImeSizing.imeUiHeight()),
     ) {
+        // A moving line across the top: the panel is Kallr's, not the keyboard's.
+        FlowLine(height = 2.dp)
         // Top bar: back to the keys, tabs, wallet.
         Row(
-            Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 8.dp),
+            Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier
-                    .border(1.dp, Muted.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                    .clickable { keyboardManager.activeState.imeUiMode = ImeUiMode.TEXT }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-            ) { Text("ABC", color = themeText(), fontWeight = FontWeight.Bold, fontSize = 13.sp) }
-            Spacer(Modifier.width(8.dp))
             Row(
-                Modifier.weight(1f).background(themeText().copy(alpha = 0.06f), RoundedCornerShape(10.dp)).padding(3.dp),
+                Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(themeText().copy(alpha = 0.07f))
+                    .pressable { keyboardManager.activeState.imeUiMode = ImeUiMode.TEXT }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Tab.entries.forEach { t ->
-                    val selected = s.tab == t
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .then(if (selected) Modifier.background(KallrBlue, RoundedCornerShape(8.dp)) else Modifier)
-                            .clickable { s.tab = t }
-                            .padding(vertical = 6.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(t.label, color = if (selected) Color.White else themeText(), fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                    }
-                }
+                Icon(Icons.Default.Keyboard, contentDescription = null, tint = themeText(), modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("ABC", color = themeText(), fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             Spacer(Modifier.width(8.dp))
-            Box(Modifier.size(8.dp).background(if (wallet != null) Up else Muted, CircleShape))
+            TabBar(Modifier.weight(1f))
+            Spacer(Modifier.width(4.dp))
+            if (wallet != null) PulseDot(KallrMint, dot = 7.dp) else Box(Modifier.padding(5.dp).size(7.dp).background(Muted, CircleShape))
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            when (s.tab) {
-                Tab.Swap -> SwapTab(wallet)
-                Tab.Positions -> PositionsTab(wallet)
-                Tab.Wallet -> WalletTab(wallet)
+            AnimatedContent(
+                targetState = s.tab,
+                transitionSpec = {
+                    val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                    (slideInHorizontally(tween(220)) { it / 6 * dir } + fadeIn(tween(220))) togetherWith
+                        (slideOutHorizontally(tween(180)) { -it / 6 * dir } + fadeOut(tween(160)))
+                },
+                label = "kallr-tab",
+            ) { tab ->
+                when (tab) {
+                    Tab.Swap -> SwapTab(wallet)
+                    Tab.Positions -> PositionsTab(wallet)
+                    Tab.Wallet -> WalletTab(wallet)
+                }
+            }
+        }
+    }
+}
+
+/** Segmented tabs; the selected one is a moving gradient that springs across when you switch. */
+@Composable
+private fun TabBar(modifier: Modifier = Modifier) {
+    val s = KallrPanelState
+    BoxWithConstraints(
+        modifier
+            .height(36.dp)
+            .background(themeText().copy(alpha = 0.07f), RoundedCornerShape(12.dp))
+            .padding(3.dp),
+    ) {
+        val w = maxWidth / Tab.entries.size
+        val x by animateDpAsState(
+            targetValue = w * s.tab.ordinal,
+            animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
+            label = "kallr-tab-indicator",
+        )
+        Box(
+            Modifier
+                .offset(x = x)
+                .width(w)
+                .fillMaxHeight()
+                .shadow(6.dp, RoundedCornerShape(9.dp), ambientColor = KallrViolet, spotColor = KallrBlue)
+                .flowBackground(RoundedCornerShape(9.dp)),
+        )
+        Row(Modifier.fillMaxSize()) {
+            Tab.entries.forEach { t ->
+                val color by animateColorAsState(if (s.tab == t) Color.White else themeText(), tween(200), label = "kallr-tab-text")
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().pressable { s.tab = t },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(t.label, color = color, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }
@@ -323,8 +369,8 @@ private fun SwapTab(wallet: String?) {
                     }
                     r?.ai != null || s.aiNote != null -> {}
                     else -> Text(
-                        "Copy a call (X link or a \$TICKER message) to trade it here, or hold the mic and say an order.",
-                        color = Muted, fontSize = 12.sp,
+                        "Copy an X link or a \$TICKER message, or hold the mic.",
+                        color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -403,11 +449,12 @@ private fun MicButton() {
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf("Hold to say an order") }
     var listening by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(14.dp)
     Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
-            .background(if (listening) KallrBlue.copy(alpha = 0.18f) else themeText().copy(alpha = 0.06f), RoundedCornerShape(12.dp))
+            .then(if (listening) Modifier.flowBackground(shape, durationMs = 1800) else Modifier.background(themeText().copy(alpha = 0.05f), shape))
             .pointerInput(Unit) {
                 detectTapGestures(onPress = {
                     if (!KallrVoice.start(context)) {
@@ -436,12 +483,24 @@ private fun MicButton() {
                     }
                 })
             }
-            .padding(horizontal = 12.dp, vertical = 9.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Default.Mic, contentDescription = "Speak an order", tint = KallrBlue, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(status, color = themeText(), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Box(
+            Modifier.size(28.dp).then(if (listening) Modifier.background(Color.White.copy(alpha = 0.2f), CircleShape) else Modifier.flowBackground(CircleShape)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (listening) ListeningBars() else Icon(Icons.Default.Mic, contentDescription = "Speak an order", tint = Color.White, modifier = Modifier.size(17.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            status,
+            color = if (listening) Color.White else themeText(),
+            fontSize = 13.sp,
+            fontWeight = if (listening) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -497,6 +556,24 @@ private fun parsePositions(context: Context, text: String): List<Position> {
     }
 }
 
+/** Working orders pulse in Kallr blue; filled ones are mint; rejected ones red. */
+@Composable
+private fun StatusPill(p: Position) {
+    val color = when {
+        p.open -> KallrBlue
+        p.status == "Filled" -> KallrMint
+        p.status == "Rejected" -> Danger
+        else -> Muted
+    }
+    Row(
+        Modifier.background(color.copy(alpha = 0.14f), RoundedCornerShape(50)).padding(start = 2.dp, end = 9.dp, top = 1.dp, bottom = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (p.open) PulseDot(color, dot = 6.dp) else Box(Modifier.padding(6.dp).size(6.dp).background(color, CircleShape))
+        Text(p.status, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 @Composable
 private fun Balances(wallet: String, refreshKey: Int) {
     var balances by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -506,16 +583,23 @@ private fun Balances(wallet: String, refreshKey: Int) {
             (o.str("usdc") ?: "0") to (o.str("eth") ?: "0")
         }
     }
+    // Numbers in the brand gradient; lighter stops on a dark keyboard so they stay readable.
+    val numbers = if (themeText().luminance() > 0.5f) Brush.linearGradient(listOf(Color(0xFF7AB2FF), Color(0xFFB79CFF))) else BrandBrush
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(
             "USDC" to (balances?.first?.toDoubleOrNull()?.let { "%.2f".format(it) } ?: "…"),
             "ETH for gas" to (balances?.second?.toDoubleOrNull()?.let { "%.5f".format(it) } ?: "…"),
         ).forEach { (label, value) ->
             Column(
-                Modifier.weight(1f).background(themeText().copy(alpha = 0.06f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
+                Modifier
+                    .weight(1f)
+                    .background(themeText().copy(alpha = 0.05f), RoundedCornerShape(14.dp))
+                    .border(1.dp, Brush.linearGradient(listOf(KallrBlue.copy(alpha = 0.4f), Color.Transparent)), RoundedCornerShape(14.dp))
+                    .shimmer(balances == null)
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
             ) {
                 Text(label, color = Muted, fontSize = 11.sp)
-                Text(value, color = themeText(), fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text(value, style = TextStyle(brush = numbers, fontSize = 19.sp, fontWeight = FontWeight.SemiBold))
             }
         }
     }
@@ -564,13 +648,7 @@ private fun PositionsTab(wallet: String?) {
                 Card {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(p.title, color = themeText(), fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            p.status,
-                            color = if (p.open) KallrBlue else Muted,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.border(1.dp, (if (p.open) KallrBlue else Muted).copy(alpha = 0.5f), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 2.dp),
-                        )
+                        StatusPill(p)
                     }
                     p.exits?.let { Text(it, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 }
