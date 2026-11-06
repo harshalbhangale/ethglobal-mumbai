@@ -1,7 +1,7 @@
 import type { Answer, PostRef } from "./call-view";
 import { appOrigin } from "./config";
 import { el, openDesk, safeLink, send } from "./dom";
-import { BASESCAN, type CardOrder, placeOnX, type QuoteFacts, type Step, toFlashInput, waitForFill } from "./flash-direct";
+import { BASESCAN, type CardOrder, placeOnX, type QuoteFacts, type Step, toFlashInput, waitForFill, waitForTradeRecord } from "./flash-direct";
 import { followButton } from "./follows";
 import { definitiveLogo, tokenIcon } from "./logos";
 import { cardOrderText, COPYABLE, DECIMAL, deskOrderUrl } from "./post";
@@ -708,6 +708,8 @@ export function receipt(r: {
   const burst = r.summary ? successBurst(r.summary) : null;
   const swap = el("dd", { class: "swap-pending" }, "Waiting for Definitive to fill on Base…");
   const venue = el("dd", {}, "Best route by Definitive");
+  const arkivTerm = el("dt", {}, "Arkiv");
+  const arkiv = el("dd", { class: "swap-pending" }, "Recording the trade…");
   const card = el(
     "div",
     { class: "done-card" },
@@ -725,9 +727,20 @@ export function receipt(r: {
       ...(r.signer ? row("Signed by", r.signer) : []),
       ...(r.signature ? row("Signature", el("span", { class: "mono", title: `EIP-712 signature: ${r.signature}` }, short(r.signature))) : []),
       ...row("Order", safeLink(`${appOrigin}/app#orders`, `${r.orderId.slice(0, 8)}… ↗`)),
+      arkivTerm,
+      arkiv,
       ...(r.exits ? row("TP/SL", r.exits === "pending_activation" ? "Arms on the first fill" : r.exits) : []),
     ),
   );
+  void waitForTradeRecord(r.orderId, r.from).then((key) => {
+    if (!key) {
+      arkivTerm.remove();
+      arkiv.remove();
+      return;
+    }
+    arkiv.classList.remove("swap-pending");
+    arkiv.replaceChildren(safeLink(`https://rabdi.explorer.arkiv.network/entity/${key}`, "Trade record ↗"));
+  });
   void waitForFill(r.orderId, r.from).then((fill) => {
     if (!fill) {
       swap.replaceChildren("Still filling: check the order page");
