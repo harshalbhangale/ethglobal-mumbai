@@ -55,6 +55,8 @@ export type TradeItem = {
   stopLoss: number | null;
   placedAt: number;
   flashOrderId: string;
+  /** The wallet that placed it; shown when the list is every Kall trade, not just yours. */
+  trader?: string;
   sample?: boolean;
 };
 export type FeedItem = CallItem | ResultItem | TradeItem;
@@ -86,6 +88,8 @@ export function useKallrData(address: Address | null) {
   const [calls, setCalls] = useState<CallItem[] | null>(null);
   const [results, setResults] = useState<ResultItem[] | null>(null);
   const [trades, setTrades] = useState<TradeItem[] | null>(null);
+  /** "yours" while this wallet has trades; "all" when it has none yet and the list is every trade placed through Kall. */
+  const [tradesScope, setTradesScope] = useState<"yours" | "all">("yours");
   const [tracked, setTracked] = useState<TrackedCaller[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,7 +115,11 @@ export function useKallrData(address: Address | null) {
     const [c, r, t, k] = await Promise.allSettled([
       readOpenCalls(client, writer, now),
       readResults(client, writer),
-      address ? readTrades(client, writer, address) : Promise.resolve([]),
+      // Your trades; a wallet that hasn't traded yet sees every trade placed through Kall instead.
+      (async () => {
+        const mine = address ? await readTrades(client, writer, address) : [];
+        return mine.length > 0 ? { scope: "yours" as const, list: mine } : { scope: "all" as const, list: await readTrades(client, writer) };
+      })(),
       readTrackedCallers(client, writer),
     ]);
     if (c.status === "fulfilled")
@@ -145,9 +153,10 @@ export function useKallrData(address: Address | null) {
           deadline: Number(e.deadline.value),
         })),
       );
+    if (t.status === "fulfilled") setTradesScope(t.value.scope);
     if (t.status === "fulfilled")
       setTrades(
-        t.value.map((e) => ({
+        t.value.list.map((e) => ({
           kind: "trade",
           id: e.$key,
           source: (["desk", "extension", "keyboard"].includes(String(e.source.value)) ? e.source.value : "desk") as Source,
@@ -160,6 +169,7 @@ export function useKallrData(address: Address | null) {
           stopLoss: num(e.stopLoss?.value),
           placedAt: Number(e.placedAt.value),
           flashOrderId: String(e.flashOrderId.value),
+          trader: String(e.trader.value),
         })),
       );
     if (k.status === "fulfilled")
@@ -189,6 +199,7 @@ export function useKallrData(address: Address | null) {
     calls: calls ?? [],
     results: results ?? [],
     trades: trades ?? [],
+    tradesScope,
     /** Callers Kallr follows, from Arkiv's kallr.tracked-callers. */
     tracked: tracked ?? [],
   };

@@ -14,10 +14,21 @@ const n = (v: unknown) => (v === undefined || v === null ? 0 : Number(v));
  * extension) or the web app, and which call it copied. The Kall app shows this as its History.
  */
 export async function GET(req: Request) {
-  const wallets = parseWallets(new URL(req.url).searchParams.get("wallets"));
-  if (!wallets) return Response.json({ error: "wallets must be up to five comma-separated addresses" }, { status: 400 });
-
+  const params = new URL(req.url).searchParams;
   const client = arkivWriterAddress ? arkivPublic(process.env.ARKIV_ACCESS_KEY ?? "") : null;
+
+  // ?all=1: every trade placed through Kall, for a wallet that hasn't traded yet. The wallets are the
+  // traders on Kall's Arkiv trade records (newest first, up to five).
+  let wallets: string[] | null;
+  if (params.get("all") === "1") {
+    const all = client && arkivWriterAddress ? await readTrades(client, arkivWriterAddress).catch(() => []) : [];
+    const traders = [...new Set([...all].sort((a, b) => n(b.placedAt.value) - n(a.placedAt.value)).map((t) => String(t.trader.value)))];
+    wallets = parseWallets(traders.slice(0, 5).join(","));
+    if (!wallets) return Response.json({ orders: [], failed: [], scope: "all" }, { headers: { "cache-control": "no-store" } });
+  } else {
+    wallets = parseWallets(params.get("wallets"));
+  }
+  if (!wallets) return Response.json({ error: "wallets must be up to five comma-separated addresses" }, { status: 400 });
   const read: WalletHistory[] = await Promise.all(
     wallets.map(async (address) => {
       const [orders, entities] = await Promise.all([
@@ -45,5 +56,5 @@ export async function GET(req: Request) {
   if (failed.length === wallets.length && orders.length === 0) {
     return Response.json({ error: "Couldn't read your orders from Definitive Flash." }, { status: 502 });
   }
-  return Response.json({ orders, failed }, { headers: { "cache-control": "no-store" } });
+  return Response.json({ orders, failed, scope: params.get("all") === "1" ? "all" : "yours" }, { headers: { "cache-control": "no-store" } });
 }
