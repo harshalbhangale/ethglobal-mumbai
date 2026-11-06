@@ -34,8 +34,8 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, minHeight: 48)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
                 }
-                Text("Orders run on Base through Definitive Flash. Not financial advice.")
-                    .font(.footnote).foregroundStyle(Kallr.muted)
+                PoweredByDefinitive(height: 12, suffix: "Flash on Base")
+                Text("Not financial advice.").font(.footnote).foregroundStyle(Kallr.muted)
             }
             .padding(24)
         }

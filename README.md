@@ -2,11 +2,36 @@
 
 # Kall Markets
 
-Every call on X has an after market.
+**Check the receipts. Trade where the conversation happens.**
 
-Crypto Twitter runs on calls, and nobody keeps score. Kall Markets prices every call at the minute it was posted, scores it when its timeframe ends, and lets you copy it with one tap: a real order on Base through Definitive Flash with take-profit and stop-loss attached. You sign in your own wallet; nothing trades without you.
+## The problem
 
-Built at ETHGlobal Mumbai 2026.
+A KOL tweets: "ETH is going to crash because of the war." If they're right, it becomes an advertisement for
+their paid group. If they're wrong, they delete the tweet and pretend it never happened. Their followers only
+ever see the winning screenshots, and they find the call on X or in a Telegram group, then have to leave the
+conversation for an exchange to act on it.
+
+## What Kall Markets does
+
+**It keeps the receipts.** Every call we capture is priced at the minute it was posted (Chainlink on Base) and
+scored when its timeframe ends. The call and its result are recorded on [Arkiv](https://arkiv.network), read-only
+so nobody can edit a miss, and the post itself is snapshotted to [Swarm](https://www.ethswarm.org), so deleting
+the tweet doesn't delete the record. You judge a caller by their actual track record, not their best screenshot.
+
+**It lets you trade the call where you saw it,** through [Definitive Flash](https://flash.definitive.fi) on Base:
+market, limit or TWAP orders with take-profit and stop-loss attached, quoted fresh and reviewed before anything
+is placed.
+
+| | Where | What you do there |
+| --- | --- | --- |
+| **Kall Extension** | Chrome, on X | Every call gets the caller's record under it. Follow callers. Copy a call into a Flash order with exits and sign it in your own wallet, without leaving X. |
+| **Kall Keyboard** | iPhone and Android, in any app: X, Telegram, Reddit, WhatsApp | A trading keyboard. Copy a call or paste a contract (fake contracts are flagged), open the trading panel, review a fresh Flash quote and confirm, without switching to an exchange. On iPhone it also shows calls from the callers you follow. |
+| **Kall Web App** | [kallr.vercel.app](https://kallr.vercel.app) | The callers you follow and their posts with Kall Markets' verdict, the trade ticket, your orders and your wallet. |
+
+Kall Markets only shows its own feed and what you choose to copy. It never reads other apps' screens or
+conversations.
+
+Built at ETHGlobal Mumbai 2026. Not financial advice.
 
 ## What's here
 

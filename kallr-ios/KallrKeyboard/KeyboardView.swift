@@ -638,8 +638,7 @@ private struct TradeTab: View {
         case .failed(let message):
             Text(message).font(.system(size: 12)).foregroundStyle(Kallr.danger).lineLimit(2)
         default:
-            Text("Fresh Definitive quote first, then you confirm · Kall wallet, up to $\(Kallr.fmt(model.wallet?.maxUsd ?? 25)) per order")
-                .font(.system(size: 10)).foregroundStyle(Kallr.muted)
+            PoweredByDefinitive(height: 9, suffix: "Flash · review first · up to $\(Kallr.fmt(model.wallet?.maxUsd ?? 25))")
         }
     }
 }
@@ -659,6 +658,7 @@ private struct ReviewCard: View {
                 Line(label: "Impact · fee", value: [quote.details?.impactPct.map { String(format: "%.2f%%", $0) }, quote.details?.feeUsd.map { String(format: "$%.2f", $0) }].compactMap { $0 }.joined(separator: " · ").ifEmpty("—"))
                 Line(label: "Exits", value: quote.preview.exits)
                 Line(label: "Approval", value: quote.preview.approval)
+                PoweredByDefinitive(height: 9, suffix: "Flash · fresh quote").padding(.top, 2)
             } else {
                 Text("PLACING ON DEFINITIVE FLASH…").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)
                 Text("Re-quoting, approving this amount, signing and submitting on Base. About 10–30 seconds.")
@@ -744,7 +744,10 @@ private struct OrdersTab: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                Section(title: "YOUR KALL WALLET ORDERS · DEFINITIVE FLASH")
+                HStack {
+                    Section(title: "YOUR KALL WALLET ORDERS")
+                    PoweredByDefinitive(height: 8, suffix: "Flash").padding(.top, 6)
+                }
                 if let note = model.ordersNote { Text(note).font(.system(size: 11)).foregroundStyle(Kallr.muted).frame(maxWidth: .infinity, alignment: .leading) }
                 if let orders = model.orders {
                     if orders.isEmpty { Empty(text: "No orders yet. Copy a call from Calls, or buy from Trade.") }

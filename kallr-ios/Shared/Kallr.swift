@@ -279,3 +279,16 @@ enum Kallr {
         return try? JSONDecoder().decode(T.self, from: data)
     }
 }
+
+/** "Powered by [Definitive] Flash": the Definitive wordmark wherever a quote or an order appears. */
+struct PoweredByDefinitive: View {
+    var height: CGFloat = 10
+    var suffix: String = "Flash · Base"
+    var body: some View {
+        HStack(spacing: 5) {
+            Text("Powered by").font(.system(size: height + 1)).foregroundStyle(Kallr.muted)
+            Image("Definitive").resizable().scaledToFit().frame(height: height).accessibilityLabel("Definitive")
+            if !suffix.isEmpty { Text(suffix).font(.system(size: height + 1)).foregroundStyle(Kallr.muted) }
+        }
+    }
+}
