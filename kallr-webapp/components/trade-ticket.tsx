@@ -93,14 +93,19 @@ function Field({ label, children, hint }: { label: string; children: React.React
   );
 }
 
+/** A call to copy into the ticket, from a tweet on the same screen; `nonce` re-applies the same call. */
+export type TicketPrefill = { order: string; postId: string; caller: string; nonce: number };
+
 export function TradeTicket({
   wallet,
   onPlaced,
   onViewOrders,
+  prefill,
 }: {
   wallet: ConnectedWallet | null;
   onPlaced: () => void;
   onViewOrders: () => void;
+  prefill?: TicketPrefill | null;
 }) {
   const prices = useUsdPrices();
   const [asset, setAsset] = useState<Asset>("ETH");
@@ -152,6 +157,16 @@ export function TradeTicket({
     }
     // Runs once on load: apply only reads the link.
   }, []);
+
+  // Copy call on a tweet: fill the ticket in place and link the trade to that post.
+  useEffect(() => {
+    if (!prefill) return;
+    setCustom(null);
+    setTypedError(apply(prefill.order));
+    setSource({ postId: prefill.postId, caller: prefill.caller });
+    setRun({ kind: "idle" });
+    // apply only sets form state; nonce re-runs it for the same call.
+  }, [prefill?.nonce]);
 
   const customPrice = custom?.price ? Number(custom.price) : null;
   const market = custom ? (customPrice && Number.isFinite(customPrice) ? customPrice : null) : (prices[asset] ?? null);
