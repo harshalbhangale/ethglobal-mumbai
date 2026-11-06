@@ -80,9 +80,9 @@ function Home({ session }: { session: Session }) {
       {session.authenticated && session.address ? (
         <WalletCard address={session.address} embedded={session.embedded} />
       ) : (
-        <div className="mesh rounded-3xl p-5 text-white" style={{ backgroundImage: "linear-gradient(135deg,#14213d,#3b2f6b,#7c3aed,#14213d)" }}>
+        <div className="rounded-2xl border border-rule bg-card p-5">
           <p className="font-display text-xl font-semibold">Your wallet lives here</p>
-          <p className="mt-1 text-sm text-white/75">Sign in with X to get a wallet on Base and see your copied trades.</p>
+          <p className="mt-1 text-sm text-slate">Sign in with X to get a wallet on Base and see your copied trades.</p>
         </div>
       )}
       <Markets prices={prices} />
@@ -136,10 +136,10 @@ function Home({ session }: { session: Session }) {
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          <Stat label="Copied from X" value={counts.x} color="#0f1419" icon={<SourceIcon source="extension" size={30} />} />
-          <Stat label="From keyboard" value={counts.keyboard} color="#7c3aed" icon={<SourceIcon source="keyboard" size={30} />} />
-          <Stat label="Open calls" value={data.calls.length} color="#1d9bf0" icon={<Dot color="#1d9bf0" />} />
-          <Stat label="Following" value={follows.entries.length} color="#f2a93b" icon={<Dot color="#f2a93b" />} />
+          <Stat label="Copied from X" value={counts.x} color="#e6ebe3" icon={<SourceIcon source="extension" size={30} />} />
+          <Stat label="From keyboard" value={counts.keyboard} color="#c6f25a" icon={<SourceIcon source="keyboard" size={30} />} />
+          <Stat label="Open calls" value={data.calls.length} color="#c6f25a" icon={<Dot color="#c6f25a" />} />
+          <Stat label="Following" value={follows.entries.length} color="#8b978d" icon={<Dot color="#8b978d" />} />
         </div>
 
         <button
@@ -149,7 +149,7 @@ function Home({ session }: { session: Session }) {
         >
           <KolAvatar handle={session.handle ?? "you"} size={36} />
           <span className="min-w-0 flex-1 truncate">Schedule a trade… “buy $50 ETH tomorrow 9am”</span>
-          <span className="rounded-full bg-violet px-3 py-1 text-xs font-semibold text-white">Agent</span>
+          <span className="rounded-md border border-rule-strong px-3 py-1 text-xs font-semibold text-slate">Agent</span>
         </button>
       </div>
 
@@ -193,7 +193,6 @@ function Dot({ color }: { color: string }) {
 function Stat({ label, value, color, icon }: { label: string; value: number; color: string; icon: ReactNode }) {
   return (
     <div className="lift relative overflow-hidden rounded-2xl border border-rule bg-card p-3">
-      <div aria-hidden className="absolute -top-6 -right-6 size-20 rounded-full opacity-20 blur-md" style={{ background: color }} />
       {icon}
       <p className="font-display mt-2 text-2xl font-bold tabular-nums">
         <CountUp value={value} />
@@ -219,7 +218,7 @@ function Empty({ tab }: { tab: Tab }) {
       </div>
       <p className="mx-auto mt-4 max-w-xs text-slate">{text}</p>
       {tab === "following" && (
-        <Link href="/kol" className="mt-4 inline-block rounded-full bg-ink px-5 py-2 text-sm font-semibold text-white">
+        <Link href="/kol" className="mt-4 inline-block rounded-lg bg-lime px-5 py-2 text-sm font-semibold text-on-lime">
           Find callers
         </Link>
       )}

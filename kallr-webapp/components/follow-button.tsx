@@ -8,8 +8,8 @@ export function FollowButton({ handle, follows, small }: { handle: string; follo
     <button
       type="button"
       onClick={() => follows.toggle(handle)}
-      className={`group shrink-0 rounded-full font-bold transition-colors ${small ? "px-3.5 py-1.5 text-sm" : "px-5 py-2"} ${
-        on ? "border border-rule bg-card text-ink hover:border-down/40 hover:bg-down/5 hover:text-down" : "bg-ink text-white hover:bg-ink-soft"
+      className={`group shrink-0 rounded-md font-semibold transition-colors ${small ? "px-3.5 py-1.5 text-sm" : "px-5 py-2"} ${
+        on ? "border border-rule bg-card text-slate hover:border-down/40 hover:text-down" : "border border-rule-strong text-ink hover:border-lime hover:text-lime"
       }`}
     >
       {on ? (

@@ -41,12 +41,16 @@ function AppShell({ session }: { session: Session }) {
           </div>
           <h1 className="font-display mt-6 text-3xl font-semibold tracking-tight">Sign in to trade calls</h1>
           <p className="mt-3 text-slate">
-            Sign in with X so your replies to @Kallr link to your wallet. You get a wallet on Base if you
-            don’t have one.
+            Sign in with X to get your Kallr wallet on Base. You approve every order; the key stays with Privy.
           </p>
           <div className="mt-8 flex justify-center">
             <SignInButton />
           </div>
+          <p className="mt-6 text-sm text-slate">
+            <a href="/dashboard" className="border-b border-rule-strong pb-0.5 hover:border-ink">
+              Browse live calls first ↗
+            </a>
+          </p>
         </div>
       </div>
     );
@@ -123,7 +127,7 @@ function Desk({ session }: { session: Session }) {
               <Icon tab={item.id} />
               <span className="flex-1">{item.label}</span>
               {item.id === "orders" && openCount > 0 && (
-                <span className="rounded-full bg-ink px-2 py-0.5 text-xs font-semibold text-white tabular-nums">{openCount}</span>
+                <span className="rounded-full bg-lime px-2 py-0.5 text-xs font-semibold text-on-lime tabular-nums">{openCount}</span>
               )}
             </button>
           ))}
@@ -196,7 +200,7 @@ function Desk({ session }: { session: Session }) {
             <Icon tab={item.id} />
             {item.label}
             {item.id === "orders" && openCount > 0 && (
-              <span className="absolute top-1.5 right-[calc(50%-20px)] grid size-4 place-items-center rounded-full bg-ink text-[10px] text-white">{openCount}</span>
+              <span className="absolute top-1.5 right-[calc(50%-20px)] grid size-4 place-items-center rounded-full bg-lime text-[10px] text-on-lime">{openCount}</span>
             )}
           </button>
         ))}

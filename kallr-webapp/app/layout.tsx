@@ -9,7 +9,7 @@ import { ServiceWorkerRegister } from "@/components/sw-register";
 export const metadata: Metadata = {
   title: "Kallr",
   description:
-    "Tag @Kallr under any crypto call on X to see how it played out, copy it with one reply, and get a call back when your exits hit.",
+    "See how a crypto caller’s past calls played out, then copy the call on Base with exits attached: from X with the extension, or from any chat with the Kallr keyboard.",
   applicationName: "Kallr",
   // Absolute URLs for share cards. Set NEXT_PUBLIC_SITE_URL to the deployed origin.
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#F3F5F8",
+  themeColor: "#050605",
   width: "device-width",
   initialScale: 1,
 };
