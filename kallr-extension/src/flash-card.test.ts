@@ -265,7 +265,7 @@ describe("any Base token", () => {
     amount.dispatchEvent(new Event("input"));
     await vi.waitFor(() => expect(q<HTMLButtonElement>(made.card, ".swap-submit").disabled).toBe(false));
     q<HTMLButtonElement>(made.card, ".swap-submit").click();
-    await vi.waitFor(() => expect(made.card.textContent).toContain("Bought DEGEN with $1.00 ✓"));
+    await vi.waitFor(() => expect(made.card.textContent).toContain("Bought DEGEN with $1.00"));
     const quoted = sendMessage.mock.calls.find(([m]) => m.type === "flash-quote")?.[0] as unknown as { order: Record<string, unknown> };
     expect(quoted.order.asset).toBe(DEGEN.address);
     expect(calls.map((c) => c.method)).toContain("eth_signTypedData_v4");
@@ -380,7 +380,7 @@ describe("sign on X with a browser wallet", () => {
       eth_getTransactionReceipt: () => ({ status: "0x1" }),
       eth_signTypedData_v4: (p) => (String(p[1]).includes("Bracket") ? "0xb2" : "0xa1"),
     });
-    await vi.waitFor(() => expect(card.textContent).toContain("Bought ETH with $25.00 ✓"));
+    await vi.waitFor(() => expect(card.textContent).toContain("Bought ETH with $25.00"));
     expect([...card.querySelectorAll(".steps .step")].map((s) => s.className)).toEqual(Array(6).fill("step done"));
     expect(open).not.toHaveBeenCalled();
     expect(calls.map((c) => c.method)).toEqual([
@@ -420,6 +420,16 @@ describe("sign on X with a browser wallet", () => {
     expect(links).toContain(`https://basescan.org/address/${from}`);
     await vi.waitFor(() => expect(q(card, ".receipt").textContent).toContain("Uniswap V3 · via Definitive"));
     expect([...card.querySelectorAll<HTMLAnchorElement>(".receipt a")].map((a) => a.href)).toContain(`https://basescan.org/tx/0x${"ab".repeat(32)}`);
+    // Success burst: check, amount, asset and the TP/SL pair, then the swap on Basescan.
+    const burst = q(card, ".sb");
+    expect(burst.getAttribute("role")).toBe("status");
+    expect(burst.querySelector(".sb-tick")).not.toBeNull();
+    expect(burst.querySelectorAll(".sb-piece").length).toBeGreaterThan(8);
+    expect(q(burst, ".sb-title").textContent).toBe("Order placed");
+    expect(q(burst, ".sb-amount").textContent).toBe("$25.00 · Bought ETH");
+    expect(q(burst, ".sb-tp").textContent).toBe("TP +10% · $2,750");
+    expect(q(burst, ".sb-sl").textContent).toBe("SL −5% · $2,375");
+    expect(q<HTMLAnchorElement>(burst, ".sb-link a").href).toBe(`https://basescan.org/tx/0x${"ab".repeat(32)}`);
   });
 
   it("stops cleanly when the user rejects in the wallet", async () => {
@@ -430,6 +440,7 @@ describe("sign on X with a browser wallet", () => {
     });
     await vi.waitFor(() => expect(card.textContent).toContain("Cancelled in your wallet. Nothing was sent."));
     expect(worker.mock.calls.some(([m]) => m.type === "flash-order")).toBe(false);
+    expect(card.querySelector(".sb")).toBeNull();
   });
 });
 
