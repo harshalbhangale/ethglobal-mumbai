@@ -67,13 +67,16 @@ there, through [Definitive Flash](https://definitive.fi) on Base, signed in your
 - **Definitive Flash: every trade.** Market, limit and TWAP orders with take-profit and stop-loss attached.
   Approvals are sized to the order, never unlimited; the API key stays on our server. Code:
   [`definitive.ts`](packages/integrations/src/definitive.ts), [`/api/flash`](kallr-webapp/app/api/flash).
-  Our notes for the team: [feedback/definitive.md](feedback/definitive.md).
+  How we use it and who signs: **[docs/DEFINITIVE.md](docs/DEFINITIVE.md)**. Our notes for the team:
+  [feedback/definitive.md](feedback/definitive.md).
 - **Arkiv: the receipts.** Calls, results, trades and the callers we track, read-only so nobody can edit a miss,
   and readable by anyone without asking us. The whole story, schema and what got in our way:
   **[arkiv/README.md](arkiv/README.md)**.
+- **Chainlink: the checks.** A CRE workflow decides whether the coin in a post is the real one (fakes can't be
+  traded) and another scores calls; both sign their answer onto a contract on Base Sepolia. Price feeds on Base
+  give every call its entry and exit. How it works and what's still simulated: **[docs/CHAINLINK.md](docs/CHAINLINK.md)**.
 
-Also: Chainlink price feeds on Base (entry and exit prices), Privy (sign in with X, embedded wallet), GoPlus and
-Dexscreener (token checks).
+Also: Privy (sign in with X, embedded wallet), GoPlus and Dexscreener (token checks).
 
 ## Proof it runs
 
