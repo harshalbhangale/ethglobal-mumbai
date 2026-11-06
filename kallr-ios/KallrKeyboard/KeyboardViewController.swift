@@ -41,19 +41,18 @@ final class KeyboardViewController: UIInputViewController {
 
     /**
      * Opens a link in Safari. A keyboard has no UIApplication of its own, but with Allow Full Access the
-     * host app's is on the responder chain. Returns false when iOS gives us no way to open it.
+     * host app's is on the responder chain. `done` gets whether iOS opened it.
      */
-    @discardableResult
-    func openURL(_ url: URL) -> Bool {
+    func openURL(_ url: URL, done: @escaping (Bool) -> Void) {
         var responder: UIResponder? = self
         while let r = responder {
             if let app = r as? UIApplication {
-                app.open(url, options: [:], completionHandler: nil)
-                return true
+                app.open(url, options: [:], completionHandler: done)
+                return
             }
             responder = r.next
         }
-        return false
+        done(false)
     }
 
     func updateHeight() {

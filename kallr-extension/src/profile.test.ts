@@ -137,15 +137,25 @@ describe("scanProfile", () => {
     expect(root?.querySelector(".pc-head .pc-follow")?.textContent).toBe("Follow");
     expect(root?.querySelector(".pc-line")?.textContent).toBe("2 calls · 100% hit · +2.2% avg · 1 deleted");
     expect(root?.querySelectorAll(".pc-stat")).toHaveLength(0);
-    expect(root?.querySelectorAll(".pc-calls li")).toHaveLength(2);
-    // A call whose post is gone from X is still on the record, and says so.
-    expect(root?.querySelectorAll(".pc-gone")).toHaveLength(1);
-    expect(root?.querySelector(".pc-gone")?.textContent).toBe("deleted on X");
+    // Every call: open ones in view, closed ones behind a dropdown, all on the same four-column grid.
+    expect(root?.querySelector(".pc-group")?.textContent).toBe("Open · 1");
+    const openList = [...(root?.querySelector(".pc")?.children ?? [])].find((c) => c.matches("ul.pc-calls"));
+    const openRows = openList?.querySelectorAll("li");
+    expect(openRows).toHaveLength(1);
+    expect(openRows?.[0]?.children).toHaveLength(4);
+    expect([...(openRows?.[0]?.querySelectorAll("a") ?? [])].map((a) => a.getAttribute("href"))).toEqual(["https://x.com/kol/status/8"]);
+    const closed = root?.querySelector<HTMLDetailsElement>("details.pc-closed");
+    expect(closed?.open).toBe(false);
+    expect(closed?.querySelector("summary")?.textContent).toBe("Closed calls · 1");
+    const closedRow = closed?.querySelector(".pc-calls li");
+    expect(closedRow?.children).toHaveLength(4);
     // Each call links to its record on Arkiv (when it has one) and to the post on X.
-    const first = [...(root?.querySelectorAll(".pc-calls li:first-child a") ?? [])].map((a) => a.getAttribute("href"));
-    expect(first).toEqual(["https://rabdi.explorer.arkiv.network/entity/0xabc9", "https://x.com/kol/status/9"]);
-    const second = [...(root?.querySelectorAll(".pc-calls li:last-child a") ?? [])].map((a) => a.getAttribute("href"));
-    expect(second).toEqual(["https://x.com/kol/status/8"]);
+    expect([...(closedRow?.querySelectorAll("a") ?? [])].map((a) => a.getAttribute("href"))).toEqual([
+      "https://rabdi.explorer.arkiv.network/entity/0xabc9",
+      "https://x.com/kol/status/9",
+    ]);
+    // A call whose post is gone from X is still on the record, and says so.
+    expect(closedRow?.querySelector(".pc-gone")?.textContent).toBe(" · deleted on X");
     // The whole record on Arkiv, and the desk.
     const foot = [...(root?.querySelectorAll(".pc-foot a") ?? [])].map((a) => a.getAttribute("href"));
     expect(foot).toEqual([

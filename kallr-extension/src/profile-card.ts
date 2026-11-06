@@ -19,17 +19,31 @@ export const PROFILE_CARD_CSS = `
 .pc-line { margin: 6px 0 0; color: var(--mute); }
 .pc-line b { color: var(--fg); font-variant-numeric: tabular-nums; }
 .pc-line b.up { color: var(--up); } .pc-line b.down { color: var(--down); }
-.pc-calls { list-style: none; margin: 6px 0 0; padding: 0; }
-.pc-calls li { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
+.pc-group { margin: 8px 0 0; color: var(--mute); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.pc-calls { list-style: none; margin: 2px 0 0; padding: 0; }
+/* One grid for every row: the call takes the room, result and links have fixed columns, so they line up. */
+.pc-calls li { display: grid; grid-template-columns: minmax(0, 1fr) 76px 50px 26px; align-items: center; column-gap: 10px;
+  padding: 5px 0; border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.3; }
+.pc-calls li:first-child { border-top: 0; }
+.pc-call { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pc-dir { font-weight: 700; }
 .pc-tag { color: var(--mute); font-size: 11.5px; }
 .pc-gone { color: var(--down); font-size: 11px; }
-.pc-res { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pc-res { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pc-res.pc-tag { font-weight: 400; }
+.pc-link { text-align: right; white-space: nowrap; }
 .pc-calls a, .pc-foot a { color: var(--mute); text-decoration: none; }
 .pc-calls a:hover, .pc-foot a:hover { color: var(--fg); }
+.pc-closed { margin: 8px 0 0; }
+.pc-closed summary { cursor: pointer; color: var(--mute); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  list-style: none; }
+.pc-closed summary::-webkit-details-marker { display: none; }
+.pc-closed summary::before { content: "▸ "; }
+.pc-closed[open] summary::before { content: "▾ "; }
+.pc-closed summary:hover { color: var(--fg); }
 .up { color: var(--up); } .down { color: var(--down); }
-.pc-foot { margin: 6px 0 0; color: var(--mute); font-size: 11.5px; }
-.pc-empty { margin: 6px 0 0; color: var(--mute); }
+.pc-foot { margin: 8px 0 0; color: var(--mute); font-size: 11.5px; }
+.pc-empty { margin: 4px 0 0; color: var(--mute); font-size: 12.5px; }
 `;
 
 export type CallerSummary = {
@@ -56,38 +70,49 @@ export function summarize(calls: SeenCall[]): CallerSummary {
   };
 }
 
-const ago = (s: number) => {
-  const d = Math.max(0, Date.now() / 1000 - s);
+/** A span of seconds as 45m / 9h / 2d. */
+const span = (seconds: number) => {
+  const d = Math.max(0, seconds);
   return d < 3600 ? `${Math.max(1, Math.round(d / 60))}m` : d < 86_400 ? `${Math.round(d / 3600)}h` : `${Math.round(d / 86_400)}d`;
 };
+const ago = (postedAt: number) => span(Date.now() / 1000 - postedAt);
 
 const ARKIV = "https://rabdi.explorer.arkiv.network";
 const toneOf = (n: number | null) => (n === null ? "" : n > 0 ? "up" : n < 0 ? "down" : "");
+const isOpen = (c: SeenCall) => c.status === "open";
 
-/** "Long $ETH · 36h … −7.9% ✕  Arkiv ↗  𝕏 ↗" */
+/**
+ * One call on the card's grid: "Long $ETH 2d (deleted on X) | −7.9% ✕ | Arkiv ↗ | 𝕏 ↗". Every cell is
+ * always there (empty when it doesn't apply), so the columns line up down the card.
+ */
 function callRow(handle: string, c: SeenCall & { gone?: boolean }) {
   const long = c.direction === "up";
-  const res =
-    c.status === "open"
-      ? el("span", { class: "pc-res pc-tag" }, "open")
-      : c.returnBps === null
-        ? el("span", { class: "pc-res pc-tag" }, "unpriced")
-        : el("span", { class: `pc-res ${toneOf(c.returnBps)}` }, `${formatBps(c.returnBps)} ${c.status === "hit" ? "✓" : c.status === "miss" ? "✕" : "·"}`);
+  const res = isOpen(c)
+    ? el("span", { class: "pc-res pc-tag" }, `${span(c.expiresAt - Date.now() / 1000)} left`)
+    : c.returnBps === null
+      ? el("span", { class: "pc-res pc-tag" }, "unpriced")
+      : el("span", { class: `pc-res ${toneOf(c.returnBps)}` }, `${formatBps(c.returnBps)} ${c.status === "hit" ? "✓" : c.status === "miss" ? "✕" : "·"}`);
   return el(
     "li",
     {},
-    el("span", { class: `pc-dir ${long ? "up" : "down"}` }, `${long ? "Long" : "Short"} $${c.asset}`),
-    el("span", { class: "pc-tag" }, ago(c.postedAt)),
-    c.gone ? el("span", { class: "pc-gone" }, "deleted on X") : null,
+    el(
+      "span",
+      { class: "pc-call" },
+      el("span", { class: `pc-dir ${long ? "up" : "down"}` }, `${long ? "Long" : "Short"} $${c.asset}`),
+      el("span", { class: "pc-tag" }, ` ${ago(c.postedAt)}`),
+      c.gone ? el("span", { class: "pc-gone" }, " · deleted on X") : null,
+    ),
     res,
-    c.key ? safeLink(`${ARKIV}/entity/${c.key}`, "Arkiv ↗") : null,
-    safeLink(`https://x.com/${handle}/status/${c.postId}`, "𝕏 ↗"),
+    el("span", { class: "pc-link" }, c.key ? safeLink(`${ARKIV}/entity/${c.key}`, "Arkiv ↗") : ""),
+    el("span", { class: "pc-link" }, safeLink(`https://x.com/${handle}/status/${c.postId}`, "𝕏 ↗")),
   );
 }
 
+const callList = (handle: string, calls: SeenCall[]) => el("ul", { class: "pc-calls" }, ...calls.map((c) => callRow(handle, c)));
+
 /**
- * Small on purpose: who and Follow, one line of numbers (calls, hit rate, average, deleted), the last
- * three calls with their records on Arkiv, and one footer line.
+ * Small on purpose: who and Follow, one line of numbers (calls, hit rate, average, deleted), every open
+ * call, every closed call behind a dropdown, each linked to its record on Arkiv, and one footer line.
  */
 export function callerCard(opts: {
   handle: string;
@@ -112,6 +137,8 @@ export function callerCard(opts: {
 
   const s = summarize(calls);
   const sorted = [...calls].sort((a, b) => b.postedAt - a.postedAt);
+  const open = sorted.filter(isOpen);
+  const closed = sorted.filter((c) => !isOpen(c));
   const line = el("p", { class: "pc-line" }, el("b", {}, String(s.total)), s.total === 1 ? " call" : " calls");
   if (s.hitRate === null) line.append(" · none settled yet");
   else
@@ -129,7 +156,12 @@ export function callerCard(opts: {
     { class: "pc" },
     head,
     line,
-    el("ul", { class: "pc-calls" }, ...sorted.slice(0, 3).map((c) => callRow(handle, c))),
+    // Open calls are what you'd act on: always in view.
+    el("p", { class: "pc-group" }, `Open · ${open.length}`),
+    open.length ? callList(handle, open) : el("p", { class: "pc-empty" }, "No open calls right now."),
+    closed.length
+      ? el("details", { class: "pc-closed" }, el("summary", {}, `Closed calls · ${closed.length}`), callList(handle, closed))
+      : null,
     el(
       "p",
       { class: "pc-foot" },
