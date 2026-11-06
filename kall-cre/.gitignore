@@ -1,0 +1,5 @@
+.env
+node_modules/
+*.wasm
+contracts/out/
+.cre_build_tmp.js

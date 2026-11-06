@@ -1,0 +1,1 @@
+{ "readChain": "ethereum-mainnet-base-1", "writeChain": "ethereum-testnet-sepolia-base-1", "verdicts": "0x6bf7fd3d5fa88090f30293aabf81565c3f88bc52", "gasLimit": "600000" }
