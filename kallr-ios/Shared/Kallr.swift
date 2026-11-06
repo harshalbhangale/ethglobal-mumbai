@@ -5,7 +5,13 @@ import Foundation
 import SwiftUI
 
 enum Kallr {
-    static let origin = URL(string: "https://kallr.vercel.app")!
+    static let origin: URL = {
+        #if DEBUG
+        // Debug builds can point at a local server: defaults write <bundle id> kall.origin http://localhost:3004
+        if let local = UserDefaults.standard.string(forKey: "kall.origin"), let url = URL(string: local) { return url }
+        #endif
+        return URL(string: "https://kallr.vercel.app")!
+    }()
 
     // MARK: Look: Kallr black, bone and lime.
     static let black = Color(red: 0.039, green: 0.039, blue: 0.039)
@@ -232,13 +238,37 @@ enum Kallr {
     struct Order: Codable {
         struct Price: Codable { let notionalPrice: String? }
         struct Bracket: Codable { let status: String; let takeProfit: Price?; let stopLoss: Price? }
+        /** What has filled: each asset's amount and the average price in USDC. Empty if Flash sends another shape. */
+        struct Filled: Codable {
+            var targetAmount: String?
+            var contraAmount: String?
+            var averagePrice: String?
+            init(from decoder: Decoder) throws {
+                let c = try? decoder.container(keyedBy: CodingKeys.self)
+                targetAmount = try? c?.decodeIfPresent(String.self, forKey: .targetAmount)
+                contraAmount = try? c?.decodeIfPresent(String.self, forKey: .contraAmount)
+                averagePrice = try? c?.decodeIfPresent(String.self, forKey: .averagePrice)
+            }
+        }
         let orderId: String
         let orderType: String
         let side: String
         let status: String
         let targetAsset: String
         let qty: String
+        let placedAt: String?
         let attachedBracket: Bracket?
+        let filled: Filled?
+
+        /** When Flash took the order, from its ISO timestamp. */
+        var placedDate: Date? {
+            guard let placedAt else { return nil }
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return f.date(from: placedAt) ?? ISO8601DateFormatter().date(from: placedAt)
+        }
+        /** "2h ago". */
+        var placedAgo: String? { placedDate.map { Kallr.ago($0.timeIntervalSince1970) } }
 
         var symbol: String {
             switch targetAsset.lowercased() {
@@ -248,7 +278,18 @@ enum Kallr {
             }
         }
         var title: String {
-            orderType == "bracket" ? "Exit · sell \(qty) \(symbol)" : "\(orderType == "market" ? "Market" : orderType.capitalized) \(side) · $\(qty) of \(symbol)"
+            if orderType == "bracket" { return "Exit · sell \(qty) \(symbol)" }
+            let kind = orderType == "market" ? "Market" : orderType == "twap" ? "TWAP" : orderType.capitalized
+            // Flash sizes buys in USDC and sells in the asset.
+            return side == "buy" ? "\(kind) buy · $\(qty) of \(symbol)" : "\(kind) sell · \(qty) \(symbol)"
+        }
+        /** "Got 0.00489 ETH for $10.00 at $2,045.26", once something has filled. */
+        var filledLine: String? {
+            guard let f = filled, let got = f.targetAmount.flatMap(Double.init), got > 0 else { return nil }
+            let paid = f.contraAmount.flatMap(Double.init).map { String(format: " for $%.2f", $0) } ?? ""
+            let at = f.averagePrice.flatMap(Double.init).map { " at $" + $0.formatted(.number.precision(.fractionLength(2))) } ?? ""
+            let amount = got.formatted(.number.precision(.significantDigits(1...6)))
+            return side == "buy" ? "Got \(amount) \(symbol)\(paid)\(at)" : "Sold \(amount) \(symbol)\(paid)\(at)"
         }
         var open: Bool { ["ORDER_STATUS_PENDING", "ORDER_STATUS_ACCEPTED", "ORDER_STATUS_PARTIALLY_FILLED"].contains(status) }
         var statusLabel: String {
@@ -291,4 +332,28 @@ struct PoweredByDefinitive: View {
             if !suffix.isEmpty { Text(suffix).font(.system(size: height + 1)).foregroundStyle(Kallr.muted) }
         }
     }
+}
+
+// MARK: Deposits
+
+/**
+ * EIP-681 links that open a wallet app with a transfer to the Kall wallet filled in, on Base (8453).
+ * MetaMask takes them as metamask.app.link/send/…; other wallets take the ethereum: form.
+ */
+enum Deposit {
+    static let usdc = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+
+    /** The part after "ethereum:", for USDC (6 decimals) or ETH (wei). */
+    static func path(asset: String, to: String, usd: Double, ethPrice: Double?) -> String? {
+        if asset == "USDC" {
+            return "\(usdc)@8453/transfer?address=\(to)&uint256=\(Int((usd * 1_000_000).rounded()))"
+        }
+        guard let price = ethPrice, price > 0 else { return nil }
+        let microEth = Int((usd / price * 1_000_000).rounded())
+        guard microEth > 0 else { return nil }
+        return "\(to)@8453?value=\(microEth)000000000000"
+    }
+
+    static func metaMask(_ path: String) -> URL? { URL(string: "https://metamask.app.link/send/\(path)") }
+    static func anyWallet(_ path: String) -> URL? { URL(string: "ethereum:\(path)") }
 }

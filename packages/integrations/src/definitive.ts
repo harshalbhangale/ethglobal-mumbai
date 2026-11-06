@@ -212,6 +212,19 @@ export function buildSubmitRequest(quoteRequest: FlashQuoteRequest, sig: FlashSi
   return body;
 }
 
+/** Flash lists an order's assets as objects ({ address, ticker, chain, … }); we keep the address. */
+const flashAssetRef = z.union([z.string(), z.object({ address: z.string() }).passthrough().transform((a) => a.address)]);
+
+/** What has filled so far: amounts of each asset, and the average price in USDC per unit. */
+const flashFilledSchema = z
+  .object({
+    targetAmount: z.string().nullable().optional(),
+    contraAmount: z.string().nullable().optional(),
+    averagePrice: z.string().nullable().optional(),
+    averageNotionalPrice: z.string().nullable().optional(),
+  })
+  .passthrough();
+
 export const flashOrderSchema = z
   .object({
     orderId: z.string(),
@@ -219,10 +232,10 @@ export const flashOrderSchema = z
     side: z.string(),
     status: z.string(),
     closeReason: z.string().nullable().optional(),
-    targetAsset: z.string(),
-    contraAsset: z.string(),
+    targetAsset: flashAssetRef,
+    contraAsset: flashAssetRef,
     qty: z.string(),
-    filled: z.string().nullable().optional(),
+    filled: z.union([flashFilledSchema, z.string()]).nullable().optional(),
     limitCrossPrice: z.string().nullable().optional(),
     limitNotionalPrice: z.string().nullable().optional(),
     attachedBracket: z

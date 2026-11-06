@@ -181,6 +181,33 @@ describe("TWAP", () => {
   });
 });
 
+describe("listOrders", () => {
+  it("reads the order list as Flash sends it, with assets and fills as objects", async () => {
+    const asset = (address: string, ticker: string) => ({ id: "x", name: ticker, address, ticker, chain: { id: "8453", name: "base", namespace: "eip155" } });
+    const listed = {
+      orderId: "bf841342-89db-4ada-88bc-a640fa15295b",
+      orderType: "market",
+      side: "sell",
+      status: "ORDER_STATUS_FILLED",
+      closeReason: "REASON_FULLY_FILLED",
+      targetAsset: asset(FLASH_BASE_ASSETS.ETH.address, "WETH"),
+      contraAsset: asset(BASE_USDC, "USDC"),
+      qty: "0.0001",
+      filled: { targetAmount: "0.0001", contraAmount: "0.204526", averagePrice: "2045.26", averageNotionalPrice: "2045.26" },
+      limitNotionalPrice: null,
+      brackets: null,
+      placedAt: "2026-11-06T05:21:19.875Z",
+    };
+    const fetcher = (async () => new Response(JSON.stringify({ orders: [listed], nextPageToken: null }))) as unknown as typeof fetch;
+    const [order] = await flashClient({ apiKey: "k_test", fetcher }).listOrders("0x94d3d3466ED0a6299D9384190eF461bb171e140D");
+    expect(order).toMatchObject({
+      targetAsset: FLASH_BASE_ASSETS.ETH.address,
+      contraAsset: BASE_USDC,
+      filled: { targetAmount: "0.0001", contraAmount: "0.204526", averagePrice: "2045.26" },
+    });
+  });
+});
+
 describe("flashCancelMessage", () => {
   it("is the exact two-line message Flash checks", () => {
     expect(flashCancelMessage("0b6f7c2e-1111-4222-8333-444455556666")).toBe(

@@ -1,5 +1,6 @@
 Kallr.xcodeproj/
 build/
+build-sim/
 *.xcuserstate
 xcuserdata/
 Shared/Secrets.swift

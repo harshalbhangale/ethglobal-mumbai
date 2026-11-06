@@ -26,6 +26,27 @@ An order typed on the iPhone keyboard ("buy $20 of eth tp 10% sl 5%") is filled 
 iOS doesn't let keyboards use the microphone, so voice orders are Android only, as are Base tokens beyond
 ETH and BTC.
 
+## The app
+
+- **Wallet:** the Kall wallet's USDC and ETH, its address (copy, or open it on BaseScan), ETH and BTC prices,
+  how many calls are open on Arkiv, the latest orders and the best callers by settled hit rate.
+  **Deposit USDC or ETH** picks an asset and amount, then opens MetaMask with the transfer to the Kall
+  wallet on Base filled in (an EIP-681 link), hands it to any other wallet app, or shows it as a QR code
+  for a wallet on another device. Balances are read again when you come back from the wallet, and a
+  deposit that landed is called out.
+- **History:** every Flash order the Kall wallet placed: totals, All / Working / Done, what each one filled
+  at, and a detail sheet with the Flash order ID, the call it copied, whether the trade is recorded on
+  Arkiv, and Cancel while it's working. Re-read every 5 seconds while an order is working.
+- **Keyboard:** setup steps, a field to try a typed order, and a call checker.
+
+Debug builds can read from a local server and show another wallet's orders, for testing History before
+the Kall wallet has traded:
+
+```sh
+xcrun simctl spawn booted defaults write com.buddyharshal.kallr kall.origin http://localhost:3004
+xcrun simctl spawn booted defaults write com.buddyharshal.kallr kall.funder 0x…
+```
+
 ## Build and install
 
 Needs Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`), an Apple ID in

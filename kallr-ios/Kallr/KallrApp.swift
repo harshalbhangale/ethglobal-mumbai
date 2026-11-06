@@ -1,17 +1,640 @@
+import CoreImage.CIFilterBuiltins
 import SwiftUI
+import UIKit
 
 @main
 struct KallrApp: App {
+    init() {
+        // Black tab bar with lime selection, to match the keyboard.
+        let bar = UITabBarAppearance()
+        bar.configureWithOpaqueBackground()
+        bar.backgroundColor = UIColor(red: 0.039, green: 0.039, blue: 0.039, alpha: 1)
+        UITabBar.appearance().standardAppearance = bar
+        UITabBar.appearance().scrollEdgeAppearance = bar
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .preferredColorScheme(.dark)
+            RootView().preferredColorScheme(.dark)
         }
     }
 }
 
-/** Setting up the keyboard, trying it, and checking a call without it. */
-struct ContentView: View {
+/** Wallet (balances, deposit, recent orders), History (every order) and Keyboard (setup and tools). */
+struct RootView: View {
+    enum Tab { case wallet, history, keyboard }
+    @State private var tab = Tab.wallet
+    @StateObject private var store = AppStore()
+    @Environment(\.scenePhase) private var phase
+
+    var body: some View {
+        TabView(selection: $tab) {
+            WalletHome(store: store, seeHistory: { tab = .history })
+                .tabItem { Label("Wallet", systemImage: "wallet.pass") }.tag(Tab.wallet)
+            HistoryView(store: store, setUp: { tab = .keyboard })
+                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }.tag(Tab.history)
+            KeyboardSetup()
+                .tabItem { Label("Keyboard", systemImage: "keyboard") }.tag(Tab.keyboard)
+        }
+        .tint(Kallr.lime)
+        .task { await store.refresh() }
+        // Back from MetaMask after a deposit: read the balances again.
+        .onChange(of: phase) { _, now in if now == .active { Task { await store.refresh() } } }
+    }
+}
+
+extension Kallr.Order: Identifiable { var id: String { orderId } }
+
+/** The Kall wallet, its orders, and which call each order copied. */
+@MainActor
+final class AppStore: ObservableObject {
+    @Published var wallet: Kallr.Wallet?
+    @Published var feed: Kallr.Feed?
+    @Published var orders: [Kallr.Order]?
+    @Published var loading = false
+    @Published var note: String?
+    @Published var cancelling: Set<String> = []
+    /** The last read of Flash orders failed; what's shown (if anything) is from before. */
+    @Published var ordersFailed = false
+    /** "+10.00 USDC arrived", shown once after a deposit lands. */
+    @Published var received: String?
+
+    var ethPrice: Double? { price("ETH") }
+    func price(_ symbol: String) -> Double? { feed?.prices[symbol] ?? nil }
+    func caller(of orderId: String) -> String? { feed?.trades?.first { $0.flashOrderId == orderId }?.caller }
+    /** The keyboard wrote this order to Arkiv as a trade record. */
+    func recorded(_ orderId: String) -> Bool { feed?.trades?.contains { $0.flashOrderId == orderId } ?? false }
+    /** Callers with settled calls, best hit rate first. */
+    var topCallers: [Kallr.FeedCaller] {
+        (feed?.callers ?? []).filter { $0.settled > 0 }
+            .sorted { ($0.hitRate ?? 0, $0.settled) > ($1.hitRate ?? 0, $1.settled) }
+            .prefix(3).map { $0 }
+    }
+
+    func refresh() async {
+        loading = true
+        async let w = Kallr.wallet()
+        async let f = Kallr.feed()
+        let (wallet, feed) = await (w, f)
+        if let wallet {
+            if let before = self.wallet { noteDeposit(from: before, to: wallet) }
+            self.wallet = wallet
+        }
+        if let feed { self.feed = feed }
+        if let address = historyFunder ?? self.wallet?.address {
+            if let fresh = await Kallr.orders(funder: address) {
+                orders = fresh
+                ordersFailed = false
+            } else {
+                ordersFailed = true
+            }
+        } else if wallet == nil {
+            ordersFailed = true
+        }
+        loading = false
+    }
+
+    /** Debug builds can show another wallet's orders: defaults write <bundle id> kall.funder 0x… */
+    private var historyFunder: String? {
+        #if DEBUG
+        return UserDefaults.standard.string(forKey: "kall.funder")
+        #else
+        return nil
+        #endif
+    }
+
+    private func noteDeposit(from old: Kallr.Wallet, to new: Kallr.Wallet) {
+        var parts: [String] = []
+        if let a = old.usdcValue, let b = new.usdcValue, b - a >= 0.01 { parts.append(String(format: "+%.2f USDC", b - a)) }
+        if let a = old.ethValue, let b = new.ethValue, b - a >= 0.00001 { parts.append(String(format: "+%.5f ETH", b - a)) }
+        guard !parts.isEmpty else { return }
+        received = parts.joined(separator: " and ") + " arrived in your Kall wallet."
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    func cancel(_ orderId: String) async {
+        cancelling.insert(orderId)
+        switch await Kallr.cancel(orderId: orderId) {
+        case .success:
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            note = "Order cancelled on Flash."
+        case .failure(let error):
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            note = error.localizedDescription
+        }
+        cancelling.remove(orderId)
+        await refresh()
+    }
+}
+
+// MARK: - Wallet
+
+private struct WalletHome: View {
+    @ObservedObject var store: AppStore
+    let seeHistory: () -> Void
+    @State private var depositing = false
+    @State private var copied = false
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                Header(eyebrow: "KALL MARKETS / YOUR KALL WALLET", title: "KALL WALLET")
+                balances
+                if let address = store.wallet?.address {
+                    HStack(spacing: 10) {
+                        Text(address).font(.system(size: 12, design: .monospaced)).foregroundStyle(Kallr.bone)
+                            .lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        Button {
+                            UIPasteboard.general.string = address
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            copied = true
+                        } label: {
+                            Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 12, weight: .bold)).foregroundStyle(Kallr.bone)
+                        }
+                        Button { if let url = BaseScan.address(address) { openURL(url) } } label: {
+                            Image(systemName: "arrow.up.right.square").font(.system(size: 15, weight: .semibold)).foregroundStyle(Kallr.muted)
+                        }
+                        .accessibilityLabel("View on BaseScan")
+                    }
+                    .padding(12)
+                    .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
+                }
+                if let received = store.received {
+                    Label(received, systemImage: "checkmark.circle.fill")
+                        .font(.footnote.weight(.semibold)).foregroundStyle(Kallr.lime)
+                }
+                Button { depositing = true } label: {
+                    Label("DEPOSIT USDC OR ETH", systemImage: "arrow.down.circle.fill")
+                        .font(.system(size: 15, weight: .heavy)).tracking(0.5)
+                        .foregroundStyle(Kallr.black)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(store.wallet?.address == nil)
+                hint
+                Markets(store: store)
+                recent
+                callers
+                PoweredByDefinitive(height: 12, suffix: "Flash on Base")
+                Text("The Kall wallet is held by Kall Markets for the keyboard, capped at $\(Kallr.fmt(store.wallet?.maxUsd ?? 25)) per order. Keep small amounts in it. Not financial advice.")
+                    .font(.footnote).foregroundStyle(Kallr.muted)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Kallr.black.ignoresSafeArea())
+        .refreshable { await store.refresh() }
+        .sheet(isPresented: $depositing, onDismiss: { Task { await store.refresh() } }) {
+            if let address = store.wallet?.address { DepositSheet(address: address, ethPrice: store.ethPrice) }
+        }
+    }
+
+    private var balances: some View {
+        HStack(spacing: 10) {
+            Amount(label: "USDC TO TRADE", value: store.wallet?.usdcValue.map { String(format: "%.2f", $0) })
+            Amount(label: "ETH FOR GAS", value: store.wallet?.ethValue.map { String(format: "%.5f", $0) })
+        }
+    }
+
+    @ViewBuilder private var hint: some View {
+        if let w = store.wallet, let usdc = w.usdcValue, let eth = w.ethValue {
+            if usdc < 1 || eth < 0.0002 {
+                Label(usdc < 1 ? "Add USDC to trade from the keyboard, plus a little ETH for gas." : "Add about $1 of ETH for gas.", systemImage: "info.circle")
+                    .font(.footnote).foregroundStyle(Kallr.muted)
+            } else {
+                Label("Ready to trade from the Kall Keyboard.", systemImage: "checkmark.seal.fill")
+                    .font(.footnote.weight(.semibold)).foregroundStyle(Kallr.lime)
+            }
+        }
+    }
+
+    @ViewBuilder private var recent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("RECENT ORDERS").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
+                Spacer()
+                Button("See all", action: seeHistory).font(.footnote.weight(.semibold)).tint(Kallr.lime)
+            }
+            if let orders = store.orders, !orders.isEmpty {
+                ForEach(orders.prefix(3), id: \.orderId) { o in OrderRow(order: o, store: store, compact: true) }
+            } else {
+                Text(store.orders == nil ? (store.ordersFailed ? "Couldn't read your orders from Flash. Pull down to try again." : "Reading your orders from Flash…") : "No orders yet. Copy a call from the Kall Keyboard to place one.")
+                    .font(.footnote).foregroundStyle(Kallr.muted)
+            }
+        }
+    }
+
+    @ViewBuilder private var callers: some View {
+        let top = store.topCallers
+        if !top.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("BEST CALLERS, SETTLED ON ARKIV").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
+                ForEach(top, id: \.handle) { c in
+                    let rate = Int(((c.hitRate ?? 0) * 100).rounded())
+                    HStack(spacing: 10) {
+                        Text("@\(c.handle)").font(.system(size: 15, weight: .semibold)).foregroundStyle(Kallr.bone).lineLimit(1)
+                        Spacer(minLength: 6)
+                        Text("\(c.hits)/\(c.settled) right").font(.footnote.monospacedDigit()).foregroundStyle(Kallr.muted)
+                        Text("\(rate)%").font(.system(size: 15, weight: .black).monospacedDigit())
+                            .foregroundStyle(rate >= 50 ? Kallr.lime : Kallr.danger)
+                            .frame(minWidth: 44, alignment: .trailing)
+                    }
+                    .padding(.horizontal, 12).frame(minHeight: 46)
+                    .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
+                }
+                Text("Follow them from the Kall Keyboard's Following tab, then trade their next call.")
+                    .font(.footnote).foregroundStyle(Kallr.muted)
+            }
+        }
+    }
+}
+
+/** ETH and BTC on Base right now, and how many calls are open on Arkiv. */
+private struct Markets: View {
+    @ObservedObject var store: AppStore
+
+    var body: some View {
+        HStack(spacing: 0) {
+            cell("ETH", store.price("ETH").map(usd))
+            Rectangle().fill(Kallr.hairline).frame(width: 1, height: 30)
+            cell("BTC", store.price("BTC").map(usd))
+            Rectangle().fill(Kallr.hairline).frame(width: 1, height: 30)
+            cell("OPEN CALLS", store.feed.map { "\($0.calls.count)" }, lime: true)
+        }
+        .padding(.vertical, 12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Kallr.hairline))
+    }
+
+    private func cell(_ label: String, _ value: String?, lime: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
+            Text(value ?? "…").font(.system(size: 17, weight: .bold).monospacedDigit())
+                .foregroundStyle(lime ? Kallr.lime : Kallr.bone).lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+    }
+
+    private func usd(_ v: Double) -> String { "$" + v.formatted(.number.precision(.fractionLength(0))) }
+}
+
+enum BaseScan {
+    static func address(_ a: String) -> URL? { URL(string: "https://basescan.org/address/\(a)") }
+}
+
+private struct Amount: View {
+    let label: String
+    let value: String?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
+            Text(value ?? "…").font(.system(size: 30, weight: .black).monospacedDigit()).foregroundStyle(Kallr.lime)
+                .minimumScaleFactor(0.6).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Kallr.hairline))
+    }
+}
+
+// MARK: - Deposit
+
+/** Pick USDC or ETH and an amount; open MetaMask (or any wallet) with the transfer filled in, or scan the QR. */
+private struct DepositSheet: View {
+    let address: String
+    let ethPrice: Double?
+    @Environment(\.openURL) private var openURL
+    @Environment(\.dismiss) private var dismiss
+    @State private var asset = "USDC"
+    @State private var usd = 10.0
+    @State private var note: String?
+
+    private var path: String? { Deposit.path(asset: asset, to: address, usd: usd, ethPrice: ethPrice) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text("DEPOSIT").font(.system(size: 22, weight: .black)).foregroundStyle(Kallr.bone)
+                    Spacer()
+                    Button("Done") { dismiss() }.tint(Kallr.lime)
+                }
+                Picker("Asset", selection: $asset) {
+                    Text("USDC to trade").tag("USDC")
+                    Text("ETH for gas").tag("ETH")
+                }
+                .pickerStyle(.segmented)
+                HStack(spacing: 8) {
+                    ForEach(asset == "USDC" ? [5.0, 10, 25, 50] : [1.0, 2, 5], id: \.self) { v in
+                        Button { usd = v } label: {
+                            Text("$\(Kallr.fmt(v))").font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(usd == v ? Kallr.black : Kallr.bone)
+                                .frame(maxWidth: .infinity, minHeight: 40)
+                                .background(usd == v ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 9))
+                        }
+                    }
+                }
+                Text(amountLine).font(.subheadline).foregroundStyle(Kallr.muted)
+                if let path, let qr = QR.image(for: "ethereum:\(path)") {
+                    Image(uiImage: qr).interpolation(.none).resizable().scaledToFit()
+                        .frame(maxWidth: 220).padding(14)
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
+                        .frame(maxWidth: .infinity)
+                    Text("Scan with MetaMask or any wallet on another device.")
+                        .font(.footnote).foregroundStyle(Kallr.muted).frame(maxWidth: .infinity)
+                }
+                Button { open(path.flatMap(Deposit.metaMask)) } label: {
+                    Label("OPEN IN METAMASK", systemImage: "arrow.up.right.square")
+                        .font(.system(size: 15, weight: .heavy)).foregroundStyle(Kallr.black)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(path == nil)
+                HStack(spacing: 10) {
+                    Button { open(path.flatMap(Deposit.anyWallet)) } label: {
+                        Text("OTHER WALLET APP").font(.system(size: 13, weight: .bold)).foregroundStyle(Kallr.bone)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
+                    }
+                    .disabled(path == nil)
+                    Button {
+                        UIPasteboard.general.string = address
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        note = "Address copied. Send on Base only."
+                    } label: {
+                        Text("COPY ADDRESS").font(.system(size: 13, weight: .bold)).foregroundStyle(Kallr.bone)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
+                    }
+                }
+                if let note { Text(note).font(.footnote).foregroundStyle(Kallr.lime) }
+                Label("Base network only. Funds sent on another network are lost.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote).foregroundStyle(Kallr.danger)
+                Text("From your Privy wallet on the Kall Web App, send to the address above on Base.")
+                    .font(.footnote).foregroundStyle(Kallr.muted)
+            }
+            .padding(20)
+        }
+        .background(Kallr.black.ignoresSafeArea())
+        .presentationDetents([.large])
+    }
+
+    private var amountLine: String {
+        if asset == "USDC" { return "\(Kallr.fmt(usd)) USDC on Base, to your Kall wallet." }
+        guard let p = ethPrice, p > 0 else { return "Reading the ETH price…" }
+        return String(format: "About %.5f ETH ($%@) on Base, for gas.", usd / p, Kallr.fmt(usd))
+    }
+
+    private func open(_ url: URL?) {
+        guard let url else { return }
+        openURL(url) { accepted in
+            if !accepted { note = "No wallet app opened that link. Copy the address or scan the QR instead." }
+        }
+    }
+}
+
+enum QR {
+    static func image(for text: String) -> UIImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(text.utf8)
+        filter.correctionLevel = "M"
+        guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 8, y: 8)),
+              let cg = CIContext().createCGImage(output, from: output.extent) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+}
+
+// MARK: - History
+
+private struct HistoryView: View {
+    enum Filter: String, CaseIterable { case all = "All", working = "Working", done = "Done" }
+    @ObservedObject var store: AppStore
+    let setUp: () -> Void
+    @State private var filter = Filter.all
+    @State private var selected: Kallr.Order?
+
+    private var shown: [Kallr.Order] {
+        let all = store.orders ?? []
+        switch filter {
+        case .all: return all
+        case .working: return all.filter(\.open)
+        case .done: return all.filter { !$0.open }
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Header(eyebrow: "DEFINITIVE FLASH / KALL WALLET ORDERS", title: "HISTORY")
+                if let note = store.note { Text(note).font(.footnote).foregroundStyle(Kallr.muted) }
+                if let orders = store.orders {
+                    if orders.isEmpty {
+                        empty
+                    } else {
+                        HStack(spacing: 10) {
+                            Amount(label: "ORDERS", value: "\(orders.count)")
+                            Amount(label: "WORKING", value: "\(orders.filter(\.open).count)")
+                            Amount(label: "FILLED", value: "\(orders.filter { $0.statusLabel == "FILLED" }.count)")
+                        }
+                        Picker("Show", selection: $filter) {
+                            ForEach(Filter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        if shown.isEmpty {
+                            Text(filter == .working ? "Nothing working on Flash right now." : "No finished orders yet.")
+                                .font(.footnote).foregroundStyle(Kallr.muted)
+                        }
+                        ForEach(shown) { o in
+                            OrderRow(order: o, store: store, compact: false)
+                                .contentShape(Rectangle())
+                                .onTapGesture { selected = o }
+                        }
+                    }
+                } else if store.ordersFailed {
+                    Label("Couldn't read your orders from Definitive Flash. Pull down to try again.", systemImage: "exclamationmark.triangle")
+                        .font(.footnote).foregroundStyle(Kallr.danger)
+                } else {
+                    ProgressView().tint(Kallr.lime).frame(maxWidth: .infinity)
+                }
+                PoweredByDefinitive(height: 12, suffix: "Flash on Base").padding(.top, 8)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Kallr.black.ignoresSafeArea())
+        .refreshable { await store.refresh() }
+        .sheet(item: $selected) { o in OrderDetail(orderId: o.orderId, fallback: o, store: store) }
+        .task {
+            // While an order is working, re-read Flash every 5 seconds.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: (store.orders?.contains { $0.open } ?? false) ? 5_000_000_000 : 20_000_000_000)
+                await store.refresh()
+            }
+        }
+    }
+
+    private var empty: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("No orders yet. In X or Telegram, switch to the Kall Keyboard, pick a call and tap Trade. Every order lands here, read live from Definitive Flash.")
+                .font(.subheadline).foregroundStyle(Kallr.muted)
+            Button(action: setUp) {
+                Text("SET UP THE KALL KEYBOARD")
+                    .font(.system(size: 14, weight: .heavy)).tracking(0.6)
+                    .foregroundStyle(Kallr.bone)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
+            }
+        }
+    }
+}
+
+private struct OrderRow: View {
+    let order: Kallr.Order
+    @ObservedObject var store: AppStore
+    let compact: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(order.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Kallr.bone)
+                let sub = [store.caller(of: order.orderId).map { "from @\($0)'s call" }, order.placedAgo, compact ? nil : order.exits].compactMap { $0 }
+                if !sub.isEmpty { Text(sub.joined(separator: " · ")).font(.footnote).foregroundStyle(Kallr.muted).lineLimit(2) }
+                if !compact, let fill = order.filledLine {
+                    Text(fill).font(.footnote.weight(.semibold).monospacedDigit()).foregroundStyle(Kallr.lime).lineLimit(2)
+                }
+            }
+            Spacer(minLength: 6)
+            VStack(alignment: .trailing, spacing: 6) {
+                StatusBadge(order: order)
+                if !compact, order.open, order.orderType != "bracket" {
+                    Button { Task { await store.cancel(order.orderId) } } label: {
+                        Text(store.cancelling.contains(order.orderId) ? "…" : "CANCEL").font(.system(size: 10, weight: .heavy))
+                            .foregroundStyle(Kallr.danger).padding(.horizontal, 8).frame(height: 22)
+                            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Kallr.danger.opacity(0.5)))
+                    }
+                }
+            }
+            if !compact {
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Kallr.muted).padding(.top, 5)
+            }
+        }
+        .padding(12)
+        .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Kallr.hairline))
+    }
+}
+
+private struct StatusBadge: View {
+    let order: Kallr.Order
+    var body: some View {
+        Text(order.statusLabel).font(.system(size: 10, weight: .heavy))
+            .foregroundStyle(order.open ? Kallr.black : order.statusLabel == "FILLED" ? Kallr.lime : Kallr.muted)
+            .padding(.horizontal, 8).frame(height: 22)
+            .background(order.open ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 5))
+    }
+}
+
+/** One order: what it is, where it came from, its Flash ID, and Cancel while it's working. */
+private struct OrderDetail: View {
+    let orderId: String
+    let fallback: Kallr.Order
+    @ObservedObject var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var copied = false
+
+    /** The latest copy, so the status moves while the sheet is open. */
+    private var order: Kallr.Order { store.orders?.first { $0.orderId == orderId } ?? fallback }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    StatusBadge(order: order)
+                    Spacer()
+                    Button("Done") { dismiss() }.tint(Kallr.lime)
+                }
+                Text(order.title).font(.system(size: 24, weight: .black)).foregroundStyle(Kallr.bone)
+                VStack(spacing: 0) {
+                    row("Type", order.orderType == "bracket" ? "Exit (take profit / stop loss)" : order.orderType.capitalized)
+                    row("Side", order.side.capitalized)
+                    // Flash sizes buys in USDC and sells (and exits) in the asset.
+                    row("Size", order.side == "buy" && order.orderType != "bracket" ? "$\(order.qty) of \(order.symbol)" : "\(order.qty) \(order.symbol)")
+                    if let when = order.placedDate { row("Placed", when.formatted(date: .abbreviated, time: .shortened)) }
+                    if let fill = order.filledLine { row("Filled", fill) }
+                    if let exits = order.exits, !exits.isEmpty { row("Exits", exits) }
+                    if let caller = store.caller(of: order.orderId) { row("Copied from", "@\(caller)'s call") }
+                    row("On Arkiv", store.recorded(order.orderId) ? "Trade recorded" : "Not recorded yet", last: true)
+                }
+                .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Kallr.hairline))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("FLASH ORDER ID").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
+                    HStack(spacing: 10) {
+                        Text(order.orderId).font(.system(size: 12, design: .monospaced)).foregroundStyle(Kallr.bone)
+                            .lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        Button {
+                            UIPasteboard.general.string = order.orderId
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            copied = true
+                        } label: {
+                            Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 12, weight: .bold)).foregroundStyle(Kallr.bone)
+                        }
+                    }
+                    .padding(12)
+                    .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
+                }
+                if order.open, order.orderType != "bracket" {
+                    Button { Task { await store.cancel(order.orderId) } } label: {
+                        Text(store.cancelling.contains(order.orderId) ? "CANCELLING…" : "CANCEL ORDER")
+                            .font(.system(size: 14, weight: .heavy)).tracking(0.6)
+                            .foregroundStyle(Kallr.danger)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.danger.opacity(0.6)))
+                    }
+                    .disabled(store.cancelling.contains(order.orderId))
+                }
+                if let address = store.wallet?.address, let url = BaseScan.address(address) {
+                    Button { openURL(url) } label: {
+                        Text("KALL WALLET ON BASESCAN  ↗")
+                            .font(.system(size: 14, weight: .heavy)).tracking(0.6)
+                            .foregroundStyle(Kallr.bone)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
+                    }
+                }
+                PoweredByDefinitive(height: 12, suffix: "Flash on Base")
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Kallr.black.ignoresSafeArea())
+        .presentationDetents([.large])
+    }
+
+    private func row(_ label: String, _ value: String, last: Bool = false) -> some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(label).font(.footnote).foregroundStyle(Kallr.muted)
+                Spacer(minLength: 8)
+                Text(value).font(.system(size: 14, weight: .semibold)).foregroundStyle(Kallr.bone).multilineTextAlignment(.trailing)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 11)
+            if !last { Rectangle().fill(Kallr.hairline).frame(height: 1).padding(.leading, 12) }
+        }
+    }
+}
+
+// MARK: - Keyboard setup and tools
+
+private struct KeyboardSetup: View {
     @Environment(\.openURL) private var openURL
     @State private var tryText = ""
     @State private var callText = ""
@@ -21,37 +644,26 @@ struct ContentView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                header
+            VStack(alignment: .leading, spacing: 26) {
+                Header(eyebrow: "KALL MARKETS / CALLS FROM X. TRADES ON BASE.", title: "SEE THE CALL.\nTRADE IT")
+                Text("The Kall Keyboard shows calls from the callers you follow, checks what you copy, and places the trade on Definitive Flash after you review a fresh quote, from your Kall wallet.")
+                    .font(.subheadline).foregroundStyle(Kallr.muted)
                 setup
-                WalletCard()
                 tryIt
                 checkCall
                 Button { openURL(Kallr.origin.appendingPathComponent("dashboard")) } label: {
-                    Text("OPEN KALL MARKETS  ↗")
+                    Text("OPEN THE KALL WEB APP  ↗")
                         .font(.system(size: 14, weight: .heavy)).tracking(0.6)
                         .foregroundStyle(Kallr.bone)
                         .frame(maxWidth: .infinity, minHeight: 48)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
                 }
-                PoweredByDefinitive(height: 12, suffix: "Flash on Base")
-                Text("Not financial advice.").font(.footnote).foregroundStyle(Kallr.muted)
             }
-            .padding(24)
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Kallr.black.ignoresSafeArea())
         .scrollDismissesKeyboard(.interactively)
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("KALL MARKETS / CALLS FROM X. TRADES ON BASE.")
-                .font(.system(size: 11, design: .monospaced)).foregroundStyle(Kallr.muted)
-            (Text("SEE THE CALL.\nTRADE IT").foregroundColor(Kallr.bone) + Text(".").foregroundColor(Kallr.lime))
-                .font(.system(size: 40, weight: .black)).tracking(-1).lineSpacing(-4)
-            Text("The Kall Keyboard shows calls from the callers you follow, checks what you copy, and places the trade on Definitive Flash in one tap, from your Kall wallet.")
-                .font(.subheadline).foregroundStyle(Kallr.muted)
-        }
     }
 
     private var setup: some View {
@@ -59,7 +671,7 @@ struct ContentView: View {
             Label("SET UP", systemImage: "keyboard").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)
             Step(n: 1, text: "Settings → General → Keyboard → Keyboards → Add New Keyboard → Kall Keyboard")
             Step(n: 2, text: "Tap Kall Keyboard and turn on Allow Full Access, so it can reach Kall Markets, read what you copy when you tap Check, and use haptics.")
-            Step(n: 3, text: "Fund your Kall wallet below, then in X or Telegram hold the globe key and pick Kall Keyboard.")
+            Step(n: 3, text: "Deposit to your Kall wallet, then in X or Telegram hold the globe key and pick Kall Keyboard.")
             Button { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } } label: {
                 Text("OPEN KALL SETTINGS  ↗")
                     .font(.system(size: 14, weight: .heavy)).tracking(0.6)
@@ -128,6 +740,25 @@ struct ContentView: View {
     }
 }
 
+// MARK: - Pieces
+
+/** The Kall mark, a mono eyebrow and a heavy uppercase title ending in a lime full stop. */
+private struct Header: View {
+    let eyebrow: String
+    let title: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image("KallMark").resizable().scaledToFit().frame(width: 30, height: 30)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                Text(eyebrow).font(.system(size: 11, design: .monospaced)).foregroundStyle(Kallr.muted).lineLimit(1).minimumScaleFactor(0.7)
+            }
+            (Text(title).foregroundColor(Kallr.bone) + Text(".").foregroundColor(Kallr.lime))
+                .font(.system(size: 36, weight: .black)).tracking(-1)
+        }
+    }
+}
+
 private struct Step: View {
     let n: Int
     let text: String
@@ -136,52 +767,5 @@ private struct Step: View {
             Text("0\(n)").font(.system(size: 12, design: .monospaced)).foregroundStyle(Kallr.lime)
             Text(text).font(.subheadline).foregroundStyle(Kallr.bone)
         }
-    }
-}
-
-/** The Kall wallet the keyboard trades from: where to send funds, and what it holds. */
-private struct WalletCard: View {
-    @State private var wallet: Kallr.Wallet?
-    @State private var copied = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("YOUR KALL WALLET", systemImage: "wallet.pass").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)
-            if let w = wallet, let address = w.address {
-                HStack(spacing: 10) {
-                    amount("USDC TO TRADE", w.usdcValue.map { String(format: "%.2f", $0) })
-                    amount("ETH FOR GAS", w.ethValue.map { String(format: "%.5f", $0) })
-                }
-                Text(address).font(.system(size: 12, design: .monospaced)).foregroundStyle(Kallr.bone).textSelection(.enabled)
-                Button {
-                    UIPasteboard.general.string = address
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    copied = true
-                } label: {
-                    Text(copied ? "ADDRESS COPIED" : "COPY ADDRESS")
-                        .font(.system(size: 14, weight: .heavy)).tracking(0.6)
-                        .foregroundStyle(Kallr.black)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 10))
-                }
-                Text("Send USDC, plus about $1 of ETH for gas, on Base only, from your Privy wallet or MetaMask. The keyboard places orders from it, up to $\(Kallr.fmt(w.maxUsd ?? 25)) each.")
-                    .font(.footnote).foregroundStyle(Kallr.muted)
-            } else {
-                Text("Reading your Kall wallet…").font(.footnote).foregroundStyle(Kallr.muted)
-            }
-        }
-        .padding(16)
-        .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Kallr.hairline))
-        .task { wallet = await Kallr.wallet() }
-        .refreshable { wallet = await Kallr.wallet() }
-    }
-
-    private func amount(_ label: String, _ value: String?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
-            Text(value ?? "…").font(.system(size: 22, weight: .black).monospacedDigit()).foregroundStyle(Kallr.lime)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
