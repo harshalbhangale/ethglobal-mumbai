@@ -241,6 +241,36 @@ export const flashOrderSchema = z
   .passthrough();
 export type FlashOrder = z.infer<typeof flashOrderSchema>;
 
+/** A fill as Flash reports it: `transactionId` is the on-chain hash, `venues` the exchanges used. */
+export const flashFillSchema = z
+  .object({
+    transactionId: z.string().nullable().optional(),
+    venues: z.array(z.string()).nullable().optional(),
+    fillPrice: z.string().nullable().optional(),
+    status: z.string().nullable().optional(),
+    filledAt: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+/** GET /orders/{id}: the order (sometimes nested under `order`) plus its fills. */
+export const flashOrderDetailSchema = z
+  .object({
+    order: flashOrderSchema.partial().passthrough().nullable().optional(),
+    status: z.string().optional(),
+    fills: z.array(flashFillSchema).nullable().optional(),
+  })
+  .passthrough()
+  .transform((d) => ({
+    status: d.order?.status ?? d.status ?? null,
+    fills: (d.fills ?? []).map((f) => ({
+      transactionId: f.transactionId ?? null,
+      venues: f.venues ?? [],
+      fillPrice: f.fillPrice ?? null,
+      status: f.status ?? null,
+    })),
+  }));
+export type FlashOrderDetail = z.output<typeof flashOrderDetailSchema>;
+
 export const OPEN_STATUSES = ["ORDER_STATUS_PENDING", "ORDER_STATUS_ACCEPTED", "ORDER_STATUS_PARTIALLY_FILLED"];
 
 export class FlashError extends Error {
@@ -311,6 +341,11 @@ export function flashClient(options: { apiKey?: string; fetcher?: typeof fetch }
       const q = new URLSearchParams({ query: query.slice(0, 64), chain: "base", limit: String(Math.min(limit, 25)) });
       const res = z.object({ assets: z.array(flashTokenSchema) }).passthrough().parse(await call(`/search?${q}`));
       return res.assets.filter((a) => a.chain === "base");
+    },
+    /** One order with its fills: each fill carries the on-chain transaction and the venues it routed through. */
+    async getOrder(orderId: string): Promise<FlashOrderDetail> {
+      const id = z.string().uuid().parse(orderId);
+      return flashOrderDetailSchema.parse(await call(`/orders/${id}`));
     },
     async listOrders(funderAddress: string, pageSize = 25): Promise<FlashOrder[]> {
       const q = new URLSearchParams({ funderAddress: String(address.parse(funderAddress)), pageSize: String(pageSize) });

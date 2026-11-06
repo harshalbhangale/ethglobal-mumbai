@@ -227,6 +227,12 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 @media (prefers-reduced-motion: reduce) { .step.active .step-dot { animation: none; border-top-color: #1d9bf0; } }
 .done-card { display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--positive); background: color-mix(in srgb, var(--positive) 10%, transparent); font-size: 14px; }
 .done-card strong { color: var(--foreground); }
+.done-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.network-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 99px; background: #0052ff; color: #fff; font: 700 11px/1 system-ui, sans-serif; }
+.network-badge i { width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+.receipt { margin: 6px 0 0; padding: 8px 0 0; background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; font-size: 12px; }
+.swap-pending { color: var(--muted); font-weight: 500; animation: kallr-pulse 1.4s ease-in-out infinite; }
+@keyframes kallr-pulse { 50% { opacity: .45; } }
 
 .definitive-logo { display: block; color: var(--foreground); }
 .exits-toggle { justify-self: start; border: 0; background: none; padding: 4px 2px; color: #1d9bf0; font: 600 14px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; }

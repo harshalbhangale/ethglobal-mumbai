@@ -95,6 +95,28 @@ export function quoteFacts(q: FlashQuote): QuoteFacts {
   };
 }
 
+export const BASESCAN = "https://basescan.org";
+
+export type SwapFill = { hash: string; venues: string[] };
+
+/**
+ * Waits for Definitive to execute the signed order on Base and returns the swap's transaction hash and
+ * the venues it routed through. Null when no fill shows up in time (the order page still has it).
+ */
+export async function waitForFill(orderId: string, tries = 20, everyMs = 3000): Promise<SwapFill | null> {
+  for (let i = 0; i < tries; i++) {
+    const res = await send<{ status: string | null; fills?: Array<{ transactionId: string | null; venues: string[] }> }>({
+      type: "flash-order-status",
+      orderId,
+    }).catch(() => null);
+    const fill = res?.fills?.find((f) => f.transactionId && /^0x[0-9a-fA-F]{64}$/.test(f.transactionId));
+    if (fill?.transactionId) return { hash: fill.transactionId, venues: fill.venues ?? [] };
+    if (res?.status && /CANCEL|REJECT|FAIL|EXPIRE/i.test(res.status)) return null;
+    await new Promise((r) => setTimeout(r, everyMs));
+  }
+  return null;
+}
+
 export async function placeOnX(o: CardOrder, onStep: (step: Step) => void, onQuote?: (facts: QuoteFacts) => void) {
   onStep("connecting");
   const from = await connect();
@@ -109,15 +131,17 @@ export async function placeOnX(o: CardOrder, onStep: (step: Step) => void, onQuo
   if (!parsed.success) throw new Error("Flash returned a quote we couldn't read. Try again.");
   const quote: FlashQuote = parsed.data;
   onQuote?.(quoteFacts(quote));
+  /** Transactions the wallet sent itself (wrap, approvals), for Basescan links. */
+  const txs: Array<{ label: string; hash: string }> = [];
 
   // Selling native ETH: turn exactly the order amount into WETH first (one deposit transaction).
   if (quote.wrap?.evmTx) {
     onStep("wrapping");
-    await sendAndWait(from, quote.wrap.evmTx);
+    txs.push({ label: "Wrap ETH", hash: await sendAndWait(from, quote.wrap.evmTx) });
   }
   if (quote.evm.approveTx) {
     onStep("approving");
-    await sendAndWait(from, quote.evm.approveTx);
+    txs.push({ label: "Approve", hash: await sendAndWait(from, quote.evm.approveTx) });
   }
   const signatures: FlashSignatures = { quoteId: quote.quoteId, userSignature: "0x", evmOrderTypedData: quote.evm.orderTypedData };
   if (quote.evm.permitTypedData) {
@@ -128,7 +152,7 @@ export async function placeOnX(o: CardOrder, onStep: (step: Step) => void, onQuo
   const pair = quote.attachedBracket;
   if (pair?.evm.approveTx) {
     onStep("approving-exits");
-    await sendAndWait(from, pair.evm.approveTx);
+    txs.push({ label: "Approve exits", hash: await sendAndWait(from, pair.evm.approveTx) });
   }
   onStep("signing");
   signatures.userSignature = await signTypedData(from, quote.evm.orderTypedData);
@@ -153,5 +177,5 @@ export async function placeOnX(o: CardOrder, onStep: (step: Step) => void, onQuo
     context: { source: "extension", caller: o.caller ?? null },
   });
   if (!res.orderId) throw new Error("Flash didn't return an order ID.");
-  return { orderId: res.orderId, from, exits: res.attachedBracket?.status ?? null, received: quote.to.amount };
+  return { orderId: res.orderId, from, exits: res.attachedBracket?.status ?? null, received: quote.to.amount, txs };
 }

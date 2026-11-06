@@ -348,6 +348,8 @@ describe("sign on X with a browser wallet", () => {
       if (m.type === "prices") return { prices: [{ asset: "ETH", price: "2500", source: "chainlink-base" }] };
       if (m.type === "flash-quote") return { quote };
       if (m.type === "flash-order") return { orderId: "887ccf13-aaaa-bbbb-cccc-000000000000", attachedBracket: { status: "pending_activation" } };
+      if (m.type === "flash-order-status")
+        return { status: "ORDER_STATUS_FILLED", fills: [{ transactionId: `0x${"ab".repeat(32)}`, venues: ["uniswap_v3"] }] };
       return null;
     });
     const { flashCard } = await import("./flash-card");
@@ -410,7 +412,14 @@ describe("sign on X with a browser wallet", () => {
       bracket: { userSignature: "0xb2", salt: "0x1", deadline: "281474976710655", signedMaxFromAmount: "0.0104" },
     });
     expect(q(card, ".swap-wallet").textContent).toBe("0x0000…00a1");
-    expect(card.textContent).toContain("TP/SL arm on the first fill");
+    expect(card.textContent).toContain("Arms on the first fill");
+    // Receipt: Base badge, Basescan links for the wallet, its approval and (once filled) the swap.
+    expect(q(card, ".network-badge").textContent).toBe("Base");
+    const links = [...card.querySelectorAll<HTMLAnchorElement>(".receipt a")].map((a) => a.href);
+    expect(links).toContain("https://basescan.org/tx/0xhash");
+    expect(links).toContain(`https://basescan.org/address/${from}`);
+    await vi.waitFor(() => expect(q(card, ".receipt").textContent).toContain("Uniswap V3 · via Definitive"));
+    expect([...card.querySelectorAll<HTMLAnchorElement>(".receipt a")].map((a) => a.href)).toContain(`https://basescan.org/tx/0x${"ab".repeat(32)}`);
   });
 
   it("stops cleanly when the user rejects in the wallet", async () => {

@@ -3,7 +3,7 @@ import type { Answer, PostRef } from "./call-view";
 import { formatBps } from "./card-metrics";
 import { appOrigin } from "./config";
 import { el, openDesk, safeLink } from "./dom";
-import { placeOnX, type QuoteFacts, type Step } from "./flash-direct";
+import { BASESCAN, placeOnX, type QuoteFacts, type Step, waitForFill } from "./flash-direct";
 import { followButton } from "./follows";
 import { definitiveLogo, tokenIcon } from "./logos";
 import { cardOrderText, COPYABLE, DECIMAL, deskOrderUrl } from "./post";
@@ -408,17 +408,13 @@ export function flashCard(input: {
       walletChip.textContent = `${result.from.slice(0, 6)}…${result.from.slice(-4)}`;
       walletChip.hidden = false;
       progress.append(
-        el(
-          "div",
-          { class: "done-card" },
-          el("strong", {}, `${side === "buy" ? "Bought" : "Sold"} ${sym()} with ${spent} ✓`),
-          el(
-            "span",
-            {},
-            result.exits ? `TP/SL ${result.exits === "pending_activation" ? "arm on the first fill" : result.exits}. ` : "",
-            safeLink(`${appOrigin}/app#orders`, `Order ${result.orderId.slice(0, 8)}… ↗`),
-          ),
-        ),
+        receipt({
+          title: `${side === "buy" ? "Bought" : "Sold"} ${sym()} with ${spent} ✓`,
+          exits: result.exits,
+          orderId: result.orderId,
+          from: result.from,
+          txs: result.txs,
+        }),
       );
       amount.value = "";
     } catch (error) {
@@ -632,4 +628,44 @@ export function quoteSummary(f: QuoteFacts, symbol: string) {
     ...(f.slippage !== null ? row("Max slippage", pct(f.slippage), "Recommended by Definitive for this quote") : []),
     ...(f.feeUsd !== null ? row("Flash fee", f.feeUsd === 0 ? "Free" : `$${f.feeUsd.toFixed(2)}`) : []),
   );
+}
+
+const short = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;
+const venueName = (v: string) => v.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+/**
+ * After a fill: the network, the wallet, every transaction the wallet sent, and the swap itself once
+ * Definitive executes it, each linked to Basescan. The swap hash arrives a few seconds later.
+ */
+export function receipt(r: { title: string; exits: string | null; orderId: string; from: string; txs: Array<{ label: string; hash: string }> }) {
+  const row = (k: string, v: Node | string) => [el("dt", {}, k), el("dd", {}, v)];
+  const swap = el("dd", { class: "swap-pending" }, "Waiting for Definitive to fill on Base…");
+  const venue = el("dd", {}, "Best route by Definitive");
+  const card = el(
+    "div",
+    { class: "done-card" },
+    el("div", { class: "done-head" }, el("strong", {}, r.title), el("span", { class: "network-badge" }, el("i", { "aria-hidden": "true" }), "Base")),
+    el(
+      "dl",
+      { class: "review receipt" },
+      el("dt", {}, "Swap"),
+      swap,
+      el("dt", {}, "Route"),
+      venue,
+      ...r.txs.flatMap((t) => row(t.label, safeLink(`${BASESCAN}/tx/${t.hash}`, `${short(t.hash)} ↗`))),
+      ...row("Wallet", safeLink(`${BASESCAN}/address/${r.from}`, `${short(r.from)} ↗`)),
+      ...row("Order", safeLink(`${appOrigin}/app#orders`, `${r.orderId.slice(0, 8)}… ↗`)),
+      ...(r.exits ? row("TP/SL", r.exits === "pending_activation" ? "Arms on the first fill" : r.exits) : []),
+    ),
+  );
+  void waitForFill(r.orderId).then((fill) => {
+    if (!fill) {
+      swap.replaceChildren("Still filling: check the order page");
+      return;
+    }
+    swap.classList.remove("swap-pending");
+    swap.replaceChildren(safeLink(`${BASESCAN}/tx/${fill.hash}`, `${short(fill.hash)} ↗`));
+    if (fill.venues.length) venue.replaceChildren(`${fill.venues.map(venueName).join(" + ")} · via Definitive`);
+  });
+  return card;
 }
