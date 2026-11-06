@@ -8,7 +8,8 @@ import { swarmUrl } from "@/lib/server/swarm";
 /**
  * What the Kall Keyboard on iPhone shows, read from Arkiv on the server (the keyboard can't run the
  * Arkiv SDK): every caller Kall Markets tracks or has priced, with their record; open calls and recent
- * results, each with the post's text from its Swarm snapshot; the linked wallet's trades; and live
+ * results, each with the post's text from its Swarm snapshot and its Arkiv entity key (for an explorer
+ * link); the linked wallet's trades (the shared keyboard wallet's for builds not linked yet); and live
  * ETH and BTC prices. Which callers the user follows is kept on the phone.
  */
 export const dynamic = "force-dynamic";
@@ -52,6 +53,7 @@ export async function GET(req: Request) {
     deadline: n(c.deadline.value),
     entry: n(c.entry?.value),
     swarmRef: c.swarmRef?.value,
+    key: c.$key,
   }));
   const settled = results.slice(0, 40).map((r) => ({
     postId: r.postId.value,
@@ -63,6 +65,7 @@ export async function GET(req: Request) {
     postedAt: n(r.postedAt?.value),
     deadline: n(r.deadline.value),
     swarmRef: r.swarmRef?.value,
+    key: r.$key,
   }));
   const [callTexts, resultTexts] = await Promise.all([
     Promise.all(openCalls.map((c) => postText(c.swarmRef))),

@@ -37,6 +37,15 @@ Each Arkiv feature maps to something a user sees:
 - `permissionlessExtension` → if we vanish, anyone can keep a caller's record alive.
 - Indexed `caller`, `trader`, `source`, `deadline` → the caller pages, your trades, and the scoring queue.
 
+## Where you see it
+
+Every record is one tap away in the product:
+
+- **Extension on X:** "On Arkiv ↗" under the caller on a post, each call on a caller's profile card, and
+  "Trade record ↗" on the receipt after you trade.
+- **Web app:** each post in the feed links its Arkiv entity.
+- **iPhone keyboard:** "Trade record on Arkiv ↗" on an order, and a caller's calls in Explore.
+
 ## The one line that makes it trustworthy
 
 Anyone can write an entity with our schema tag. So every read we make adds `$creator = addr(<our writer>)`, and

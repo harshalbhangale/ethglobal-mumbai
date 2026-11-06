@@ -1,8 +1,9 @@
 import "server-only";
 import { execFile } from "node:child_process";
 import path from "node:path";
-import { createPublicClient, getAddress, http, isAddress, parseAbi, parseAbiItem, type Address } from "viem";
+import { createPublicClient, getAddress, http, isAddress, keccak256, parseAbi, parseAbiItem, toBytes, type Address } from "viem";
 import { baseSepolia } from "viem/chains";
+import { logWindows } from "@/lib/log-windows";
 
 /**
  * Chainlink CRE verdicts. The workflows in kall-cre/ decide (coin real or fake, call hit or miss) on
@@ -45,13 +46,36 @@ export type CoinVerdict = {
 
 /** The block KallVerdicts was deployed in; log searches start there. */
 const FROM_BLOCK = BigInt(process.env.KALL_VERDICTS_FROM_BLOCK ?? "55315000");
+/**
+ * Log searches get their own RPC: sepolia.base.org allows only 200 blocks per eth_getLogs, publicnode
+ * 50,000. The contract is older than one window, so the search walks back in windows from the newest.
+ */
+const logs = createPublicClient({
+  chain: baseSepolia,
+  transport: http(process.env.BASE_SEPOLIA_LOGS_RPC_URL || "https://base-sepolia-rpc.publicnode.com"),
+});
+const LOG_SPAN = BigInt(process.env.BASE_SEPOLIA_LOG_SPAN ?? "50000");
+/** A verdict's transaction never changes once found. */
+const txCache = new Map<string, `0x${string}`>();
 
-const txOf = async (event: typeof coinChecked | typeof callScored, args: Record<string, unknown>) => {
+/** The transaction that wrote the newest matching event, or null. */
+const txOf = async (event: typeof coinChecked | typeof callScored, args: Record<string, unknown>, cacheKey: string) => {
   if (!VERDICTS) return null;
-  const logs = await client
-    .getLogs({ address: VERDICTS, event: event as typeof coinChecked, args, fromBlock: FROM_BLOCK })
-    .catch(() => []);
-  return logs.at(-1)?.transactionHash ?? null;
+  const known = txCache.get(cacheKey);
+  if (known) return known;
+  const latest = await logs.getBlockNumber().catch(() => null);
+  if (latest === null) return null;
+  for (const window of logWindows(FROM_BLOCK, latest, LOG_SPAN)) {
+    const found = await logs
+      .getLogs({ address: VERDICTS, event: event as typeof coinChecked, args, ...window })
+      .catch(() => []);
+    const hash = found.at(-1)?.transactionHash;
+    if (hash) {
+      txCache.set(cacheKey, hash);
+      return hash;
+    }
+  }
+  return null;
 };
 
 /** The CRE verdict for (token, ticker), or null when CRE hasn't checked it. */
@@ -68,7 +92,7 @@ export async function readCoinVerdict(token: Address, claimed: string): Promise<
     symbol: c.symbol,
     canonical: c.canonical === "0x0000000000000000000000000000000000000000" ? null : c.canonical,
     checkedAt: Number(c.checkedAt),
-    txHash: await txOf(coinChecked, { token }),
+    txHash: await txOf(coinChecked, { token }, `coin:${token}:${ticker}`),
     contract: VERDICTS,
   };
 }
@@ -84,7 +108,8 @@ export async function readCallScore(postId: string) {
     returnBps: s.returnBps,
     entry: Number(s.entry) / 1e8,
     exit: Number(s.exit) / 1e8,
-    txHash: await txOf(callScored, {}),
+    // CallScored is indexed by keccak256(postId): this finds this call's score, not just the newest one.
+    txHash: await txOf(callScored, { postKey: keccak256(toBytes(postId)) }, `call:${postId}`),
     contract: VERDICTS,
   };
 }

@@ -1,9 +1,10 @@
 import "server-only";
 import { timingSafeEqual } from "node:crypto";
 import { flashCancelMessage, type FlashOrderInput } from "@kallr/integrations/definitive";
-import { createWalletClient, type Hex, http, isHex } from "viem";
+import { createWalletClient, encodeFunctionData, erc20Abi, type Hex, http, isHex, parseEther, parseUnits } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
+import { USDC_BASE, USDC_DECIMALS } from "@/lib/chain";
 import { parseTypedData } from "@/lib/typed-data";
 import { flash } from "./flash";
 import { placeWithSigner, type ServerSigner } from "./flash-place";
@@ -63,6 +64,25 @@ export function placeFromKeyboardWallet(input: FlashOrderInput, dryRun = false) 
   const run = queue.then(() => {
     if (!signer) throw new Error("The keyboard wallet isn't set up.");
     return placeWithSigner(input, signer, { dryRun });
+  });
+  queue = run.catch(() => undefined);
+  return run;
+}
+
+export type Withdrawal = { asset: "ETH" | "USDC"; amount: string; to: Hex };
+
+/**
+ * Send ETH or USDC from the keyboard wallet to an address the user typed: the way their money comes back
+ * out. Runs in the same queue as orders so nonces never race. Resolves to the transaction hash.
+ */
+export function withdrawFromKeyboardWallet(w: Withdrawal): Promise<Hex> {
+  const run = queue.then(() => {
+    if (!walletClient) throw new Error("The keyboard wallet isn't set up.");
+    if (w.asset === "ETH") return walletClient.sendTransaction({ to: w.to, value: parseEther(w.amount) });
+    return walletClient.sendTransaction({
+      to: USDC_BASE,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [w.to, parseUnits(w.amount, USDC_DECIMALS)] }),
+    });
   });
   queue = run.catch(() => undefined);
   return run;
