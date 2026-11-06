@@ -79,13 +79,18 @@ describe("flashCard", () => {
     // Logos are inlined, so they survive extension reloads.
     expect(q(card, ".swap-icon").getAttribute("src")).toMatch(/^data:image\/png;base64,/);
     expect(q(card, ".caller-strip .caller-handle").textContent).toBe("@kol");
-    // The card shows the call itself; the caller's record lives on their profile card.
-    expect(q(card, ".caller-strip .caller-record").textContent).toBe("Long $ETH");
+    // The call, how it moved since the post, and the caller's record so far.
+    expect(q(card, ".caller-strip .caller-side").textContent).toBe("Long $ETH");
+    expect(q(card, ".caller-strip .caller-move").textContent).toBe("+2.5% since post");
+    expect(q(card, ".caller-strip .caller-facts").textContent).toContain("1 scored · 100% hit · +2.5% median");
     expect(q(card, ".caller-strip .x-follow").textContent).toBe("Follow");
     expect(card.querySelector(".call-insights")).toBeNull();
+    // The call's own Arkiv record, when it has one.
+    expect(card.querySelector(".caller-strip a.caller-arkiv[href*='arkiv']")).toBeNull();
     expect(q(card, ".inline-buy").textContent).toBe("⇄ Copy");
     expect(q(card, ".inline-panel").hidden).toBe(true);
-    expect(q(card, ".swap-powered").textContent).toBe("Powered byDEFINITIVE");
+    expect(q(card, ".swap-powered").textContent).toBe("Kall MarketsPowered byDEFINITIVE");
+    expect(card.querySelector(".swap-powered .brand-mark-glyph")).not.toBeNull();
     expect(q(card, ".swap-powered .definitive-logo").getAttribute("aria-label")).toBe("Definitive");
   });
 
@@ -528,5 +533,13 @@ describe("plain swap by default", () => {
       "Not enough USDC in this wallet on Base. Add USDC (and a little ETH for gas), then try again.",
     );
     expect(friendlyError({ code: 4001, message: "User rejected the request." }, "USDC")).toBe("Cancelled in your wallet. Nothing was sent.");
+  });
+});
+
+describe("flashCard caller strip", () => {
+  it("links the call to its Arkiv record", async () => {
+    const key = `0x${"c".repeat(64)}`;
+    const { card } = await mounted({ ...answer(), arkivKey: key });
+    expect(q(card, ".caller-strip a.caller-arkiv").getAttribute("href")).toBe(`https://rabdi.explorer.arkiv.network/entity/${key}`);
   });
 });

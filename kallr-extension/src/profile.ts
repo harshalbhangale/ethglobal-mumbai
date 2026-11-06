@@ -2,7 +2,7 @@ import type { SeenCall } from "./card-metrics";
 import { appOrigin } from "./config";
 import { el, send } from "./dom";
 import { followButton } from "./follows";
-import { callerCard, PROFILE_CARD_CSS } from "./profile-card";
+import { type CopiedTrade, callerCard, PROFILE_CARD_CSS } from "./profile-card";
 
 /** First path segments on x.com that are app pages, not profiles. */
 const RESERVED = new Set([
@@ -31,7 +31,7 @@ function mount(anchor: HTMLElement, host: HTMLElement) {
   anchor.after(host);
 }
 
-type RecordAnswer = { calls?: SeenCall[]; writer?: string | null; deleted?: number; deletedChecked?: number };
+type RecordAnswer = { calls?: SeenCall[]; trades?: CopiedTrade[]; writer?: string | null; deleted?: number; deletedChecked?: number };
 
 const isDark = () => {
   const bg = getComputedStyle(document.body).backgroundColor.match(/\d+/g)?.map(Number) ?? [255, 255, 255];
@@ -73,6 +73,7 @@ export async function scanProfile() {
     ? callerCard({
         handle,
         calls: answer.calls ?? [],
+        trades: answer.trades ?? [],
         writer: answer.writer,
         deleted: typeof answer.deleted === "number" ? { count: answer.deleted, checked: answer.deletedChecked ?? 0 } : null,
         follow,

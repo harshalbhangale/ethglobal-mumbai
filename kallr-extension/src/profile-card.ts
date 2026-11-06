@@ -1,5 +1,6 @@
 import { formatBps, MIN_SAMPLE, type SeenCall } from "./card-metrics";
-import { el, safeLink } from "./dom";
+import { brandMark, el, safeLink } from "./dom";
+import { tokenIcon } from "./logos";
 
 /** The compact record card on an X profile. Pure DOM: no chrome APIs, so it's testable. */
 
@@ -10,8 +11,9 @@ export const PROFILE_CARD_CSS = `
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 :host([data-theme="dark"]) .pc { --fg: #e7e9ea; --mute: #8b98a5; --line: #2f3336; }
 .pc-head { display: flex; align-items: center; gap: 8px; }
-.pc-mark { width: 16px; height: 16px; border-radius: 4px; background: #0b0d0c; display: grid; place-items: center; flex: none; }
-.pc-mark i { width: 7px; height: 7px; border-radius: 2px; background: var(--lime); }
+.brand-mark-glyph { display: inline-block; flex: none; background-color: #0e1407;
+  -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
+:host([data-theme="dark"]) .brand-mark-glyph { background-color: var(--lime); }
 .pc-title { flex: 1; min-width: 0; color: var(--mute); }
 .pc-title b { color: var(--fg); }
 .pc-follow { font: inherit; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; cursor: pointer;
@@ -25,7 +27,9 @@ export const PROFILE_CARD_CSS = `
 .pc-calls li { display: grid; grid-template-columns: minmax(0, 1fr) 76px 50px 26px; align-items: center; column-gap: 10px;
   padding: 5px 0; border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.3; }
 .pc-calls li:first-child { border-top: 0; }
-.pc-call { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-call { min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; }
+.pc-call > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.pc-coin { width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-grid; place-items: center; color: #fff; font-size: 10px; font-weight: 700; }
 .pc-dir { font-weight: 700; }
 .pc-tag { color: var(--mute); font-size: 11.5px; }
 .pc-gone { color: var(--down); font-size: 11px; }
@@ -33,6 +37,7 @@ export const PROFILE_CARD_CSS = `
 .pc-res.pc-tag { font-weight: 400; }
 .pc-link { text-align: right; white-space: nowrap; }
 .pc-calls a, .pc-foot a { color: var(--mute); text-decoration: none; }
+.pc-calls a.pc-arkiv { color: #1d9bf0; }
 .pc-calls a:hover, .pc-foot a:hover { color: var(--fg); }
 .pc-closed { margin: 8px 0 0; }
 .pc-closed summary { cursor: pointer; color: var(--mute); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
@@ -98,13 +103,47 @@ function callRow(handle: string, c: SeenCall & { gone?: boolean }) {
     el(
       "span",
       { class: "pc-call" },
-      el("span", { class: `pc-dir ${long ? "up" : "down"}` }, `${long ? "Long" : "Short"} $${c.asset}`),
-      el("span", { class: "pc-tag" }, ` ${ago(c.postedAt)}`),
-      c.gone ? el("span", { class: "pc-gone" }, " · deleted on X") : null,
+      coin(c.asset),
+      el(
+        "span",
+        {},
+        el("span", { class: `pc-dir ${long ? "up" : "down"}` }, `${long ? "Long" : "Short"} $${c.asset}`),
+        el("span", { class: "pc-tag" }, ` ${ago(c.postedAt)}`),
+        c.gone ? el("span", { class: "pc-gone" }, " · deleted on X") : null,
+      ),
     ),
     res,
-    el("span", { class: "pc-link" }, c.key ? safeLink(`${ARKIV}/entity/${c.key}`, "Arkiv ↗") : ""),
+    el("span", { class: "pc-link" }, c.key ? safeLink(`${ARKIV}/entity/${c.key}`, "Arkiv ↗", "pc-arkiv") : ""),
     el("span", { class: "pc-link" }, safeLink(`https://x.com/${handle}/status/${c.postId}`, "𝕏 ↗")),
+  );
+}
+
+function coin(asset: string) {
+  const icon = tokenIcon(asset, 18);
+  icon.classList.add("pc-coin");
+  return icon;
+}
+
+/** A trade a Kall user placed copying this caller, as Arkiv stores it. */
+export type CopiedTrade = { key: string; asset: string; side: string; source: string; postId: string | null; placedAt: number };
+
+const SOURCE: Record<string, string> = { extension: "on X", keyboard: "keyboard", desk: "web app" };
+
+/** A copied trade on the same grid: "Bought $ETH on X 16h | | Arkiv ↗ | 𝕏 ↗" (the call it copied). */
+function tradeRow(handle: string, t: CopiedTrade) {
+  const buy = t.side.toLowerCase() === "buy";
+  return el(
+    "li",
+    {},
+    el(
+      "span",
+      { class: "pc-call" },
+      coin(t.asset),
+      el("span", {}, el("span", { class: `pc-dir ${buy ? "up" : "down"}` }, `${buy ? "Bought" : "Sold"} $${t.asset}`), el("span", { class: "pc-tag" }, ` ${SOURCE[t.source] ?? "on Kall"} · ${ago(t.placedAt)}`)),
+    ),
+    el("span", { class: "pc-res pc-tag" }, ""),
+    el("span", { class: "pc-link" }, /^0x[0-9a-fA-F]{64}$/.test(t.key) ? safeLink(`${ARKIV}/entity/${t.key}`, "Arkiv ↗", "pc-arkiv") : ""),
+    el("span", { class: "pc-link" }, t.postId && /^\d+$/.test(t.postId) ? safeLink(`https://x.com/${handle}/status/${t.postId}`, "𝕏 ↗") : ""),
   );
 }
 
@@ -117,6 +156,8 @@ const callList = (handle: string, calls: SeenCall[]) => el("ul", { class: "pc-ca
 export function callerCard(opts: {
   handle: string;
   calls: SeenCall[] | null;
+  /** Trades Kall users placed copying this caller. */
+  trades?: CopiedTrade[] | null;
   writer?: string | null;
   /** Call posts no longer public on X, out of how many X answered for. */
   deleted?: { count: number; checked: number } | null;
@@ -124,10 +165,11 @@ export function callerCard(opts: {
   deskUrl: string;
 }) {
   const { handle, calls, writer, deleted, follow, deskUrl } = opts;
+  const trades = opts.trades ?? [];
   const head = el(
     "div",
     { class: "pc-head" },
-    el("span", { class: "pc-mark", "aria-hidden": "true" }, el("i", {})),
+    brandMark(18),
     el("span", { class: "pc-title" }, el("b", {}, `@${handle}`), " on Kall"),
     follow,
   );
@@ -162,6 +204,9 @@ export function callerCard(opts: {
     closed.length
       ? el("details", { class: "pc-closed" }, el("summary", {}, `Closed calls · ${closed.length}`), callList(handle, closed))
       : null,
+    // Trades people placed through Kall copying this caller, each its own record on Arkiv.
+    trades.length ? el("p", { class: "pc-group" }, `Copied on Kall · ${trades.length}`) : null,
+    trades.length ? el("ul", { class: "pc-calls" }, ...trades.slice(0, 5).map((t) => tradeRow(handle, t))) : null,
     el(
       "p",
       { class: "pc-foot" },

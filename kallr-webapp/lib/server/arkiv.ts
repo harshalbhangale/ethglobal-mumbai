@@ -12,6 +12,7 @@ import {
   findCall,
   findResultKey,
   hasResult,
+  readCallerTrades,
   readDueCalls,
   readOpenCalls,
   readResults,
@@ -53,7 +54,11 @@ export async function callerRecordFromArkiv(handle: string) {
   if (!writer) return null;
   const h = handle.toLowerCase();
   const now = Math.floor(Date.now() / 1000);
-  const [settled, open] = await Promise.all([readResults(writer.reader, writer.address, h), readOpenCalls(writer.reader, writer.address, now)]);
+  const [settled, open, trades] = await Promise.all([
+    readResults(writer.reader, writer.address, h),
+    readOpenCalls(writer.reader, writer.address, now),
+    readCallerTrades(writer.reader, writer.address, h).catch(() => []),
+  ]);
   const dir = (v: unknown) => (v === "down" || v === "short" ? "down" : "up") as "up" | "down";
   const calls = [
     ...settled.map((e) => ({
@@ -79,7 +84,16 @@ export async function callerRecordFromArkiv(handle: string) {
         expiresAt: Number(e.deadline.value),
       })),
   ].sort((a, b) => b.postedAt - a.postedAt);
-  return { calls, writer: writer.address };
+  // Trades Kall users placed copying this caller, each its own Arkiv entity.
+  const copied = trades.map((t) => ({
+    key: String(t.$key),
+    asset: String(t.asset.value),
+    side: String(t.side.value),
+    source: String(t.source.value),
+    postId: t.postId?.value ? String(t.postId.value) : null,
+    placedAt: Number(t.placedAt.value),
+  }));
+  return { calls, trades: copied, writer: writer.address };
 }
 
 let queue: Promise<unknown> = Promise.resolve();

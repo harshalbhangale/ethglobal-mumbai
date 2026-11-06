@@ -1,6 +1,6 @@
 import type { Answer, PostRef } from "./call-view";
 import { appOrigin } from "./config";
-import { el, openDesk, safeLink, send } from "./dom";
+import { el, openDesk, safeLink, send, wordmark } from "./dom";
 import { BASESCAN, type CardOrder, placeOnX, type QuoteFacts, type Step, toFlashInput, waitForFill, waitForTradeRecord } from "./flash-direct";
 import { followButton } from "./follows";
 import { baseLogo, definitiveLogo, tokenIcon } from "./logos";
@@ -165,21 +165,38 @@ export function flashCard(input: {
   const close = el("button", { type: "button", class: "inline-close", hidden: "", "aria-label": "Close" }, "✕ Close");
   if (!tradable) buy.hidden = true;
 
-  // --- caller strip: who made the call, which way, and Follow. Their record lives on their profile. ---
+  // --- caller strip: who made the call, which way, how it moved, their record so far, the call on Arkiv, and Follow. ---
   const callerStrip = (() => {
     const follow = followButton(post.handle, (label) => el("button", { type: "button", class: "x-follow" }, label) as HTMLButtonElement);
-    const read = call ? el("span", { class: `caller-record ${call.direction === "up" ? "up" : "down"}` }, `${call.direction === "up" ? "Long" : "Short"} $${call.asset}`) : null;
+    const long = call?.direction !== "down";
+    const side = call ? el("span", { class: `caller-side ${long ? "up" : "down"}` }, `${long ? "Long" : "Short"} $${call.asset}`) : null;
+    const move =
+      call && call.returnBps !== null
+        ? Math.abs(call.returnBps) < 5
+          ? el("span", { class: "caller-move" }, "flat since post")
+          : el("span", { class: `caller-move ${call.returnBps >= 0 ? "up" : "down"}` }, `${call.returnBps >= 0 ? "+" : "−"}${Math.abs(call.returnBps / 100).toFixed(1)}% since post`)
+        : null;
+    // Their record across every call Kall has priced, read from Arkiv.
+    const r = input.answer?.record;
+    const facts = r
+      ? r.scored
+        ? `${r.scored} scored · ${Math.round((r.hitRate ?? 0) * 100)}% hit${r.medianReturnBps === null ? "" : ` · ${r.medianReturnBps >= 0 ? "+" : "−"}${Math.abs(r.medianReturnBps / 100).toFixed(1)}% median`}`
+        : r.open
+          ? `${r.open} open call${r.open === 1 ? "" : "s"} · none scored yet`
+          : "First call Kall has seen"
+      : null;
     // The call's own record on Arkiv: read-only, so a deleted post still has it.
     const key = input.answer?.arkivKey;
-    const onArkiv = key && /^0x[0-9a-fA-F]{64}$/.test(key) ? safeLink(`https://rabdi.explorer.arkiv.network/entity/${key}`, "On Arkiv ↗", "caller-arkiv") : null;
+    const onArkiv = key && /^0x[0-9a-fA-F]{64}$/.test(key) ? safeLink(`https://rabdi.explorer.arkiv.network/entity/${key}`, "Call on Arkiv ↗", "caller-arkiv") : null;
+    const profile = safeLink(`https://x.com/${post.handle}`, "Record ↗", "caller-arkiv");
     return el(
       "div",
       { class: "caller-strip" },
       el(
         "div",
         { class: "caller-id" },
-        safeLink(`https://x.com/${post.handle}`, `@${post.handle}`, "caller-handle"),
-        read || onArkiv ? el("span", { class: "caller-meta" }, read, read && onArkiv ? el("span", { class: "caller-dot", "aria-hidden": "true" }, "·") : null, onArkiv) : null,
+        el("div", { class: "caller-line" }, safeLink(`https://x.com/${post.handle}`, `@${post.handle}`, "caller-handle"), side, move),
+        facts ? el("div", { class: "caller-line caller-facts" }, el("span", {}, facts), onArkiv, profile) : onArkiv ? el("div", { class: "caller-line caller-facts" }, onArkiv) : null,
       ),
       follow,
     );
@@ -572,6 +589,8 @@ export function flashCard(input: {
     el(
       "span",
       { class: "swap-powered" },
+      wordmark(14),
+      el("span", { class: "swap-powered-sep", "aria-hidden": "true" }),
       "Powered by",
       definitiveLogo(11),
     ),

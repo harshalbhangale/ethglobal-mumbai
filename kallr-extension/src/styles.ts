@@ -80,7 +80,7 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .dir-up { color: var(--positive); } .dir-down { color: var(--negative); }
 
 /* Trade panel */
-.inline-panel { border-top: 1px solid var(--line); padding: 12px 14px; display: grid; gap: 8px; }
+.inline-panel { padding: 4px 14px 12px; display: grid; gap: 8px; }
 .swap-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .swap-row-end { display: inline-flex; align-items: center; gap: 8px; }
 .seg { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 99px; }
@@ -183,16 +183,20 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .chip.following { color: var(--lime); background: #c6f25a14; border-color: #c6f25a55; font-weight: 700; letter-spacing: .02em; }
 
 /* Caller strip under the price header: who called it, their record, and Follow. */
-.caller-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px 12px; }
-.caller-id { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.caller-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
-.caller-dot { color: var(--muted); }
+.caller-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 14px 12px; padding: 10px 12px;
+  border-radius: 12px; background: color-mix(in srgb, var(--foreground, #e7e9ea) 5%, transparent); }
+.caller-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.caller-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
 .caller-strip .x-follow { min-width: 76px; height: 30px; padding: 0 14px; font-size: 13px; }
 .inline-card a.caller-handle { color: var(--foreground); font-weight: 700; font-size: 14px; text-decoration: none; }
 .inline-card a.caller-handle:hover { text-decoration: underline; }
-.caller-record { color: var(--muted); font-size: 13px; }
-.inline-card a.caller-arkiv { color: #1d9bf0; font-size: 13px; text-decoration: none; }
-.caller-arkiv:hover { text-decoration: underline; }
+.caller-side { font: 700 12px/18px system-ui, sans-serif; padding: 0 8px; border-radius: 999px; border: 1px solid currentColor; }
+.caller-side.up { color: #00ba7c; } .caller-side.down { color: #f4212e; }
+.caller-move { color: var(--muted); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.caller-move.up { color: #00ba7c; } .caller-move.down { color: #f4212e; }
+.caller-facts { color: var(--muted); font-size: 13px; }
+.inline-card a.caller-arkiv { color: #1d9bf0; font-size: 12px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.inline-card a.caller-arkiv:hover { text-decoration: underline; }
 
 /* Follow pill, as X draws it: white "Follow", outlined "Following", red "Unfollow" on hover. */
 .x-follow { flex: 0 0 auto; min-width: 84px; height: 34px; padding: 0 16px; border-radius: 99px; cursor: pointer;
