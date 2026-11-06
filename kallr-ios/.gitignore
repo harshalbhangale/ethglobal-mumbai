@@ -2,3 +2,4 @@ Kallr.xcodeproj/
 build/
 *.xcuserstate
 xcuserdata/
+Shared/Secrets.swift

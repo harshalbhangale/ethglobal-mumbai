@@ -1,4 +1,4 @@
-# Kallr for iPhone: a small app plus the Kallr keyboard extension.
+# Kall Keyboard for iPhone: a small app plus the keyboard extension.
 # Generate the Xcode project with `xcodegen generate` in this folder (see README.md).
 name: Kallr
 options:
@@ -22,10 +22,11 @@ targets:
     info:
       path: Kallr/Info.plist
       properties:
-        CFBundleDisplayName: Kallr
+        CFBundleDisplayName: Kall Keyboard
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiresFullScreen: true
         UIUserInterfaceStyle: Dark
         ITSAppUsesNonExemptEncryption: false
     settings:
@@ -42,7 +43,7 @@ targets:
     info:
       path: KallrKeyboard/Info.plist
       properties:
-        CFBundleDisplayName: Kallr
+        CFBundleDisplayName: Kall Keyboard
         NSExtension:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
@@ -50,7 +51,7 @@ targets:
             IsASCIICapable: false
             PrefersRightToLeft: false
             PrimaryLanguage: en-US
-            # Full Access lets the keyboard reach Kallr's server and read what you copy.
+            # Full Access lets the keyboard reach Kall Markets, read what you copy when asked, and use haptics.
             RequestsOpenAccess: true
     settings:
       base:

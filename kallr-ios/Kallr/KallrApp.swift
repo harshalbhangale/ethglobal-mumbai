@@ -24,10 +24,11 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 28) {
                 header
                 setup
+                WalletCard()
                 tryIt
                 checkCall
                 Button { openURL(Kallr.origin.appendingPathComponent("dashboard")) } label: {
-                    Text("OPEN THE KALLR DESK  ↗")
+                    Text("OPEN KALL MARKETS  ↗")
                         .font(.system(size: 14, weight: .heavy)).tracking(0.6)
                         .foregroundStyle(Kallr.bone)
                         .frame(maxWidth: .infinity, minHeight: 48)
@@ -44,11 +45,11 @@ struct ContentView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("KALLR / CALLS FROM X. TRADES ON BASE.")
+            Text("KALL MARKETS / CALLS FROM X. TRADES ON BASE.")
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(Kallr.muted)
             (Text("SEE THE CALL.\nTRADE IT").foregroundColor(Kallr.bone) + Text(".").foregroundColor(Kallr.lime))
                 .font(.system(size: 40, weight: .black)).tracking(-1).lineSpacing(-4)
-            Text("The Kallr keyboard checks the calls you copy in X or Telegram, shows the caller's record, flags fake contracts, and opens the order with your wallet.")
+            Text("The Kall Keyboard shows calls from the callers you follow, checks what you copy, and places the trade on Definitive Flash in one tap, from your Kall wallet.")
                 .font(.subheadline).foregroundStyle(Kallr.muted)
         }
     }
@@ -56,11 +57,11 @@ struct ContentView: View {
     private var setup: some View {
         VStack(alignment: .leading, spacing: 14) {
             Label("SET UP", systemImage: "keyboard").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)
-            Step(n: 1, text: "Settings → General → Keyboard → Keyboards → Add New Keyboard → Kallr")
-            Step(n: 2, text: "Tap Kallr and turn on Allow Full Access, so it can reach Kallr and read what you copy when you tap Check.")
-            Step(n: 3, text: "In any app, hold the globe key and pick Kallr.")
+            Step(n: 1, text: "Settings → General → Keyboard → Keyboards → Add New Keyboard → Kall Keyboard")
+            Step(n: 2, text: "Tap Kall Keyboard and turn on Allow Full Access, so it can reach Kall Markets, read what you copy when you tap Check, and use haptics.")
+            Step(n: 3, text: "Fund your Kall wallet below, then in X or Telegram hold the globe key and pick Kall Keyboard.")
             Button { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } } label: {
-                Text("OPEN KALLR SETTINGS  ↗")
+                Text("OPEN KALL SETTINGS  ↗")
                     .font(.system(size: 14, weight: .heavy)).tracking(0.6)
                     .foregroundStyle(Kallr.black)
                     .frame(maxWidth: .infinity, minHeight: 48)
@@ -75,7 +76,7 @@ struct ContentView: View {
     private var tryIt: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("TRY IT", systemImage: "text.cursor").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)
-            Text("Switch to Kallr here and type “buy $20 of eth tp 10% sl 5%”.")
+            Text("Type “buy $20 of eth tp 10% sl 5%” here, then switch to Kall Keyboard: the order is filled in.")
                 .font(.footnote).foregroundStyle(Kallr.muted)
             TextField("Type here", text: $tryText, axis: .vertical)
                 .lineLimit(2...4)
@@ -115,7 +116,7 @@ struct ContentView: View {
                         if let record = r.record?.line { Text(record).font(.footnote).foregroundStyle(Kallr.muted) }
                         if let token = r.token?.line { Text(token).font(.footnote).foregroundStyle(Kallr.muted) }
                     } else {
-                        Text("Nothing Kallr can read there. Paste a post link, or a message with a $TICKER or a contract.")
+                        Text("Nothing Kall Markets can read there. Paste a post link, or a message with a $TICKER or a contract.")
                             .font(.footnote).foregroundStyle(Kallr.muted)
                     }
                 }
@@ -135,5 +136,52 @@ private struct Step: View {
             Text("0\(n)").font(.system(size: 12, design: .monospaced)).foregroundStyle(Kallr.lime)
             Text(text).font(.subheadline).foregroundStyle(Kallr.bone)
         }
+    }
+}
+
+/** The Kall wallet the keyboard trades from: where to send funds, and what it holds. */
+private struct WalletCard: View {
+    @State private var wallet: Kallr.Wallet?
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("YOUR KALL WALLET", systemImage: "wallet.pass").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)
+            if let w = wallet, let address = w.address {
+                HStack(spacing: 10) {
+                    amount("USDC TO TRADE", w.usdcValue.map { String(format: "%.2f", $0) })
+                    amount("ETH FOR GAS", w.ethValue.map { String(format: "%.5f", $0) })
+                }
+                Text(address).font(.system(size: 12, design: .monospaced)).foregroundStyle(Kallr.bone).textSelection(.enabled)
+                Button {
+                    UIPasteboard.general.string = address
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    copied = true
+                } label: {
+                    Text(copied ? "ADDRESS COPIED" : "COPY ADDRESS")
+                        .font(.system(size: 14, weight: .heavy)).tracking(0.6)
+                        .foregroundStyle(Kallr.black)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 10))
+                }
+                Text("Send USDC, plus about $1 of ETH for gas, on Base only, from your Privy wallet or MetaMask. The keyboard places orders from it, up to $\(Kallr.fmt(w.maxUsd ?? 25)) each.")
+                    .font(.footnote).foregroundStyle(Kallr.muted)
+            } else {
+                Text("Reading your Kall wallet…").font(.footnote).foregroundStyle(Kallr.muted)
+            }
+        }
+        .padding(16)
+        .background(Kallr.graphite.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Kallr.hairline))
+        .task { wallet = await Kallr.wallet() }
+        .refreshable { wallet = await Kallr.wallet() }
+    }
+
+    private func amount(_ label: String, _ value: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
+            Text(value ?? "…").font(.system(size: 22, weight: .black).monospacedDigit()).foregroundStyle(Kallr.lime)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

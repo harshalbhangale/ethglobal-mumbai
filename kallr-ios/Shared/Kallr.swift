@@ -117,4 +117,117 @@ enum Kallr {
     }
 
     static func fmt(_ v: Double) -> String { v.rounded() == v ? String(Int(v)) : String(v) }
+
+    static let up = Color(red: 0.541, green: 0.851, blue: 0.486)
+
+    /** "3h left", "40m left" until a call's deadline. */
+    static func left(_ deadline: Double?) -> String {
+        guard let deadline else { return "" }
+        let s = deadline - Date().timeIntervalSince1970
+        if s <= 0 { return "settling" }
+        return s >= 3600 ? "\(Int(s / 3600))h left" : "\(max(1, Int(s / 60)))m left"
+    }
+
+    // MARK: Calls feed (Arkiv, read by the server)
+
+    struct FeedCall: Codable { let postId: String; let caller: String; let asset: String; let direction: String; let deadline: Double?; let entry: Double? }
+    struct FeedResult: Codable { let postId: String; let caller: String; let asset: String; let status: String; let returnBps: Int? }
+    struct Feed: Codable {
+        let following: [String]
+        let prices: [String: Double?]
+        let calls: [FeedCall]
+        let results: [FeedResult]
+    }
+
+    static func feed() async -> Feed? { await get("api/keyboard/feed") }
+
+    // MARK: The Kall keyboard wallet
+
+    struct Wallet: Codable {
+        struct Balances: Codable { let eth: String; let usdc: String }
+        let configured: Bool
+        let address: String?
+        let maxUsd: Double?
+        let balances: Balances?
+        var usdcValue: Double? { balances.flatMap { Double($0.usdc) } }
+        var ethValue: Double? { balances.flatMap { Double($0.eth) } }
+    }
+
+    static func wallet() async -> Wallet? { await get("api/keyboard/execute") }
+
+    struct KeyboardOrder: Codable { let token: String; let kind: String; let usd: String; let tpPct: Double?; let slPct: Double?; let postId: String?; let caller: String? }
+    struct Preview: Codable { let title: String; let get: String; let exits: String }
+    struct Placed: Codable { let orderId: String?; let preview: Preview }
+
+    struct Failure: LocalizedError { let message: String; var errorDescription: String? { message } }
+
+    /** Place an order from the Kall keyboard wallet: the server quotes, approves, signs and submits on Flash. */
+    static func execute(_ order: KeyboardOrder) async -> Swift.Result<Placed, Failure> {
+        var request = URLRequest(url: origin.appendingPathComponent("api/keyboard/execute"), timeoutInterval: 120)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.setValue("Bearer \(Secrets.execToken)", forHTTPHeaderField: "authorization")
+        request.httpBody = try? JSONEncoder().encode(["order": order])
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if (200..<300).contains(status), let placed = try? JSONDecoder().decode(Placed.self, from: data) { return .success(placed) }
+            let message = (try? JSONDecoder().decode([String: String].self, from: data))?["error"] ?? "The order didn't go through (\(status))."
+            return .failure(Failure(message: message))
+        } catch {
+            return .failure(Failure(message: "Couldn't reach Kall Markets. Check your connection."))
+        }
+    }
+
+    // MARK: Orders on Flash
+
+    struct Order: Codable {
+        struct Price: Codable { let notionalPrice: String? }
+        struct Bracket: Codable { let status: String; let takeProfit: Price?; let stopLoss: Price? }
+        let orderId: String
+        let orderType: String
+        let side: String
+        let status: String
+        let targetAsset: String
+        let qty: String
+        let attachedBracket: Bracket?
+
+        var symbol: String {
+            switch targetAsset.lowercased() {
+            case "0x4200000000000000000000000000000000000006": return "ETH"
+            case "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf": return "BTC"
+            default: return "token"
+            }
+        }
+        var title: String {
+            orderType == "bracket" ? "Exit · sell \(qty) \(symbol)" : "\(orderType == "market" ? "Market" : orderType.capitalized) \(side) · $\(qty) of \(symbol)"
+        }
+        var open: Bool { ["ORDER_STATUS_PENDING", "ORDER_STATUS_ACCEPTED", "ORDER_STATUS_PARTIALLY_FILLED"].contains(status) }
+        var statusLabel: String {
+            switch status {
+            case "ORDER_STATUS_PENDING", "ORDER_STATUS_ACCEPTED": return "WORKING"
+            case "ORDER_STATUS_PARTIALLY_FILLED": return "PART FILLED"
+            default: return status.replacingOccurrences(of: "ORDER_STATUS_", with: "")
+            }
+        }
+        var exits: String? {
+            guard let b = attachedBracket else { return nil }
+            let tp = b.takeProfit?.notionalPrice.flatMap(Double.init).map { String(format: "TP $%.2f", $0) }
+            let sl = b.stopLoss?.notionalPrice.flatMap(Double.init).map { String(format: "SL $%.2f", $0) }
+            return [tp, sl].compactMap { $0 }.joined(separator: " · ")
+        }
+    }
+
+    static func orders(funder: String) async -> [Order]? {
+        struct Body: Codable { let orders: [Order] }
+        let body: Body? = await get("api/flash/orders?funder=\(funder)")
+        return body?.orders
+    }
+
+    private static func get<T: Decodable>(_ path: String) async -> T? {
+        guard let url = URL(string: path, relativeTo: origin) else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 20)),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
+    }
 }
