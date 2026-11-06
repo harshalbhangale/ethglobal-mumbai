@@ -162,9 +162,17 @@ fun KallrRow() {
             // A warning opens the panel to explain it; it never offers "Trade" next to a fake contract.
             Box(
                 Modifier
-                    .then(if (warning != null) Modifier.background(Danger, RoundedCornerShape(50)) else Modifier.flowBackground(RoundedCornerShape(50)))
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
-            ) { Text(if (warning != null) "Why?" else "Trade", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                    .then(if (warning != null) Modifier.background(Danger, RoundedCornerShape(8.dp)) else Modifier.flowBackground(RoundedCornerShape(8.dp)))
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+            ) {
+                Text(
+                    if (warning != null) "WHY?" else "TRADE ↗",
+                    color = if (warning != null) Color.White else KallrBlack,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.6.sp,
+                )
+            }
         }
     }
 }

@@ -758,7 +758,7 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         )
         val dayThemeId = custom(
             key = "theme__day_theme_id",
-            default = extCoreTheme("kallr_day"),
+            default = extCoreTheme("kallr_night"), // Kallr is black-and-lime in light mode too
             serializer = ExtensionComponentName.Serializer,
         )
         val nightThemeId = custom(

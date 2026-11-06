@@ -16,6 +16,10 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -25,11 +29,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,7 +50,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Composable
@@ -68,25 +69,17 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /** Definitive Flash's blue for actions; everything else follows the system light/dark theme. */
-val KallrBlue = Color(0xFF2F6BFF)
 
 @Composable
 fun KallrTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
     MaterialTheme(
-        colorScheme = if (dark) {
-            darkColorScheme(
-                primary = KallrBlue, secondary = KallrViolet,
-                background = Color(0xFF0B1020), surface = Color(0xFF111833), surfaceVariant = Color(0xFF1A2340),
-                onSurface = Color(0xFFF4F6FB), onSurfaceVariant = Color(0xFF9AA3C2),
-            )
-        } else {
-            lightColorScheme(
-                primary = KallrBlue, secondary = KallrViolet,
-                surface = Color.White, surfaceVariant = Color(0xFFEEF1F8),
-                onSurface = KallrInk, onSurfaceVariant = Color(0xFF6B7591),
-            )
-        },
+        // Kallr's screens are always black-and-lime, like the keyboard.
+        colorScheme = darkColorScheme(
+            primary = KallrLime, onPrimary = KallrBlack, secondary = KallrLime, onSecondary = KallrBlack,
+            background = KallrBlack, surface = Color(0xFF111111), surfaceVariant = KallrGraphite,
+            onBackground = KallrBone, onSurface = KallrBone, onSurfaceVariant = Color(0xFF8E8E86),
+            outline = KallrHairline, error = Danger,
+        ),
         content = content,
     )
 }
@@ -149,9 +142,7 @@ private fun Progress(text: String) {
     Column {
         Text(text, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(12.dp))
-        Box(
-            Modifier.fillMaxWidth().height(5.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50)),
-        ) { Box(Modifier.fillMaxWidth().height(5.dp).flowBackground(RoundedCornerShape(50), durationMs = 1100)) }
+        FlowLine(Modifier.clip(RoundedCornerShape(50)), height = 4.dp)
     }
 }
 
@@ -165,9 +156,9 @@ private fun DoneMark() {
         Modifier
             .size(52.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .background(Brush.linearGradient(listOf(KallrMint, KallrSky)), CircleShape),
+            .background(KallrLime, CircleShape),
         contentAlignment = Alignment.Center,
-    ) { Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp)) }
+    ) { Icon(Icons.Default.Check, contentDescription = null, tint = KallrBlack, modifier = Modifier.size(30.dp)) }
 }
 
 private sealed interface SheetState {
@@ -208,7 +199,7 @@ private fun TradeSheet(order: KeyboardOrder, onClose: () -> Unit) {
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
             tonalElevation = 2.dp,
         ) {
-            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 20.dp).navigationBarsPadding()) {
+            Column(Modifier.dotField().padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 20.dp).navigationBarsPadding()) {
                 SheetHandle()
                 when (val s = state) {
                     SheetState.Loading -> Progress("Pricing ${order.symbol ?: "your order"} on Flash…")
@@ -329,9 +320,18 @@ private fun WalletScreen() {
     }
     LaunchedEffect(Unit) { refresh() }
 
-    Column(Modifier.systemBarsPadding().padding(24.dp)) {
-        FlowLine(Modifier.padding(bottom = 18.dp).width(56.dp), height = 4.dp)
-        Text("Kallr wallet", fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+    Column(Modifier.fillMaxSize().dotField().systemBarsPadding().padding(24.dp)) {
+        FlowLine(Modifier.padding(bottom = 18.dp).width(56.dp), height = 3.dp)
+        Text(
+            buildAnnotatedString {
+                append("KALLR WALLET")
+                withStyle(SpanStyle(color = KallrLime)) { append(".") }
+            },
+            fontSize = 34.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-0.5).sp,
+            lineHeight = 36.sp,
+        )
         Text(
             "Trade calls from your keyboard, in X, Telegram or any app. Same wallet as the Kallr desk.",
             modifier = Modifier.padding(top = 6.dp, bottom = 20.dp),
@@ -417,7 +417,7 @@ private fun ShareSheet(text: String, onClose: () -> Unit) {
 
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)).clickable { onClose() }, contentAlignment = Alignment.BottomCenter) {
         Surface(Modifier.fillMaxWidth().clickable(enabled = false) {}, shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), tonalElevation = 2.dp) {
-            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 20.dp).navigationBarsPadding()) {
+            Column(Modifier.dotField().padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 20.dp).navigationBarsPadding()) {
                 SheetHandle()
                 Text("Kallr · check this call", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))

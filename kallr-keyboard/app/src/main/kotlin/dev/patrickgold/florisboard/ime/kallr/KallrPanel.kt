@@ -30,10 +30,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -201,7 +198,7 @@ private fun ChipRow(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** A soft panel with a hairline that fades from Kallr blue to violet to nothing. */
+/** A dark card with a hairline edge. */
 @Composable
 private fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(14.dp)
@@ -209,8 +206,8 @@ private fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope
         modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
-            .background(themeText().copy(alpha = 0.05f), shape)
-            .border(1.dp, Brush.linearGradient(listOf(KallrBlue.copy(alpha = 0.45f), KallrViolet.copy(alpha = 0.25f), Color.Transparent)), shape)
+            .background(themeText().copy(alpha = 0.04f), shape)
+            .border(1.dp, themeText().copy(alpha = 0.12f), shape)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         content = content,
     )
@@ -274,9 +271,9 @@ fun KallrInputLayout() {
             Spacer(Modifier.width(8.dp))
             TabBar(Modifier.weight(1f))
             Spacer(Modifier.width(4.dp))
-            if (wallet != null) PulseDot(KallrMint, dot = 7.dp) else Box(Modifier.padding(5.dp).size(7.dp).background(Muted, CircleShape))
+            if (wallet != null) PulseDot(KallrLime, dot = 7.dp) else Box(Modifier.padding(5.dp).size(7.dp).background(Muted, CircleShape))
         }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(Modifier.weight(1f).fillMaxWidth().dotField(dots = themeText())) {
             AnimatedContent(
                 targetState = s.tab,
                 transitionSpec = {
@@ -303,7 +300,7 @@ private fun TabBar(modifier: Modifier = Modifier) {
     BoxWithConstraints(
         modifier
             .height(36.dp)
-            .background(themeText().copy(alpha = 0.07f), RoundedCornerShape(12.dp))
+            .background(themeText().copy(alpha = 0.06f), RoundedCornerShape(10.dp))
             .padding(3.dp),
     ) {
         val w = maxWidth / Tab.entries.size
@@ -317,17 +314,16 @@ private fun TabBar(modifier: Modifier = Modifier) {
                 .offset(x = x)
                 .width(w)
                 .fillMaxHeight()
-                .shadow(6.dp, RoundedCornerShape(9.dp), ambientColor = KallrViolet, spotColor = KallrBlue)
-                .flowBackground(RoundedCornerShape(9.dp)),
+                .flowBackground(RoundedCornerShape(8.dp)),
         )
         Row(Modifier.fillMaxSize()) {
             Tab.entries.forEach { t ->
-                val color by animateColorAsState(if (s.tab == t) Color.White else themeText(), tween(200), label = "kallr-tab-text")
+                val color by animateColorAsState(if (s.tab == t) KallrBlack else themeText(), tween(200), label = "kallr-tab-text")
                 Box(
                     Modifier.weight(1f).fillMaxHeight().pressable { s.tab = t },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(t.label, color = color, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(t.label.uppercase(), color = color, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp)
                 }
             }
         }
@@ -487,15 +483,15 @@ private fun MicButton() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(28.dp).then(if (listening) Modifier.background(Color.White.copy(alpha = 0.2f), CircleShape) else Modifier.flowBackground(CircleShape)),
+            Modifier.size(28.dp).then(if (listening) Modifier.background(KallrBlack.copy(alpha = 0.12f), CircleShape) else Modifier.flowBackground(CircleShape)),
             contentAlignment = Alignment.Center,
         ) {
-            if (listening) ListeningBars() else Icon(Icons.Default.Mic, contentDescription = "Speak an order", tint = Color.White, modifier = Modifier.size(17.dp))
+            if (listening) ListeningBars(KallrBlack) else Icon(Icons.Default.Mic, contentDescription = "Speak an order", tint = KallrBlack, modifier = Modifier.size(17.dp))
         }
         Spacer(Modifier.width(10.dp))
         Text(
             status,
-            color = if (listening) Color.White else themeText(),
+            color = if (listening) KallrBlack else themeText(),
             fontSize = 13.sp,
             fontWeight = if (listening) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
@@ -560,8 +556,8 @@ private fun parsePositions(context: Context, text: String): List<Position> {
 @Composable
 private fun StatusPill(p: Position) {
     val color = when {
-        p.open -> KallrBlue
-        p.status == "Filled" -> KallrMint
+        p.open -> KallrLime
+        p.status == "Filled" -> themeText()
         p.status == "Rejected" -> Danger
         else -> Muted
     }
@@ -583,8 +579,8 @@ private fun Balances(wallet: String, refreshKey: Int) {
             (o.str("usdc") ?: "0") to (o.str("eth") ?: "0")
         }
     }
-    // Numbers in the brand gradient; lighter stops on a dark keyboard so they stay readable.
-    val numbers = if (themeText().luminance() > 0.5f) Brush.linearGradient(listOf(Color(0xFF7AB2FF), Color(0xFFB79CFF))) else BrandBrush
+    // Lime numbers on the black keyboard, plain black on Kallr Paper.
+    val numbers = if (themeText().luminance() > 0.5f) KallrLime else themeText()
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(
             "USDC" to (balances?.first?.toDoubleOrNull()?.let { "%.2f".format(it) } ?: "…"),
@@ -593,13 +589,13 @@ private fun Balances(wallet: String, refreshKey: Int) {
             Column(
                 Modifier
                     .weight(1f)
-                    .background(themeText().copy(alpha = 0.05f), RoundedCornerShape(14.dp))
-                    .border(1.dp, Brush.linearGradient(listOf(KallrBlue.copy(alpha = 0.4f), Color.Transparent)), RoundedCornerShape(14.dp))
+                    .background(themeText().copy(alpha = 0.04f), RoundedCornerShape(12.dp))
+                    .border(1.dp, themeText().copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                     .shimmer(balances == null)
                     .padding(horizontal = 12.dp, vertical = 9.dp),
             ) {
                 Text(label, color = Muted, fontSize = 11.sp)
-                Text(value, style = TextStyle(brush = numbers, fontSize = 19.sp, fontWeight = FontWeight.SemiBold))
+                Text(value, color = numbers, fontSize = 20.sp, fontWeight = FontWeight.Black)
             }
         }
     }
@@ -633,7 +629,7 @@ private fun PositionsTab(wallet: String?) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Your Flash orders", color = themeText(), fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             Icon(
-                Icons.Default.Refresh, contentDescription = "Refresh", tint = KallrBlue,
+                Icons.Default.Refresh, contentDescription = "Refresh", tint = KallrLime,
                 modifier = Modifier.size(22.dp).clickable { refresh++ },
             )
         }

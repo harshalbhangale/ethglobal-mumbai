@@ -1,28 +1,28 @@
 {
   "$schema": "https://schemas.florisboard.org/snygg/v2/stylesheet",
   "@defines": {
-    "--primary": "#2f6bff",
-    "--primary-variant": "#1f4fd8",
-    "--secondary": "#a78bfa",
-    "--secondary-variant": "#7c3aed",
-    "--background": "#0b1020",
-    "--background-variant": "#121a30",
-    "--surface": "#1a2340",
-    "--surface-variant": "#2a3560",
-    "--popup-surface": "#2a3560",
-    "--focused-popup-surface": "#3b4a80",
+    "--primary": "#ccf25a",
+    "--primary-variant": "#b4d944",
+    "--secondary": "#ccf25a",
+    "--secondary-variant": "#b4d944",
+    "--background": "#0a0a0a",
+    "--background-variant": "#121212",
+    "--surface": "#1a1a1a",
+    "--surface-variant": "#2b2b2b",
+    "--popup-surface": "#262626",
+    "--focused-popup-surface": "#3a3a3a",
     "--drag-marker": "rgb(255,0,0)",
-    "--spacer-color": "rgba(255, 255, 255, 0.12)",
-    "--one-hand-background": "#1a2340",
-    "--one-hand-foreground": "#e6e9f2",
+    "--spacer-color": "rgba(236, 236, 228, 0.12)",
+    "--one-hand-background": "#1a1a1a",
+    "--one-hand-foreground": "#ecece4",
     "--incognito-icon-color": "#ffffff11",
-    "--on-primary": "#ffffff",
-    "--on-background": "#e6e9f2",
-    "--on-background-disabled": "#e6e9f248",
-    "--on-surface": "#f4f6fb",
-    "--on-surface-variant": "#8a94b8",
-    "--shape": "rounded-corner(10dp, 10dp, 10dp, 10dp)",
-    "--shape-variant": "rounded-corner(14dp, 14dp, 14dp, 14dp)",
+    "--on-primary": "#0a0a0a",
+    "--on-background": "#ecece4",
+    "--on-background-disabled": "#ecece448",
+    "--on-surface": "#ecece4",
+    "--on-surface-variant": "#8e8e86",
+    "--shape": "rounded-corner(8dp, 8dp, 8dp, 8dp)",
+    "--shape-variant": "rounded-corner(10dp, 10dp, 10dp, 10dp)",
     "--shape-chip": "rounded-corner(50%, 50%, 50%, 50%)"
   },
   "window": {
@@ -34,7 +34,7 @@
     "foreground": "var(--on-surface)",
     "font-size": "22sp",
     "shape": "var(--shape)",
-    "shadow-elevation": "1dp",
+    "shadow-elevation": "0dp",
     "text-max-lines": "1"
   },
   "key:pressed": {
@@ -43,11 +43,11 @@
   },
   "key[code=10]": {
     "background": "var(--primary)",
-    "foreground": "#ffffff"
+    "foreground": "#0a0a0a"
   },
   "key[code=10]:pressed": {
     "background": "var(--primary-variant)",
-    "foreground": "var(--on-surface)"
+    "foreground": "#0a0a0a"
   },
   "key[code=32]": {
     "background": "var(--surface)",
