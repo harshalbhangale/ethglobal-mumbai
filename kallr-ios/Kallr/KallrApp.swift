@@ -38,7 +38,7 @@ struct RootView: View {
         }
         .tint(Kallr.lime)
         .task { await store.refresh() }
-        // Back from MetaMask after a deposit: read the balances again.
+        // Back from a wallet app after a deposit: read the balances again.
         .onChange(of: phase) { _, now in if now == .active { Task { await store.refresh() } } }
     }
 }
@@ -559,7 +559,7 @@ private struct Amount: View {
 
 // MARK: - Deposit
 
-/** Pick USDC or ETH and an amount; open MetaMask (or any wallet) with the transfer filled in, or scan the QR. */
+/** Pick USDC or ETH and an amount; copy the address, open a wallet app with the transfer filled in, or scan the QR. */
 private struct DepositSheet: View {
     let address: String
     let ethPrice: Double?
@@ -600,33 +600,25 @@ private struct DepositSheet: View {
                         .frame(maxWidth: 220).padding(14)
                         .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
                         .frame(maxWidth: .infinity)
-                    Text("Scan with MetaMask or any wallet on another device.")
+                    Text("Scan with any wallet on another device.")
                         .font(.footnote).foregroundStyle(Kallr.muted).frame(maxWidth: .infinity)
                 }
-                Button { open(path.flatMap(Deposit.metaMask)) } label: {
-                    Label("OPEN IN METAMASK", systemImage: "arrow.up.right.square")
+                Button {
+                    UIPasteboard.general.string = address
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    note = "Address copied. Send on Base only."
+                } label: {
+                    Label("COPY ADDRESS", systemImage: "doc.on.doc")
                         .font(.system(size: 15, weight: .heavy)).foregroundStyle(Kallr.black)
                         .frame(maxWidth: .infinity, minHeight: 50)
                         .background(Kallr.lime, in: RoundedRectangle(cornerRadius: 12))
                 }
-                .disabled(path == nil)
-                HStack(spacing: 10) {
-                    Button { open(path.flatMap(Deposit.anyWallet)) } label: {
-                        Text("OTHER WALLET APP").font(.system(size: 13, weight: .bold)).foregroundStyle(Kallr.bone)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
-                    }
-                    .disabled(path == nil)
-                    Button {
-                        UIPasteboard.general.string = address
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        note = "Address copied. Send on Base only."
-                    } label: {
-                        Text("COPY ADDRESS").font(.system(size: 13, weight: .bold)).foregroundStyle(Kallr.bone)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Kallr.hairline))
-                    }
+                Button { open(path.flatMap(Deposit.anyWallet)) } label: {
+                    Text("OPEN A WALLET APP").font(.system(size: 13, weight: .bold)).foregroundStyle(Kallr.bone)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
                 }
+                .disabled(path == nil)
                 if let note { Text(note).font(.footnote).foregroundStyle(Kallr.lime) }
                 Label("Base network only. Funds sent on another network are lost.", systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote).foregroundStyle(Kallr.danger)
@@ -877,7 +869,7 @@ private struct WalletsCard: View {
                     }
                 }
             }
-            Text(bad ? "That isn't a wallet address. Copy it from MetaMask, or from Wallet in the Kall web app."
+            Text(bad ? "That isn't a wallet address. Copy it from Wallet in the Kall web app."
                  : "Trades you place on X with the Kall extension, or in the Kall web app, come from your own wallet. Link it and they show up here next to your keyboard trades. Only the address is kept, on this phone.")
                 .font(.footnote).foregroundStyle(bad ? Kallr.danger : Kallr.muted)
         }
@@ -1099,6 +1091,74 @@ private struct OrderDetail: View {
 
 // MARK: - Keyboard setup and tools
 
+/**
+ * Calls to try, written the way Telegram channels post them. Copy one, open any chat, switch to Kall
+ * Keyboard and tap Paste: Trade opens on it (or Chainlink CRE blocks it, for the fake one).
+ */
+private struct TelegramCalls: View {
+    struct Post: Identifiable {
+        let id: String
+        let title: String
+        let text: String
+        let note: String
+    }
+    static let posts = [
+        Post(id: "eth", title: "ETH long, with targets", text: """
+            #ETHUSDT 4H
+
+            $ETH is holding the $2,200 support and breaking out of the falling wedge. Long from here.
+
+            🎯 $2,350
+            🎯 $2,480
+            🛑 SL $2,120
+            """, note: "Opens Trade on ETH with the take-profit and stop-loss filled in."),
+        Post(id: "toshi", title: "A fake contract", text: """
+            🚀 $TOSHI is about to send. Aping now.
+
+            CA: 0x8544FE9D190fD7EC52860abBf45088E81Ee24a8c
+            """, note: "Chainlink CRE checks the contract and blocks the trade."),
+        Post(id: "degen", title: "The real contract", text: """
+            Loading up on $DEGEN here.
+
+            CA: 0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed
+            """, note: "Chainlink CRE confirms it's the real coin, then Trade opens."),
+    ]
+
+    @State private var copied: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("TRY A CALL FROM TELEGRAM", systemImage: "paperplane.fill").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.lime)
+            Text("Copy one, open any chat, switch to Kall Keyboard and tap Paste.")
+                .font(.footnote).foregroundStyle(Kallr.muted)
+            ForEach(Self.posts) { post in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(post.title).font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.bone)
+                        Spacer()
+                        Button {
+                            UIPasteboard.general.string = post.text
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            copied = post.id
+                        } label: {
+                            Label(copied == post.id ? "Copied" : "Copy", systemImage: copied == post.id ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 13, weight: .heavy))
+                                .foregroundStyle(copied == post.id ? Kallr.lime : Kallr.black)
+                                .padding(.horizontal, 12).frame(height: 32)
+                                .background(copied == post.id ? Kallr.graphite : Kallr.lime, in: Capsule())
+                        }
+                    }
+                    Text(post.text).font(.system(size: 15)).foregroundStyle(Kallr.bone)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(Color(red: 0.12, green: 0.14, blue: 0.16), in: RoundedRectangle(cornerRadius: 14))
+                    Text(post.note).font(.footnote).foregroundStyle(Kallr.muted)
+                }
+            }
+        }
+    }
+}
+
 private struct KeyboardSetup: View {
     @Environment(\.openURL) private var openURL
     @State private var tryText = ""
@@ -1114,6 +1174,7 @@ private struct KeyboardSetup: View {
                 Text("The Kall Keyboard shows calls from the callers you follow, checks what you copy, and places the trade on Definitive Flash after you review a fresh quote, from your Kall wallet.")
                     .font(.subheadline).foregroundStyle(Kallr.muted)
                 setup
+                TelegramCalls()
                 tryIt
                 checkCall
                 Button { openURL(Kallr.origin.appendingPathComponent("dashboard")) } label: {

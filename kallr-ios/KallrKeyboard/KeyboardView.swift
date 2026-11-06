@@ -165,39 +165,30 @@ final class KeyboardModel: ObservableObject {
     @Published var ticks: [Double] = []
     /** +1 when the last tick went up, −1 down: the ticker flashes that way. */
     @Published var tickMove = 0
-    private var liveTask: Task<Void, Never>?
     private var liveKey = ""
     /** The coin the ticker follows: ETH when swapping it, otherwise what you're buying. */
     var tickerKey: String { payingETH ? "ETH" : asset }
 
-    /** Follow the coin on screen every 4 seconds while Trade is open. */
-    func startLive() {
+    /**
+     * Follow the coin on screen every 4 seconds while Trade is open. Runs as the Trade view's own task,
+     * so it stops with that view and a view on its way out can't stop the one coming in.
+     */
+    func followLive() async {
         let key = tickerKey
-        if liveTask != nil, key == liveKey { return }
-        liveTask?.cancel()
-        if key != liveKey { live = nil; ticks = []; tickMove = 0 }
-        liveKey = key
-        liveTask = Task { [weak self] in
-            while !Task.isCancelled {
-                if let q = await Kallr.livePrice(key) {
-                    guard let self, !Task.isCancelled, self.liveKey == key else { return }
-                    if let before = self.live?.price, before != q.price { self.tickMove = q.price > before ? 1 : -1 }
-                    self.live = q
-                    if self.ticks.last != q.price {
-                        self.ticks.append(q.price)
-                        if self.ticks.count > 40 { self.ticks.removeFirst() }
-                    }
-                    // Estimates follow the market.
-                    if key.hasPrefix("0x"), self.asset == key { self.assetPrice = q.price }
+        if key != liveKey { live = nil; ticks = []; tickMove = 0; liveKey = key }
+        while !Task.isCancelled {
+            if let q = await Kallr.livePrice(key), !Task.isCancelled, liveKey == key {
+                if let before = live?.price, before != q.price { tickMove = q.price > before ? 1 : -1 }
+                live = q
+                if ticks.last != q.price {
+                    ticks.append(q.price)
+                    if ticks.count > 40 { ticks.removeFirst() }
                 }
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                // Estimates follow the market.
+                if key.hasPrefix("0x"), asset == key { assetPrice = q.price }
             }
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
         }
-    }
-
-    func stopLive() {
-        liveTask?.cancel()
-        liveTask = nil
     }
 
     // MARK: Chainlink CRE
@@ -305,6 +296,15 @@ final class KeyboardModel: ObservableObject {
     var optionsSummary: String {
         [kind == .market ? nil : kind.rawValue, exitsOn ? "+\(Kallr.fmt(tpPct))% / −\(Kallr.fmt(slPct))%" : "Options"]
             .compactMap { $0 }.joined(separator: " · ")
+    }
+    /** The Buy side's amount: about how much of the coin, or of USDC when swapping ETH. */
+    var buyAmount: String {
+        if payingETH { return Double(usd).map { String(format: "≈ %.2f", $0 * 0.97) } ?? "0" }
+        return estimate.map { "≈ " + Self.coinAmount($0) } ?? "0"
+    }
+    /** Under Sell: what you can spend. */
+    var spendLine: String? {
+        payingETH ? swappableUsd.map { String(format: "Can swap $%.2f", $0) } : wallet?.usdcValue.map { String(format: "Balance $%.2f", $0) }
     }
     /** Under the amount: about what it gets, and what you can spend. */
     var amountSubline: String {
@@ -1146,60 +1146,121 @@ private struct TradeTab: View {
                 form
             }
         }
-        // Trade open: follow the coin's price.
-        .onAppear { model.startLive() }
-        .onDisappear { model.stopLive() }
-        .onChange(of: model.tickerKey) { _, _ in model.startLive() }
+        // Trade open: follow the coin's price (a new coin restarts it).
+        .task(id: model.tickerKey) { await model.followLive() }
     }
 
-    /** One decision: the call, how much, and one button. Order type and exits fold into Options. */
+    /**
+     * Like a Uniswap swap: Sell on top, Buy below, a flip button between them, one lime button.
+     * The call (or Chainlink CRE's word on the coin) sits above; order type and exits fold into Options.
+     */
     private var form: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ScrollView(.vertical, showsIndicators: false) {
-                if model.advancedOpen, !model.payingETH {
-                    options
-                } else {
-                VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        if let call = callLine {
-                            Text(call).font(TradeFont.body).foregroundStyle(Kallr.bone).lineLimit(1)
-                        }
-                        if let claimed = model.creChecking {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small).tint(Kallr.muted)
-                                Text("Checking $\(claimed) with Chainlink CRE…").font(TradeFont.body).foregroundStyle(Kallr.muted).lineLimit(1)
+        VStack(spacing: 0) {
+            if model.advancedOpen, !model.payingETH {
+                ScrollView(.vertical, showsIndicators: false) { options }.modifier(NoEdgeBlur())
+            } else {
+                header
+                ZStack {
+                    VStack(spacing: 4) {
+                        SwapSide(label: "Sell", amount: "$" + (model.usd.isEmpty ? "0" : model.usd), dim: model.usd.isEmpty,
+                                 onAmount: { model.startTyping() }) {
+                            Button { model.togglePay() } label: { TokenBadge(symbol: model.payAsset, chevron: true) }
+                                .buttonStyle(Press())
+                                .accessibilityLabel("Pay with \(model.payingETH ? "USDC" : "ETH")")
+                        } footer: {
+                            HStack(spacing: 8) {
+                                Text(model.spendLine ?? " ").font(TradeFont.body).foregroundStyle(Kallr.muted).lineLimit(1)
+                                Spacer(minLength: 4)
+                                Button { Haptics.modifier(); model.useMax() } label: {
+                                    Text("Max").font(TradeFont.bold).foregroundStyle(Kallr.lime).frame(minWidth: 40, minHeight: 22)
+                                }
+                                .buttonStyle(Press())
                             }
-                        } else if let real = model.creReal {
-                            Label("Real $\(real.claimed ?? real.symbol ?? "") · checked by Chainlink CRE", systemImage: "checkmark.seal.fill")
-                                .font(TradeFont.body).foregroundStyle(Kallr.lime).lineLimit(1)
                         }
-                        LiveTicker(model: model)
+                        SwapSide(label: "Buy", amount: model.buyAmount, dim: true, onAmount: nil) {
+                            if model.payingETH {
+                                TokenBadge(symbol: "USDC")
+                            } else {
+                                Button { Haptics.modifier(); model.openPicker() } label: {
+                                    TokenBadge(symbol: model.symbol, logo: model.isAddress ? model.assetLogo : nil, chevron: true)
+                                }
+                                .buttonStyle(Press())
+                                .accessibilityLabel("Pick a token")
+                            }
+                        } footer: {
+                            LiveTicker(model: model)
+                        }
                     }
-                    AmountLine(model: model, editing: false)
-                    pair
+                    // Flip: pay with the other coin.
+                    Button { model.togglePay() } label: {
+                        Image(systemName: "arrow.down").font(.system(size: 15, weight: .heavy)).foregroundStyle(Kallr.bone)
+                            .frame(width: 38, height: 38)
+                            .background(swapFill, in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Kallr.black, lineWidth: 4))
+                    }
+                    .buttonStyle(Press())
+                    .accessibilityLabel("Flip what you pay with")
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 6)
-                .padding(.bottom, 6)
-                }
+                .padding(.horizontal, 8)
+                Spacer(minLength: 0)
             }
-            .modifier(NoEdgeBlur())
             if case .failed(let message) = model.placing {
                 Text(message).font(TradeFont.body).foregroundStyle(Kallr.danger).lineLimit(2)
-                    .padding(.horizontal, 14).padding(.bottom, 6)
+                    .padding(.horizontal, 14).padding(.bottom, 4)
             }
             Button { model.review() } label: {
                 Text(model.busy ? "Getting a quote…" : model.blocked ?? reviewTitle)
                     .font(TradeFont.bold).lineLimit(1).minimumScaleFactor(0.8)
                     .foregroundStyle(model.blocked == nil ? Kallr.black : Kallr.muted)
-                    .frame(maxWidth: .infinity, minHeight: 52)
-                    .background(model.blocked == nil ? Kallr.lime : Kallr.keyDark, in: RoundedRectangle(cornerRadius: 14))
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(model.blocked == nil ? Kallr.lime : Kallr.keyDark, in: RoundedRectangle(cornerRadius: 16))
             }
             .buttonStyle(Press())
             .disabled(model.blocked != nil || model.busy)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 8)
+            .padding(.top, 6)
             .padding(.bottom, 8)
         }
+    }
+
+    /** One line above the cards: CRE's word on the coin, or the call; Options on the right. */
+    private var header: some View {
+        HStack(spacing: 8) {
+            Group {
+                if let claimed = model.creChecking {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.mini).tint(Kallr.muted)
+                        Text("Checking $\(claimed) with Chainlink CRE…").foregroundStyle(Kallr.muted)
+                    }
+                } else if let real = model.creReal {
+                    Label("Real $\(real.claimed ?? real.symbol ?? "") · Chainlink CRE", systemImage: "checkmark.seal.fill").foregroundStyle(Kallr.lime)
+                } else if let call = callLine {
+                    Text(call).foregroundStyle(Kallr.bone)
+                } else {
+                    Text(model.payingETH ? "Swap ETH to USDC" : "Buy on Base").foregroundStyle(Kallr.muted)
+                }
+            }
+            .font(TradeFont.body).lineLimit(1)
+            Spacer(minLength: 6)
+            if !model.payingETH {
+                Button {
+                    Haptics.modifier()
+                    withAnimation(.easeOut(duration: 0.18)) { model.advancedOpen = true }
+                } label: {
+                    HStack(spacing: 3) {
+                        Text(model.optionsSummary).font(TradeFont.body).lineLimit(1).minimumScaleFactor(0.7)
+                        Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(Kallr.muted)
+                    .frame(minHeight: 30)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(Press())
+                .accessibilityLabel("Options: order type, take profit and stop loss")
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 30)
     }
 
     /** Options on their own screen: order type, take-profit and stop-loss, then Done. */
@@ -1228,45 +1289,6 @@ private struct TradeTab: View {
         }
         if let copied = model.copied, copied.trade != nil, copied.warning == nil { return copied.headline(typed: nil) }
         return nil
-    }
-
-    /** You pay → you get, as two coins; then Options, folded. */
-    private var pair: some View {
-        HStack(spacing: 8) {
-            Button { model.togglePay() } label: { TokenBadge(symbol: model.payAsset, chevron: true) }
-                .buttonStyle(Press())
-                .accessibilityLabel("Pay with \(model.payingETH ? "USDC" : "ETH")")
-            Image(systemName: "arrow.right").font(TradeFont.bold).foregroundStyle(Kallr.muted)
-            if model.payingETH {
-                TokenBadge(symbol: "USDC")
-            } else {
-                Button { Haptics.modifier(); model.openPicker() } label: {
-                    TokenBadge(symbol: model.symbol, logo: model.isAddress ? model.assetLogo : nil, chevron: true)
-                }
-                .buttonStyle(Press())
-                .accessibilityLabel("Pick a token")
-            }
-            Spacer(minLength: 6)
-            if model.payingETH {
-                Text("Swap").font(TradeFont.body).foregroundStyle(Kallr.muted)
-            } else {
-                Button {
-                    Haptics.modifier()
-                    withAnimation(.easeOut(duration: 0.18)) { model.advancedOpen.toggle() }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(model.optionsSummary).font(TradeFont.body).lineLimit(1).minimumScaleFactor(0.6)
-                        Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold))
-                            .rotationEffect(.degrees(model.advancedOpen ? 180 : 0))
-                    }
-                    .foregroundStyle(model.advancedOpen ? Kallr.lime : Kallr.muted)
-                    .frame(minHeight: 40)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(Press())
-                .accessibilityLabel("Options: order type, take profit and stop loss")
-            }
-        }
     }
 
     private var reviewTitle: String {
@@ -1311,6 +1333,38 @@ private struct AmountLine: View {
             .onTapGesture { if !editing { model.startTyping() } }
             Text(model.amountSubline).font(TradeFont.body).foregroundStyle(Kallr.muted).lineLimit(1)
         }
+    }
+}
+
+/** One side of the swap, like Uniswap's: a label, the amount, the coin on the right, and a line under it. */
+/** The swap cards' fill: a step up from the keyboard's black. */
+private let swapFill = Color(red: 0.086, green: 0.094, blue: 0.09)
+
+private struct SwapSide<Coin: View, Footer: View>: View {
+    let label: String
+    let amount: String
+    let dim: Bool
+    let onAmount: (() -> Void)?
+    @ViewBuilder let coin: () -> Coin
+    @ViewBuilder let footer: () -> Footer
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(TradeFont.body).foregroundStyle(Kallr.muted)
+            HStack(spacing: 8) {
+                Text(amount).font(.system(size: 30, weight: .black).monospacedDigit())
+                    .foregroundStyle(dim ? Kallr.bone.opacity(0.75) : Kallr.bone)
+                    .lineLimit(1).minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onAmount?() }
+                coin()
+            }
+            footer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(swapFill, in: RoundedRectangle(cornerRadius: 18))
     }
 }
 
@@ -1626,11 +1680,10 @@ private struct LiveTicker: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Circle().fill(model.live == nil ? Kallr.muted : Kallr.up).frame(width: 6, height: 6).opacity(flash ? 0.3 : 1)
             if let live = model.live {
-                Text("\(model.payingETH ? "ETH" : model.symbol) $\(Self.tick(live.price))")
+                Text("1 \(model.payingETH ? "ETH" : model.symbol) = $\(Self.tick(live.price))")
                     .font(TradeFont.body.monospacedDigit())
-                    .foregroundStyle(flash ? (model.tickMove >= 0 ? Kallr.up : Kallr.danger) : Kallr.bone)
+                    .foregroundStyle(flash ? (model.tickMove >= 0 ? Kallr.up : Kallr.danger) : Kallr.muted)
                     .contentTransition(.numericText(value: live.price))
                     .lineLimit(1)
                 if let c = live.change24h {
@@ -1642,7 +1695,7 @@ private struct LiveTicker: View {
                 Text("\(model.payingETH ? "ETH" : model.symbol) · live price…").font(TradeFont.body).foregroundStyle(Kallr.muted)
             }
             Spacer(minLength: 4)
-            Sparkline(values: model.ticks).frame(width: 64, height: 16)
+            Sparkline(values: model.ticks).frame(width: 56, height: 14)
         }
         .onChange(of: model.live?.price) { _, _ in
             withAnimation(.easeOut(duration: 0.15)) { flash = true }
@@ -1680,10 +1733,22 @@ private struct TokenIcon: View {
         }
     }
 
+    /** The coin's real logo, bundled for ETH, USDC and BTC. */
+    private var bundled: String? {
+        switch symbol.uppercased() {
+        case "ETH", "WETH": return "TokenETH"
+        case "USDC": return "TokenUSDC"
+        case "BTC", "CBBTC", "WBTC": return "TokenBTC"
+        default: return nil
+        }
+    }
+
     var body: some View {
         let fallback = Text(glyph).font(.system(size: size * 0.55, weight: .black)).foregroundStyle(.white)
             .frame(width: size, height: size).background(tint, in: Circle())
-        if let logo {
+        if let bundled {
+            Image(bundled).resizable().interpolation(.high).scaledToFill().frame(width: size, height: size).clipShape(Circle())
+        } else if let logo {
             AsyncImage(url: logo) { image in
                 image.resizable().scaledToFill().frame(width: size, height: size).clipShape(Circle())
             } placeholder: { fallback }
@@ -1993,7 +2058,7 @@ private struct WalletTab: View {
                 }
                 .padding(10)
                 .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
-                Text("Deposit ETH from the Kall Keyboard app (MetaMask opens with it filled in), then swap some to USDC there. About $1 of ETH stays for gas. Orders go up to $\(Kallr.fmt(w.maxUsd ?? 25)) each, Base only.")
+                Text("Deposit ETH from the Kall Keyboard app (copy the address, or scan its QR), then swap some to USDC there. About $1 of ETH stays for gas. Orders go up to $\(Kallr.fmt(w.maxUsd ?? 25)) each, Base only.")
                     .font(.system(size: 11)).foregroundStyle(Kallr.muted)
             } else {
                 Empty(text: model.fullAccess ? "Reading your Kall wallet…" : "Turn on Allow Full Access for Kall Keyboard in Settings.")

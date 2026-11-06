@@ -516,7 +516,7 @@ struct PoweredByDefinitive: View {
 
 /**
  * EIP-681 links that open a wallet app with a transfer to the Kall wallet filled in, on Base (8453).
- * MetaMask takes them as metamask.app.link/send/…; other wallets take the ethereum: form.
+ * Wallet apps take the ethereum: form.
  */
 enum Deposit {
     static let usdc = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
@@ -532,6 +532,5 @@ enum Deposit {
         return "\(to)@8453?value=\(microEth)000000000000"
     }
 
-    static func metaMask(_ path: String) -> URL? { URL(string: "https://metamask.app.link/send/\(path)") }
     static func anyWallet(_ path: String) -> URL? { URL(string: "ethereum:\(path)") }
 }

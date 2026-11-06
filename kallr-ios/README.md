@@ -44,9 +44,9 @@ iOS doesn't let keyboards use the microphone, so voice orders are Android only.
 
 - **Wallet:** the Kall wallet's ETH and USDC, its address (copy, or open it on BaseScan), ETH and BTC
   prices, how many calls are open on Arkiv, the latest orders and the best callers by settled hit rate.
-  **Deposit ETH** (USDC also works) picks an amount, then opens MetaMask with the transfer to the Kall
-  wallet on Base filled in (an EIP-681 link), hands it to any other wallet app, or shows it as a QR code
-  for a wallet on another device. Balances are read again when you come back from the wallet, and a
+  **Deposit ETH** (USDC also works) picks an amount, then copies the Kall wallet's address, opens a wallet
+  app with the transfer on Base filled in (an EIP-681 link), or shows it as a QR code for a wallet on
+  another device. Balances are read again when you come back from the wallet, and a
   deposit that landed is called out.
 - **Swap ETH to USDC:** type dollars (or $5, $10, $25, Max), review a fresh Definitive Flash quote, confirm.
   The server (`/api/keyboard/swap`) sells that much of the Kall wallet's ETH for USDC: Flash's wrap to
