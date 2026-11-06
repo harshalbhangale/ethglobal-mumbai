@@ -7,6 +7,7 @@ import { BASESCAN, placeOnX, type QuoteFacts, type Step, waitForFill } from "./f
 import { followButton } from "./follows";
 import { definitiveLogo, tokenIcon } from "./logos";
 import { cardOrderText, COPYABLE, DECIMAL, deskOrderUrl } from "./post";
+import { type SuccessSummary, successBurst } from "./success-burst";
 import { ALIASES, formatPrice, type LivePrice, livePrice } from "./ticker-price";
 import { type Choice, choiceIcon, plainPrice, searchTokens, tokenPicker } from "./token-picker";
 import { hasBrowserWallet, rejected } from "./wallet";
@@ -407,9 +408,19 @@ export function flashCard(input: {
       tracker.finish();
       walletChip.textContent = `${result.from.slice(0, 6)}…${result.from.slice(-4)}`;
       walletChip.hidden = false;
+      // Flash returned an order ID: only now does the success moment play.
+      const at = price();
       progress.append(
         receipt({
-          title: `${side === "buy" ? "Bought" : "Sold"} ${sym()} with ${spent} ✓`,
+          title: `${side === "buy" ? "Bought" : "Sold"} ${sym()} with ${spent}`,
+          summary: {
+            title: `${side === "buy" ? "Bought" : "Sold"} ${sym()}`,
+            spent,
+            exits:
+              side === "buy" && tp !== null && sl !== null
+                ? { tpPct: tp, slPct: sl, tpPrice: formatPrice(String(at * (1 + tp / 100))), slPrice: formatPrice(String(at * (1 - sl / 100))) }
+                : null,
+          },
           exits: result.exits,
           orderId: result.orderId,
           from: result.from,
@@ -637,13 +648,23 @@ const venueName = (v: string) => v.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) =
  * After a fill: the network, the wallet, every transaction the wallet sent, and the swap itself once
  * Definitive executes it, each linked to Basescan. The swap hash arrives a few seconds later.
  */
-export function receipt(r: { title: string; exits: string | null; orderId: string; from: string; txs: Array<{ label: string; hash: string }> }) {
+export function receipt(r: {
+  title: string;
+  /** Plays the success burst above the receipt. */
+  summary?: SuccessSummary;
+  exits: string | null;
+  orderId: string;
+  from: string;
+  txs: Array<{ label: string; hash: string }>;
+}) {
   const row = (k: string, v: Node | string) => [el("dt", {}, k), el("dd", {}, v)];
+  const burst = r.summary ? successBurst(r.summary) : null;
   const swap = el("dd", { class: "swap-pending" }, "Waiting for Definitive to fill on Base…");
   const venue = el("dd", {}, "Best route by Definitive");
   const card = el(
     "div",
     { class: "done-card" },
+    burst?.root,
     el("div", { class: "done-head" }, el("strong", {}, r.title), el("span", { class: "network-badge" }, el("i", { "aria-hidden": "true" }), "Base")),
     el(
       "dl",
@@ -661,8 +682,10 @@ export function receipt(r: { title: string; exits: string | null; orderId: strin
   void waitForFill(r.orderId).then((fill) => {
     if (!fill) {
       swap.replaceChildren("Still filling: check the order page");
+      burst?.setLink(`${BASESCAN}/address/${r.from}`, "Your wallet on Basescan ↗");
       return;
     }
+    burst?.setLink(`${BASESCAN}/tx/${fill.hash}`, "View swap on Basescan ↗");
     swap.classList.remove("swap-pending");
     swap.replaceChildren(safeLink(`${BASESCAN}/tx/${fill.hash}`, `${short(fill.hash)} ↗`));
     if (fill.venues.length) venue.replaceChildren(`${fill.venues.map(venueName).join(" + ")} · via Definitive`);
