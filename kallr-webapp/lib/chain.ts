@@ -1,4 +1,4 @@
-import { createPublicClient, erc20Abi, formatUnits, http, type Address } from "viem";
+import { createPublicClient, erc20Abi, fallback, formatUnits, http, type Address } from "viem";
 import { base } from "viem/chains";
 
 export const CHAIN = base;
@@ -7,10 +7,17 @@ export const CHAIN = base;
 export const USDC_BASE: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 export const USDC_DECIMALS = 6;
 
-export const publicClient = createPublicClient({
-  chain: base,
-  transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL || undefined),
-});
+/**
+ * Base RPC. On the server, Ankr first (ANKR_API_KEY, never sent to the browser) with Base's public RPC as an
+ * instant fallback; in the browser, the public RPC only.
+ */
+export function baseTransport() {
+  const ankrKey = typeof window === "undefined" ? process.env.ANKR_API_KEY : undefined;
+  const pub = http(process.env.NEXT_PUBLIC_BASE_RPC_URL || undefined, { timeout: 4_000 });
+  return ankrKey ? fallback([http(`https://rpc.ankr.com/base/${ankrKey}`, { timeout: 2_500, retryCount: 0 }), pub]) : pub;
+}
+
+export const publicClient = createPublicClient({ chain: base, transport: baseTransport() });
 
 export type Balances = { eth: string; usdc: string };
 
