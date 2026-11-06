@@ -164,6 +164,30 @@ describe("scanProfile", () => {
     ]);
     expect(root?.querySelector(".pc-foot")?.textContent).toContain("Too few to judge · Priced at post time");
   });
+  it("shows the Kall mark, coin logos, and each trade copied from the caller with its Arkiv record", async () => {
+    const postedAt = Math.floor(Date.now() / 1000) - 3600;
+    const tradeKey = `0x${"b".repeat(64)}`;
+    await wire({
+      writer: null,
+      calls: [{ key: `0x${"a".repeat(64)}`, postId: "8", asset: "ETH", direction: "up", status: "open", returnBps: null, postedAt, expiresAt: postedAt + 86_400 }],
+      trades: [{ key: tradeKey, asset: "ETH", side: "sell", source: "extension", postId: "8", placedAt: postedAt + 60 }],
+    });
+    history.replaceState(null, "", "/copied");
+    document.body.innerHTML = profilePage("copied");
+    const { scanProfile } = await import("./profile");
+    await scanProfile();
+    const root = document.querySelector<HTMLElement>(".kallr-profile-host")?.shadowRoot;
+    expect(root?.querySelector(".pc-head .brand-mark-glyph")).not.toBeNull();
+    expect(root?.querySelectorAll(".pc-calls .pc-coin")).toHaveLength(2);
+    const groups = [...(root?.querySelectorAll(".pc-group") ?? [])].map((g) => g.textContent);
+    expect(groups).toContain("Copied on Kall · 1");
+    const lists = [...(root?.querySelectorAll(".pc-calls") ?? [])];
+    const copied = lists.at(-1);
+    expect(copied?.textContent).toContain("Sold $ETH");
+    expect(copied?.textContent).toContain("on X");
+    const links = [...(copied?.querySelectorAll("a") ?? [])].map((a) => a.getAttribute("href"));
+    expect(links).toEqual([`https://rabdi.explorer.arkiv.network/entity/${tradeKey}`, "https://x.com/copied/status/8"]);
+  });
   it("is honest when a caller has no calls yet, and leaves non-profile pages alone", async () => {
     await wire({ calls: [], writer: null });
     history.replaceState(null, "", "/newkol");

@@ -152,6 +152,20 @@ export async function readTrades(client: ArkivPublic, writer: Hex, trader?: Hex)
   return (await filtered.orderBy(desc("placedAt")).limit(100).fetch()).entities;
 }
 
+/** Trades placed through Kall that copied a caller's call, newest first. */
+export async function readCallerTrades(client: ArkivPublic, writer: Hex, caller: string, limit = 20) {
+  return (
+    await client
+      .select()
+      .from(Trades)
+      .createdBy(writer)
+      .where(eq("caller", caller.toLowerCase()))
+      .orderBy(desc("placedAt"))
+      .limit(limit)
+      .fetch()
+  ).entities;
+}
+
 export async function readResults(client: ArkivPublic, writer: Hex, caller?: string) {
   const q = client.select().from(CallResults).createdBy(writer);
   const filtered = caller ? q.where(eq("caller", caller.toLowerCase())) : q;
