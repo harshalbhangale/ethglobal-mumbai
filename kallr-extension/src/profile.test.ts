@@ -117,8 +117,8 @@ describe("scanProfile", () => {
     await wire({
       writer: "0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53",
       calls: [
-        { postId: "9", asset: "ETH", direction: "up", status: "hit", returnBps: 220, postedAt, expiresAt: postedAt + 86_400, gone: true },
-        { postId: "8", asset: "ETH", direction: "up", status: "open", returnBps: 30, postedAt, expiresAt: postedAt + 9e9 },
+        { key: "0xabc9", postId: "9", asset: "ETH", direction: "up", status: "hit", returnBps: 220, postedAt, expiresAt: postedAt + 86_400, gone: true },
+        { postId: "8", asset: "ETH", direction: "up", status: "open", returnBps: 30, postedAt: postedAt - 60, expiresAt: postedAt + 9e9 },
       ],
       deleted: 1,
       deletedChecked: 2,
@@ -132,23 +132,27 @@ describe("scanProfile", () => {
     expect(hosts).toHaveLength(1);
     expect(hosts[0]?.nextElementSibling?.getAttribute("role")).toBe("tablist");
     const root = hosts[0]?.shadowRoot;
-    // Small: a header with Follow, four numbers, the last calls, one footer line.
-    expect(root?.querySelector(".pc-title")?.textContent).toBe("Kall record @kol");
+    // Small: who and Follow, one line of numbers, the last calls, one footer line. No stat tiles.
+    expect(root?.querySelector(".pc-title")?.textContent).toBe("@kol on Kall");
     expect(root?.querySelector(".pc-head .pc-follow")?.textContent).toBe("Follow");
-    const stats = [...(root?.querySelectorAll(".pc-stat") ?? [])].map((s) => s.textContent);
-    expect(stats).toEqual(["2calls", "100%hit rate · 1/1", "+2.2%avg return", "1open", "1deleted · of 2"]);
+    expect(root?.querySelector(".pc-line")?.textContent).toBe("2 calls · 100% hit · +2.2% avg · 1 deleted");
+    expect(root?.querySelectorAll(".pc-stat")).toHaveLength(0);
     expect(root?.querySelectorAll(".pc-calls li")).toHaveLength(2);
     // A call whose post is gone from X is still on the record, and says so.
     expect(root?.querySelectorAll(".pc-gone")).toHaveLength(1);
     expect(root?.querySelector(".pc-gone")?.textContent).toBe("deleted on X");
-    expect(root?.querySelector(".pc-calls a")?.getAttribute("href")).toMatch(/^https:\/\/x\.com\/kol\/status\/(8|9)$/);
-    // The record is read from Arkiv, with a link to the writer's entities, and the desk link.
+    // Each call links to its record on Arkiv (when it has one) and to the post on X.
+    const first = [...(root?.querySelectorAll(".pc-calls li:first-child a") ?? [])].map((a) => a.getAttribute("href"));
+    expect(first).toEqual(["https://rabdi.explorer.arkiv.network/entity/0xabc9", "https://x.com/kol/status/9"]);
+    const second = [...(root?.querySelectorAll(".pc-calls li:last-child a") ?? [])].map((a) => a.getAttribute("href"));
+    expect(second).toEqual(["https://x.com/kol/status/8"]);
+    // The whole record on Arkiv, and the desk.
     const foot = [...(root?.querySelectorAll(".pc-foot a") ?? [])].map((a) => a.getAttribute("href"));
     expect(foot).toEqual([
       "https://rabdi.explorer.arkiv.network/address/0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53",
       "https://kallr.test/app?caller=kol",
     ]);
-    expect(root?.querySelector(".pc-foot")?.textContent).toContain("too few to judge");
+    expect(root?.querySelector(".pc-foot")?.textContent).toContain("Too few to judge · Priced at post time");
   });
   it("is honest when a caller has no calls yet, and leaves non-profile pages alone", async () => {
     await wire({ calls: [], writer: null });
