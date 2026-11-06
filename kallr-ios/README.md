@@ -15,7 +15,7 @@ plays keyboard haptics only with Allow Full Access.
 
 - **Following:** calls from the callers you follow (kept on the phone), read from Arkiv by
   `/api/keyboard/feed`: the post's text from its Swarm snapshot, the move since the post, time left, and
-  **Trade**. Caller chips with hit rates narrow the list; Active, Settled and starred Favorites filter it.
+  **Trade**. Caller chips with hit rates narrow the list; Active and Settled filter it.
   **Explore** lists every caller Kall Markets tracks or has priced, with their record and Follow. The
   clipboard button checks a post or $TICKER message you copied.
 - **Trade:** laid out like a swap. **You pay** is dollars of USDC (tap to type, with $1, $5, $10, $25 and
