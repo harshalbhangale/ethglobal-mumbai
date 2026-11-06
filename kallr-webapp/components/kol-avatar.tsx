@@ -8,7 +8,7 @@ export function handleHue(handle: string) {
 }
 export function handleGradient(handle: string, angle = 135) {
   const a = handleHue(handle);
-  return `linear-gradient(${angle}deg, hsl(${a} 85% 58%), hsl(${(a + 70) % 360} 80% 52%), hsl(${(a + 150) % 360} 75% 45%))`;
+  return `linear-gradient(${angle}deg, hsl(${a} 12% 18%), hsl(${(a + 40) % 360} 10% 26%))`;
 }
 
 /** The caller's X avatar through unavatar, falling back to a colored initial. */
@@ -17,7 +17,7 @@ export function KolAvatar({ handle, size = 44, ring = false }: { handle: string;
   const [failed, setFailed] = useState(handle === "you");
   return (
     <span
-      className={`relative inline-grid shrink-0 place-items-center overflow-hidden rounded-full font-display font-semibold text-white ${ring ? "ring-4 ring-card" : ""}`}
+      className={`relative inline-grid shrink-0 place-items-center overflow-hidden rounded-full font-display font-semibold text-ink ${ring ? "ring-4 ring-card" : ""}`}
       style={{ width: size, height: size, background: handleGradient(handle), fontSize: size * 0.42 }}
       title={`@${handle}`}
     >

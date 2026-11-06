@@ -236,6 +236,8 @@ This repo was started at the event (first commit 5 Nov 2026). What we brought in
 - **Chrome extension cards:** the post card, ticker Buy button, caller record, call check drawer, profile card and
   follow chips were ported from **Xtrading**, our earlier X trading extension (on Monad, with Kuru and Perpl). At
   the event we moved them onto Base and Definitive Flash, added token safety checks, and wired them to this app.
+- **Landing background:** the particle knot behind the landing hero (`kallr-webapp/components/signal-field.tsx`) and
+  the black-and-lime look come from the Xtrading site.
 - **Android keyboard:** a fork of [FlorisBoard](https://github.com/florisboard/florisboard) v0.5.2 (Apache-2.0),
   which does all the typing. We added the Kallr row; the full list of changes is in
   [kallr-keyboard/KALLR.md](kallr-keyboard/KALLR.md).

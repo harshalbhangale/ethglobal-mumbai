@@ -192,11 +192,10 @@ function AgentWindow({ open, onOpenChange, prefill }: { open: boolean; onOpenCha
       <button
         type="button"
         onClick={() => onOpenChange(true)}
-        className="mesh fixed right-4 bottom-20 z-40 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_-8px_rgba(124,58,237,0.6)] transition-transform hover:scale-105 lg:bottom-6"
-        style={{ backgroundImage: "linear-gradient(120deg,#7c3aed,#1d9bf0,#10b981,#7c3aed)" }}
+        className="fixed right-4 bottom-20 z-40 flex items-center gap-2 rounded-lg border border-rule-strong bg-card px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-lime hover:text-lime lg:bottom-6"
       >
         <Sparkle /> Ask Kallr
-        {schedules.length > 0 && <span className="rounded-full bg-white/25 px-2 text-xs tabular-nums">{schedules.length}</span>}
+        {schedules.length > 0 && <span className="rounded-full bg-lime/15 px-2 text-xs text-lime tabular-nums">{schedules.length}</span>}
       </button>
     );
   }
@@ -205,19 +204,19 @@ function AgentWindow({ open, onOpenChange, prefill }: { open: boolean; onOpenCha
     <div
       role="dialog"
       aria-label="Kallr agent"
-      className="pop-in fixed inset-x-2 bottom-2 z-50 flex max-h-[86dvh] flex-col overflow-hidden rounded-3xl border border-rule bg-card shadow-[0_30px_80px_-20px_rgba(20,33,61,0.45)] sm:inset-x-auto sm:right-5 sm:bottom-5 sm:w-[400px]"
+      className="pop-in fixed inset-x-2 bottom-2 z-50 flex max-h-[86dvh] flex-col overflow-hidden rounded-3xl border border-rule bg-card shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)] sm:inset-x-auto sm:right-5 sm:bottom-5 sm:w-[400px]"
     >
-      <header className="mesh relative flex items-center gap-3 px-5 py-4 text-white" style={{ backgroundImage: "linear-gradient(120deg,#14213d,#3b2f6b,#7c3aed,#1d9bf0,#14213d)" }}>
-        <span className="grid size-9 place-items-center rounded-xl bg-white/15">
+      <header className="relative flex items-center gap-3 border-b border-rule bg-raised px-5 py-4">
+        <span className="grid size-9 place-items-center rounded-lg bg-lime text-on-lime">
           <Sparkle />
         </span>
         <div className="flex-1">
           <p className="font-display font-semibold">Kallr agent</p>
-          <p className="flex items-center gap-1.5 text-xs text-white/75">
-            <span className="rounded-full bg-white/20 px-1.5 py-px text-[10px] font-semibold tracking-wide uppercase">Preview</span> Plans trades in plain words · nothing is placed
+          <p className="flex items-center gap-1.5 text-xs text-slate">
+            <span className="rounded bg-lime/15 px-1.5 py-px text-[10px] font-semibold tracking-wide text-lime uppercase">Preview</span> Plans trades in plain words · nothing is placed
           </p>
         </div>
-        <button type="button" onClick={() => onOpenChange(false)} aria-label="Minimize" className="rounded-full p-2 hover:bg-white/15">
+        <button type="button" onClick={() => onOpenChange(false)} aria-label="Minimize" className="rounded-full p-2 hover:bg-card">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
             <path d="M6 12h12" />
           </svg>
@@ -229,7 +228,7 @@ function AgentWindow({ open, onOpenChange, prefill }: { open: boolean; onOpenCha
         {stage.kind === "receipt" && (
           <div>
             <Receipt plan={stage.plan} />
-            <button type="button" onClick={() => setStage({ kind: "idle" })} className="mt-4 w-full rounded-full bg-ink py-2.5 text-sm font-semibold text-white hover:bg-ink-soft">
+            <button type="button" onClick={() => setStage({ kind: "idle" })} className="mt-4 w-full rounded-full bg-lime py-2.5 text-sm font-semibold text-on-lime hover:bg-lime-strong">
               Done
             </button>
           </div>
@@ -304,7 +303,7 @@ function AgentWindow({ open, onOpenChange, prefill }: { open: boolean; onOpenCha
           <button
             type="submit"
             disabled={!input.trim() || stage.kind === "processing"}
-            className="grid size-9 place-items-center rounded-full bg-violet text-white transition-transform hover:scale-105 disabled:opacity-40"
+            className="grid size-9 place-items-center rounded-lg bg-lime text-on-lime transition-colors hover:bg-lime-strong disabled:opacity-40"
             aria-label="Schedule"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -346,7 +345,7 @@ export function Processing({ plan, step }: { plan: Plan; step: number }) {
       <ol className="relative mt-4 space-y-2.5">
         {STEPS.map((s, i) => (
           <li key={s} className={`flex items-center gap-3 text-sm transition-opacity ${i > step ? "opacity-35" : ""}`}>
-            <span className={`grid size-6 place-items-center rounded-full ${i < step ? "bg-mint text-white" : i === step ? "bg-violet/15" : "bg-rule/60"}`}>
+            <span className={`grid size-6 place-items-center rounded-full ${i < step ? "bg-lime text-on-lime" : i === step ? "bg-violet/15" : "bg-rule/60"}`}>
               {i < step ? (
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <path className="draw" d="M5 12l5 5 9-10" />
@@ -363,7 +362,7 @@ export function Processing({ plan, step }: { plan: Plan; step: number }) {
   );
 }
 
-const CONFETTI = ["#7c3aed", "#1d9bf0", "#10b981", "#f2a93b", "#f43f5e"];
+const CONFETTI = ["#c6f25a", "#d6f985", "#e6ebe3", "#8ad97c", "#b8c2b7"];
 
 export function Receipt({ plan, stampText = "Saved" }: { plan: Plan; stampText?: string }) {
   const qty = plan.estPrice ? plan.amountUsd / plan.estPrice : null;
@@ -391,9 +390,9 @@ export function Receipt({ plan, stampText = "Saved" }: { plan: Plan; stampText?:
   return (
     <div className="relative">
       {/* Printer slot */}
-      <div className="relative z-10 mx-auto h-3 w-[92%] rounded-full bg-ink shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]" />
+      <div className="relative z-10 mx-auto h-3 w-[92%] rounded-full bg-paper shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]" />
       <div className="relative -mt-1.5 overflow-hidden px-[6%] pb-3">
-        <div className="receipt-print receipt-edge relative bg-[#fffdf7] px-5 pt-6 pb-8 font-mono text-[12.5px] text-ink shadow-[0_8px_20px_-10px_rgba(20,33,61,0.35)]">
+        <div className="receipt-print receipt-edge relative border border-rule bg-raised px-5 pt-6 pb-8 font-mono text-[12.5px] text-ink">
           <div className="text-center">
             <p className="font-display text-lg font-bold tracking-tight">KALLR</p>
             <p className="text-[11px] text-slate">Receipt #{plan.id}</p>
@@ -424,7 +423,7 @@ export function Receipt({ plan, stampText = "Saved" }: { plan: Plan; stampText?:
           <div
             aria-hidden
             className="mx-auto mt-5 h-10 w-4/5"
-            style={{ background: "repeating-linear-gradient(90deg,#14213d 0 2px,transparent 2px 4px,#14213d 4px 5px,transparent 5px 8px,#14213d 8px 11px,transparent 11px 12px)" }}
+            style={{ background: "repeating-linear-gradient(90deg,#e6ebe3 0 2px,transparent 2px 4px,#e6ebe3 4px 5px,transparent 5px 8px,#e6ebe3 8px 11px,transparent 11px 12px)" }}
           />
           <p className="mt-2 text-center text-[10px] text-slate">Preview · saved in this browser, not placed. To trade, use Copy call or the desk.</p>
 

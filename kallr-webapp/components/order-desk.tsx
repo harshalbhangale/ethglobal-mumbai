@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getUsdPrice, hasUsdFeed, type PricedAsset } from "@/lib/chain";
 import { listFlashOrders, type OrderContext, type PlaceStep, placeFlashOrder, stepLabel } from "@/lib/flash-client";
 import { toFlashOrder } from "@/lib/flash-order";
+import type { TradeItem } from "@/lib/feed";
 import { describeOrder, type ExitPrices, exitPrices, type ParsedOrder, parseOrder } from "@kallr/domain/order";
 
 const usd = (n: number) =>
@@ -150,7 +151,7 @@ export function OrderComposer({ wallet, onPlaced }: { wallet: ConnectedWallet | 
         <button
           type="submit"
           disabled={!flash?.ok || busy}
-          className="rounded-full bg-ink px-6 py-3 text-[15px] font-semibold text-white disabled:opacity-40"
+          className="rounded-lg bg-lime px-6 py-3 text-[15px] font-semibold text-on-lime disabled:opacity-40"
         >
           {busy ? "Placing…" : "Place order"}
         </button>
@@ -257,40 +258,90 @@ function describeFlashOrder(o: FlashOrder) {
   return o.side === "buy" ? `${kind} buy: $${o.qty} of ${symbol}` : `${kind} sell: ${o.qty} ${symbol}`;
 }
 
-export function OpenOrders({ orders, error }: { orders: FlashOrder[] | null; error: string | null }) {
+/**
+ * Orders in three parts: open on Definitive Flash right now, closed (filled, cancelled or expired),
+ * and the trade history Kallr recorded on Arkiv for this wallet, each with its proof.
+ */
+export function OpenOrders({
+  orders,
+  error,
+  history,
+}: {
+  orders: FlashOrder[] | null;
+  error: string | null;
+  history?: { trades: TradeItem[]; explorer: string; loading: boolean };
+}) {
   const open = orders?.filter((o) => OPEN_STATUSES.includes(o.status) || o.attachedBracket?.status === "active") ?? [];
-  const recent = orders?.filter((o) => !open.includes(o)).slice(0, 5) ?? [];
+  const closed = orders?.filter((o) => !open.includes(o)) ?? [];
 
   return (
-    <section id="orders" aria-labelledby="orders-heading" className="rounded-2xl border border-rule bg-card p-6">
-      <div className="flex items-baseline justify-between">
-        <h2 id="orders-heading" className="font-display text-lg font-semibold">
-          Open orders
-        </h2>
-        {open.length > 0 && <span className="text-sm text-slate">{open.length} open</span>}
-      </div>
-
-      {error && <p className="mt-4 text-sm text-down">{error}</p>}
-      {orders === null && !error && <p className="mt-6 text-sm text-slate">Loading orders from Definitive…</p>}
-
-      {orders !== null && open.length === 0 && (
-        <div className="mt-6 rounded-xl border border-dashed border-rule px-6 py-10 text-center">
-          <p className="font-semibold">No open orders</p>
-          <p className="mx-auto mt-2 max-w-sm text-sm text-slate">
-            Reply “@Kallr copy $2” under a call on X, or type an order above. It shows up here with its
-            take-profit and stop-loss.
-          </p>
+    <div id="orders" className="space-y-4">
+      <section aria-labelledby="open-heading" className="rounded-lg border border-rule bg-card p-6">
+        <div className="flex items-baseline justify-between">
+          <h2 id="open-heading" className="font-display text-lg font-semibold">
+            Open orders
+          </h2>
+          {open.length > 0 && <span className="text-sm text-slate">{open.length} open</span>}
         </div>
-      )}
+        {error && <p className="mt-4 text-sm text-down">{error}</p>}
+        {orders === null && !error && <p className="mt-6 text-sm text-slate">Loading orders from Definitive…</p>}
+        {orders !== null && open.length === 0 && (
+          <p className="mt-4 text-sm text-slate">Nothing open. Limit orders and armed take-profit / stop-loss exits wait here until they fill.</p>
+        )}
+        {open.length > 0 && <OrderList orders={open} />}
+      </section>
 
-      {open.length > 0 && <OrderList orders={open} />}
-      {recent.length > 0 && (
-        <>
-          <h3 className="mt-6 text-sm font-semibold text-slate">Recent</h3>
-          <OrderList orders={recent} />
-        </>
+      <section aria-labelledby="closed-heading" className="rounded-lg border border-rule bg-card p-6">
+        <h2 id="closed-heading" className="font-display text-lg font-semibold">
+          Closed orders
+        </h2>
+        {orders !== null && closed.length === 0 ? (
+          <p className="mt-4 text-sm text-slate">Filled, cancelled and expired orders show up here.</p>
+        ) : (
+          <OrderList orders={closed} />
+        )}
+      </section>
+
+      {history && (
+        <section aria-labelledby="history-heading" className="rounded-lg border border-rule bg-card p-6">
+          <h2 id="history-heading" className="font-display text-lg font-semibold">
+            Trade history
+          </h2>
+          <p className="mt-1 text-sm text-slate">Every trade placed from this wallet through Kallr, recorded on Arkiv.</p>
+          {history.loading ? (
+            <p className="mt-4 text-sm text-slate">Reading Arkiv…</p>
+          ) : history.trades.length === 0 ? (
+            <p className="mt-4 text-sm text-slate">No trades yet from this wallet.</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-rule">
+              {history.trades.map((t) => (
+                <li key={t.id} className="flex items-start justify-between gap-4 py-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">
+                      {t.side === "buy" ? `Bought $${t.qty} of ${t.asset}` : `Sold ${t.qty} ${t.asset}`}
+                      {t.caller && <span className="font-normal text-slate"> · copying @{t.caller}</span>}
+                    </p>
+                    <p className="mt-1 text-sm text-slate">
+                      {new Date(t.placedAt * 1000).toLocaleString()} · via {t.source}
+                      {t.takeProfit !== null && <span className="text-up"> · TP {usd(t.takeProfit)}</span>}
+                      {t.stopLoss !== null && <span className="text-down"> · SL {usd(t.stopLoss)}</span>}
+                    </p>
+                  </div>
+                  <a
+                    href={`${history.explorer}/entity/${t.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 rounded-md border border-rule px-3 py-1 text-sm text-slate hover:border-rule-strong hover:text-ink"
+                  >
+                    Proof on Arkiv ↗
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
-    </section>
+    </div>
   );
 }
 

@@ -6,9 +6,9 @@
 export type Source = "desk" | "extension" | "keyboard";
 
 export const SOURCE_STYLE: Record<Source, { label: string; short: string; bg: string; fg: string; tint: string }> = {
-  extension: { label: "Extension on X", short: "X", bg: "#0f1419", fg: "#ffffff", tint: "#0f141914" },
-  keyboard: { label: "Keyboard", short: "Keyboard", bg: "#7c3aed", fg: "#ffffff", tint: "#7c3aed1a" },
-  desk: { label: "Desk", short: "Desk", bg: "#f2a93b", fg: "#14213d", tint: "#f2a93b26" },
+  extension: { label: "Extension on X", short: "X", bg: "#e6ebe3", fg: "#050605", tint: "#e6ebe314" },
+  keyboard: { label: "Keyboard", short: "Keyboard", bg: "#c6f25a", fg: "#0e1407", tint: "#c6f25a1a" },
+  desk: { label: "Desk", short: "Desk", bg: "#2c3830", fg: "#e6ebe3", tint: "#2c383040" },
 };
 
 const isSource = (s: string): s is Source => s in SOURCE_STYLE;

@@ -51,7 +51,7 @@ export function CountUp({ value, format = (n: number) => Math.round(n).toLocaleS
 // ---------- Shell: X-style three columns ----------
 
 const NAV = [
-  { href: "/dashboard", label: "Home", icon: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5z" /> },
+  { href: "/app", label: "Home", icon: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5z" /> },
   { href: "/kol", label: "Callers", icon: <path d="M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM17 11a3 3 0 1 0 0-6M21 19v-1a4 4 0 0 0-3-3.87" /> },
   { href: "/trades", label: "Trades", icon: <path d="M4 17l6-6 4 4 6-8M14 7h6v6" /> },
   { href: "/app", label: "Desk", icon: <path d="M3 5h18v11H3zM8 20h8M12 16v4" /> },
@@ -63,14 +63,9 @@ export function Shell({ session, children, rail }: { session: Session; children:
   const active = (href: string) => (href === "/kol" ? path.startsWith("/kol") : path === href);
   return (
     <div className="relative min-h-dvh">
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-40 -left-32 size-[520px] rounded-full bg-violet/10 blur-3xl" />
-        <div className="absolute top-1/3 -right-40 size-[520px] rounded-full bg-sky/10 blur-3xl" />
-        <div className="absolute -bottom-40 left-1/3 size-[460px] rounded-full bg-amber/10 blur-3xl" />
-      </div>
       <div className="mx-auto grid max-w-[1280px] lg:grid-cols-[240px_minmax(0,1fr)_340px] xl:grid-cols-[260px_minmax(0,1fr)_360px]">
         <aside className="sticky top-0 hidden h-dvh flex-col px-4 py-6 lg:flex">
-          <Logo href="/dashboard" />
+          <Logo href="/app" />
           <nav className="mt-8 flex flex-col gap-1" aria-label="Main">
             {NAV.map((n) => (
               <Link
@@ -89,9 +84,8 @@ export function Shell({ session, children, rail }: { session: Session; children:
           <button
             type="button"
             onClick={() => agent.open()}
-            className="mesh mt-6 rounded-full py-3.5 font-semibold text-white shadow-[0_10px_24px_-10px_rgba(124,58,237,0.7)] transition-transform hover:scale-[1.02]"
-            style={{ backgroundImage: "linear-gradient(120deg,#7c3aed,#1d9bf0,#7c3aed)" }}
-          >
+            className="mt-6 rounded-lg border border-rule-strong py-3.5 font-semibold text-ink transition-colors hover:border-lime hover:text-lime"
+            >
             Ask the agent
           </button>
           <div className="mt-auto">
@@ -113,7 +107,7 @@ export function Shell({ session, children, rail }: { session: Session; children:
 
         <main className="min-h-dvh min-w-0 border-rule bg-card/70 pb-24 backdrop-blur lg:border-x lg:pb-0">
           <div className="flex items-center justify-between border-b border-rule px-4 py-3 lg:hidden">
-            <Logo href="/dashboard" />
+            <Logo href="/app" />
             {!session.authenticated && <SignInButton />}
           </div>
           {children}
@@ -232,14 +226,14 @@ function CallPost({ c, price }: { c: CallItem; price: number | null }) {
             </div>
           </div>
           <div className="h-1.5 bg-paper">
-            <div className="h-full rounded-r-full" style={{ width: `${done * 100}%`, background: "linear-gradient(90deg,#1d9bf0,#7c3aed)" }} />
+            <div className="h-full rounded-r-full" style={{ width: `${done * 100}%`, background: "#c6f25a" }} />
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {"href" in copy ? (
             <Link
               href={copy.href}
-              className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-white transition-transform hover:scale-105"
+              className="rounded-lg bg-lime px-4 py-1.5 text-sm font-semibold text-on-lime transition-transform hover:bg-lime-strong"
             >
               Copy call
             </Link>
@@ -268,18 +262,14 @@ function ResultPost({ r }: { r: ResultItem }) {
           {r.direction === "long" ? "Long" : "Short"} <b>${r.asset}</b> settled.
         </p>
         <div
-          className="lift mt-3 flex items-center gap-4 rounded-2xl p-4 text-white"
-          style={{
-            background:
-              tone === "up" ? "linear-gradient(120deg,#0f766e,#10b981)" : tone === "down" ? "linear-gradient(120deg,#9f1239,#f43f5e)" : "linear-gradient(120deg,#334155,#64748b)",
-          }}
+          className="lift mt-3 flex items-center gap-4 rounded-xl border border-rule bg-raised p-4"
         >
           <AssetIcon asset={r.asset} size={40} />
           <div className="flex-1">
-            <p className="text-xs text-white/75">Called move</p>
-            <p className="font-display text-3xl font-semibold tabular-nums">{pct(r.returnBps)}</p>
+            <p className="text-xs text-slate">Called move</p>
+            <p className={`font-display text-3xl font-semibold tabular-nums ${tone === "up" ? "text-up" : tone === "down" ? "text-down" : "text-ink-soft"}`}>{pct(r.returnBps)}</p>
           </div>
-          <div className="text-right text-xs text-white/85 tabular-nums">
+          <div className="text-right text-xs text-slate tabular-nums">
             <div>{usd(r.entry)}</div>
             <div>↓</div>
             <div>{usd(r.exit)}</div>
@@ -377,13 +367,11 @@ export function WalletCard({ address, embedded }: { address: Address; embedded: 
   return (
     <section
       aria-label="Wallet"
-      className="mesh relative overflow-hidden rounded-3xl p-5 text-white shadow-[0_16px_40px_-16px_rgba(59,47,107,0.7)]"
-      style={{ backgroundImage: "linear-gradient(135deg,#14213d,#3b2f6b,#7c3aed,#1d9bf0,#14213d)" }}
+      className="relative overflow-hidden rounded-2xl border border-rule bg-card p-5"
     >
-      <div aria-hidden className="absolute -top-12 -right-12 size-40 rounded-full bg-white/10 blur-xl" />
       <div className="relative flex items-center justify-between">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold">
-          <span className="size-2 rounded-full bg-[#0052ff] ring-2 ring-white/60" /> {embedded ? "Embedded · Base" : "Wallet · Base"}
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-rule px-2.5 py-1 text-xs font-semibold text-ink-soft">
+          <span className="size-2 rounded-full bg-[#0052ff] ring-2 ring-rule" /> {embedded ? "Embedded · Base" : "Wallet · Base"}
         </span>
         <button
           type="button"
@@ -392,22 +380,22 @@ export function WalletCard({ address, embedded }: { address: Address; embedded: 
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}
-          className="rounded-full bg-white/10 px-2.5 py-1 font-mono text-xs hover:bg-white/20"
+          className="rounded-md bg-raised px-2.5 py-1 font-mono text-xs hover:bg-rule"
           title={address}
         >
           {copied ? "Copied ✓" : shortAddress(address)}
         </button>
       </div>
-      <p className="relative mt-6 text-xs text-white/70">USDC balance</p>
+      <p className="relative mt-6 text-xs text-slate">USDC balance</p>
       <p className="font-display relative text-4xl font-semibold tracking-tight tabular-nums">
         {balances ? <CountUp value={Number(balances.usdc)} format={(n) => `$${n.toFixed(2)}`} /> : error ? "—" : "…"}
       </p>
-      <p className="relative mt-1 text-xs text-white/70 tabular-nums">{balances ? `${formatAmount(balances.eth, 5)} ETH for gas` : error ? "Couldn’t read Base" : "Reading Base…"}</p>
+      <p className="relative mt-1 text-xs text-slate tabular-nums">{balances ? `${formatAmount(balances.eth, 5)} ETH for gas` : error ? "Couldn’t read Base" : "Reading Base…"}</p>
       <a
         href={`https://basescan.org/address/${address}`}
         target="_blank"
         rel="noreferrer"
-        className="relative mt-4 inline-block rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/25"
+        className="relative mt-4 inline-block rounded-lg bg-lime px-3 py-1.5 text-xs font-semibold text-on-lime hover:bg-lime-strong"
       >
         Basescan ↗
       </a>

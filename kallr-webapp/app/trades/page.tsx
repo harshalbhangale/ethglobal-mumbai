@@ -97,7 +97,7 @@ function Dashboard({ session }: { session: Session | null }) {
       <header className="flex items-center justify-between border-b border-rule bg-card px-6 py-4">
         <Logo href="/" />
         <nav className="flex items-center gap-5 text-sm">
-          <Link href="/dashboard" className="text-slate hover:text-ink">
+          <Link href="/app" className="text-slate hover:text-ink">
             Dashboard
           </Link>
           <Link href="/app" className="text-slate hover:text-ink">
@@ -138,7 +138,7 @@ function Dashboard({ session }: { session: Session | null }) {
                   aria-selected={scope === s}
                   disabled={s === "yours" && !signedIn}
                   onClick={() => setScope(s)}
-                  className={`rounded-full px-3 py-1 disabled:opacity-40 ${scope === s ? "bg-ink text-white" : "text-slate hover:text-ink"}`}
+                  className={`rounded-lg px-3 py-1 disabled:opacity-40 ${scope === s ? "bg-lime text-on-lime" : "text-slate hover:text-ink"}`}
                 >
                   {s === "yours" ? "Yours" : "Everyone"}
                 </button>

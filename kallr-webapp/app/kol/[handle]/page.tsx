@@ -7,7 +7,7 @@ import { AgentProvider } from "@/components/agent";
 import { type Session, WithSession } from "@/components/auth";
 import { CountUp, FeedPost, FeedSkeleton, Markets, pct, RailCard, Shell, Tabs, usePriceMap } from "@/components/feed";
 import { FollowButton } from "@/components/follow-button";
-import { handleGradient, KolAvatar } from "@/components/kol-avatar";
+import { KolAvatar } from "@/components/kol-avatar";
 import { LogoMark } from "@/components/logo";
 import { callerStats, copyCall, type FeedItem, itemTime, useFollows, useKallrData } from "@/lib/feed";
 
@@ -62,7 +62,7 @@ function Profile({ session }: { session: Session }) {
                 key={r.id}
                 title={`${r.asset} ${pct(r.returnBps)}`}
                 className="size-5 rounded-md"
-                style={{ background: r.status === "hit" ? "#10b981" : r.status === "miss" ? "#f43f5e" : "#94a3b8" }}
+                style={{ background: r.status === "hit" ? "#8ad97c" : r.status === "miss" ? "#ff8a7a" : "#3a453d" }}
               />
             ))}
             {strip.length === 0 && <p className="text-sm text-slate">No settled calls yet.</p>}
@@ -76,7 +76,7 @@ function Profile({ session }: { session: Session }) {
   return (
     <Shell session={session} rail={rail}>
       <div className="sticky top-0 z-30 flex items-center gap-4 bg-card/85 px-4 py-2 backdrop-blur">
-        <Link href="/dashboard" aria-label="Back" className="rounded-full p-2 hover:bg-paper">
+        <Link href="/app" aria-label="Back" className="rounded-full p-2 hover:bg-paper">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 12H5M11 6l-6 6 6 6" />
           </svg>
@@ -87,7 +87,7 @@ function Profile({ session }: { session: Session }) {
         </div>
       </div>
 
-      <div className="mesh h-36 sm:h-44" style={{ backgroundImage: handleGradient(handle, 120) }} />
+      <div className="h-28 border-b border-rule bg-card sm:h-32" />
       <div className="px-4 sm:px-5">
         <div className="-mt-12 flex items-end justify-between">
           <KolAvatar handle={handle} size={104} ring />
@@ -111,17 +111,16 @@ function Profile({ session }: { session: Session }) {
         <p className="mt-2 text-[15px]">Every call priced on Chainlink the minute it was posted, and settled on Arkiv when its window closes.</p>
 
         <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          <Big label="Hit rate" value={stats.hitRate === null ? null : stats.hitRate * 100} format={(n) => `${Math.round(n)}%`} color="#10b981" />
-          <Big label="Median move" value={stats.medianBps} format={(n) => pct(n)} color={stats.medianBps !== null && stats.medianBps < 0 ? "#f43f5e" : "#1d9bf0"} />
-          <Big label="Best call" value={stats.best} format={(n) => pct(n)} color="#7c3aed" />
-          <Big label="Open now" value={stats.open} format={(n) => String(Math.round(n))} color="#f2a93b" />
+          <Big label="Hit rate" value={stats.hitRate === null ? null : stats.hitRate * 100} format={(n) => `${Math.round(n)}%`} color="#c6f25a" />
+          <Big label="Median move" value={stats.medianBps} format={(n) => pct(n)} color={stats.medianBps !== null && stats.medianBps < 0 ? "#ff8a7a" : "#8ad97c"} />
+          <Big label="Best call" value={stats.best} format={(n) => pct(n)} color="#e6ebe3" />
+          <Big label="Open now" value={stats.open} format={(n) => String(Math.round(n))} color="#c6f25a" />
         </div>
 
         {lastCall && lastCopy && "href" in lastCopy && (
           <Link
             href={lastCopy.href}
-            className="mesh mt-4 block w-full rounded-2xl py-3 text-center font-semibold text-white"
-            style={{ backgroundImage: "linear-gradient(120deg,#14213d,#7c3aed,#1d9bf0,#14213d)" }}
+            className="mt-4 block w-full rounded-lg bg-lime py-3 text-center font-semibold text-on-lime hover:bg-lime-strong"
           >
             Copy latest call · {lastCall.direction.toUpperCase()} {lastCall.asset}
           </Link>
@@ -178,7 +177,7 @@ function Ring({ value }: { value: number | null }) {
   return (
     <div className="flex items-center gap-4">
       <svg width="110" height="110" viewBox="0 0 110 110" className="-rotate-90">
-        <circle cx="55" cy="55" r={r} fill="none" stroke="#eef1f6" strokeWidth="10" />
+        <circle cx="55" cy="55" r={r} fill="none" stroke="#1e2621" strokeWidth="10" />
         <circle
           cx="55"
           cy="55"
@@ -193,8 +192,8 @@ function Ring({ value }: { value: number | null }) {
         />
         <defs>
           <linearGradient id="ring" x1="0" x2="1">
-            <stop offset="0" stopColor="#10b981" />
-            <stop offset="1" stopColor="#1d9bf0" />
+            <stop offset="0" stopColor="#c6f25a" />
+            <stop offset="1" stopColor="#d6f985" />
           </linearGradient>
         </defs>
       </svg>

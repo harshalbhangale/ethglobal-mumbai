@@ -50,7 +50,7 @@ function friendlyError(err: unknown) {
 }
 
 function Chip({ on, onClick, children, tone }: { on: boolean; onClick: () => void; children: React.ReactNode; tone?: "up" | "down" }) {
-  const active = tone === "up" ? "border-up bg-up/10 text-up" : tone === "down" ? "border-down bg-down/10 text-down" : "border-ink bg-ink text-white";
+  const active = tone === "up" ? "border-up bg-up/10 text-up" : tone === "down" ? "border-down bg-down/10 text-down" : "border-ink bg-lime text-on-lime";
   return (
     <button
       type="button"
@@ -377,7 +377,7 @@ export function TradeTicket({
               placeholder="copy $2 of ETH tp 10% sl 5%"
               className="min-w-0 flex-1 rounded-full border border-rule bg-paper px-4 py-2.5 text-[15px] placeholder:text-slate/70 focus:border-ink focus:outline-none"
             />
-            <button type="submit" className="rounded-full border border-ink px-4 py-2.5 text-sm font-semibold hover:bg-ink hover:text-white">
+            <button type="submit" className="rounded-lg border border-rule-strong px-4 py-2.5 text-sm font-semibold hover:border-lime hover:text-lime">
               Fill
             </button>
           </div>
@@ -412,7 +412,7 @@ export function TradeTicket({
                 type="button"
                 onClick={place}
                 disabled={!flash?.ok || busy}
-                className="w-full rounded-full bg-ink px-6 py-3.5 text-[15px] font-semibold text-white transition-opacity disabled:opacity-40"
+                className="w-full rounded-lg bg-lime px-6 py-3.5 text-[15px] font-semibold text-on-lime transition-opacity disabled:opacity-40"
               >
                 {side === "buy" ? "Buy" : "Sell"} {symbol}
                 {amountOk ? ` · ${usd(amountUsd)}` : ""}
@@ -435,7 +435,7 @@ export function TradeTicket({
                     <span
                       aria-hidden="true"
                       className={`grid size-5 shrink-0 place-items-center rounded-full border-2 text-[11px] font-bold ${
-                        state === "done" ? "border-up bg-up text-white" : state === "failed" ? "border-down bg-down text-white" : state === "active" ? "animate-spin border-ink border-t-transparent" : "border-rule"
+                        state === "done" ? "border-up bg-up text-on-lime" : state === "failed" ? "border-down bg-down text-paper" : state === "active" ? "animate-spin border-lime border-t-transparent" : "border-rule"
                       }`}
                     >
                       {state === "done" ? "✓" : state === "failed" ? "!" : ""}
@@ -454,7 +454,7 @@ export function TradeTicket({
                 {run.exits === "pending_activation" ? "Your TP/SL arm on the first fill. " : ""}Order {run.orderId.slice(0, 8)}… is with Definitive.
               </p>
               <div className="flex gap-2">
-                <button type="button" onClick={onViewOrders} className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white">
+                <button type="button" onClick={onViewOrders} className="rounded-lg bg-lime px-4 py-2 text-sm font-semibold text-on-lime">
                   View in Orders
                 </button>
                 <button type="button" onClick={() => setRun({ kind: "idle" })} className="rounded-full border border-rule px-4 py-2 text-sm font-semibold hover:border-ink">
