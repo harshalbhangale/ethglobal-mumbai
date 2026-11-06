@@ -31,7 +31,7 @@ function mount(anchor: HTMLElement, host: HTMLElement) {
   anchor.after(host);
 }
 
-type RecordAnswer = { calls?: SeenCall[]; writer?: string | null };
+type RecordAnswer = { calls?: SeenCall[]; writer?: string | null; deleted?: number; deletedChecked?: number };
 
 const isDark = () => {
   const bg = getComputedStyle(document.body).backgroundColor.match(/\d+/g)?.map(Number) ?? [255, 255, 255];
@@ -70,7 +70,14 @@ export async function scanProfile() {
   const answer = await send<RecordAnswer>({ type: "caller-record", handle });
   if (!host.isConnected || profileHandle() !== handle) return;
   const next = answer
-    ? callerCard({ handle, calls: answer.calls ?? [], writer: answer.writer, follow, deskUrl })
+    ? callerCard({
+        handle,
+        calls: answer.calls ?? [],
+        writer: answer.writer,
+        deleted: typeof answer.deleted === "number" ? { count: answer.deleted, checked: answer.deletedChecked ?? 0 } : null,
+        follow,
+        deskUrl,
+      })
     : el("div", { class: "pc" }, el("p", { class: "pc-empty" }, "Couldn't load the record. Try again in a minute."));
   card.replaceWith(next);
   card = next;

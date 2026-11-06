@@ -117,9 +117,11 @@ describe("scanProfile", () => {
     await wire({
       writer: "0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53",
       calls: [
-        { postId: "9", asset: "ETH", direction: "up", status: "hit", returnBps: 220, postedAt, expiresAt: postedAt + 86_400 },
+        { postId: "9", asset: "ETH", direction: "up", status: "hit", returnBps: 220, postedAt, expiresAt: postedAt + 86_400, gone: true },
         { postId: "8", asset: "ETH", direction: "up", status: "open", returnBps: 30, postedAt, expiresAt: postedAt + 9e9 },
       ],
+      deleted: 1,
+      deletedChecked: 2,
     });
     history.replaceState(null, "", "/KOL");
     document.body.innerHTML = profilePage("KOL");
@@ -134,8 +136,11 @@ describe("scanProfile", () => {
     expect(root?.querySelector(".pc-title")?.textContent).toBe("Kall record @kol");
     expect(root?.querySelector(".pc-head .pc-follow")?.textContent).toBe("Follow");
     const stats = [...(root?.querySelectorAll(".pc-stat") ?? [])].map((s) => s.textContent);
-    expect(stats).toEqual(["2calls", "100%hit rate · 1/1", "+2.2%avg return", "1open"]);
+    expect(stats).toEqual(["2calls", "100%hit rate · 1/1", "+2.2%avg return", "1open", "1deleted · of 2"]);
     expect(root?.querySelectorAll(".pc-calls li")).toHaveLength(2);
+    // A call whose post is gone from X is still on the record, and says so.
+    expect(root?.querySelectorAll(".pc-gone")).toHaveLength(1);
+    expect(root?.querySelector(".pc-gone")?.textContent).toBe("deleted on X");
     expect(root?.querySelector(".pc-calls a")?.getAttribute("href")).toMatch(/^https:\/\/x\.com\/kol\/status\/(8|9)$/);
     // The record is read from Arkiv, with a link to the writer's entities, and the desk link.
     const foot = [...(root?.querySelectorAll(".pc-foot a") ?? [])].map((a) => a.getAttribute("href"));

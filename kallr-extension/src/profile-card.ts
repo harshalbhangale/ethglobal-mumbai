@@ -16,7 +16,8 @@ export const PROFILE_CARD_CSS = `
 .pc-title span { color: var(--mute); font-weight: 400; }
 .pc-follow { font: inherit; font-weight: 700; padding: 4px 12px; border-radius: 999px; cursor: pointer;
   border: 1px solid var(--line); background: transparent; color: var(--fg); }
-.pc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+.pc-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 10px; }
+.pc-gone { font-size: 11px; color: var(--down); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; }
 .pc-stat { background: var(--tile); border-radius: 10px; padding: 7px 9px; }
 .pc-stat b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
 .pc-stat small { color: var(--mute); font-size: 11px; }
@@ -77,6 +78,7 @@ function callRow(handle: string, c: SeenCall) {
     {},
     el("span", { class: `pc-dir ${long ? "up" : "down"}` }, `${long ? "Long" : "Short"} $${c.asset}`),
     el("span", { class: "pc-tag" }, ago(c.postedAt)),
+    (c as SeenCall & { gone?: boolean }).gone ? el("span", { class: "pc-gone" }, "deleted on X") : null,
     res,
     safeLink(`https://x.com/${handle}/status/${c.postId}`, "↗"),
   );
@@ -90,10 +92,12 @@ export function callerCard(opts: {
   handle: string;
   calls: SeenCall[] | null;
   writer?: string | null;
+  /** Call posts no longer public on X, out of how many X answered for. */
+  deleted?: { count: number; checked: number } | null;
   follow: HTMLElement;
   deskUrl: string;
 }) {
-  const { handle, calls, writer, follow, deskUrl } = opts;
+  const { handle, calls, writer, deleted, follow, deskUrl } = opts;
   const head = el(
     "div",
     { class: "pc-head" },
@@ -120,6 +124,9 @@ export function callerCard(opts: {
       stat(rate, s.scored ? `hit rate · ${s.hits}/${s.scored}` : "hit rate", s.hitRate === null ? "" : s.hitRate >= 0.5 ? "up" : "down"),
       stat(avg, "avg return", s.avgBps === null ? "" : s.avgBps >= 0 ? "up" : "down"),
       stat(String(s.open), "open"),
+      deleted && deleted.checked
+        ? stat(String(deleted.count), `deleted · of ${deleted.checked}`, deleted.count ? "down" : "")
+        : stat("—", "deleted"),
     ),
     el("ul", { class: "pc-calls" }, ...sorted.slice(0, 3).map((c) => callRow(handle, c))),
     el(
