@@ -263,3 +263,14 @@
   color-scheme: dark;
   border-radius: 12px;
 }
+
+/* ---------- Landing: 3D hero ---------- */
+.hero3d-step { min-height: 100dvh; }
+.hero3d-text { text-shadow: 0 0 28px rgb(5 6 5 / 0.95), 0 0 6px rgb(5 6 5 / 0.9); }
+.hero3d-vignette { background: radial-gradient(ellipse at center, transparent 45%, rgb(5 6 5 / 0.85) 100%); }
+.hero3d-dots { position: fixed; right: 22px; top: 50%; transform: translateY(-50%); z-index: 15; display: grid; gap: 10px; pointer-events: none; }
+.hero3d-dots i { width: 7px; height: 7px; border-radius: 9px; background: #2c3830; transition: all .3s; }
+.hero3d-dots i.on { height: 20px; background: var(--color-lime); box-shadow: 0 0 12px var(--color-lime); }
+.spot { box-shadow: 0 0 0 1px rgb(198 242 90 / 0.06), 0 20px 60px rgb(0 0 0 / 0.45); transition: border-color .2s, transform .2s; }
+.spot:hover { border-color: var(--color-lime); transform: translateY(-2px); }
+@media (max-width: 760px) { .hero3d-dots { display: none; } }
