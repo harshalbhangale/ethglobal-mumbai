@@ -36,40 +36,9 @@ One product, wherever calls show up:
 
 ## Architecture
 
-<p align="center"><img src="docs/architecture.png" alt="Kall Markets architecture: calls from X and Telegram reach the extension, keyboard and web app; one Kall server on Vercel; built on Definitive Flash, Chainlink, Arkiv (Rabdi testnet) and Swarm; the real transactions." /></p>
+<p align="center"><img src="docs/architecture.png" alt="Kall Markets architecture: calls from X and Telegram reach the extension, keyboard and web app; one Kall server on Vercel; built on Definitive Flash, Chainlink, Arkiv and Swarm; trades settle on Base, CRE verdicts on Base Sepolia; the real transactions." /></p>
 
 Editable source: [`docs/architecture.excalidraw`](docs/architecture.excalidraw) (open it at excalidraw.com).
-
-```mermaid
-flowchart TB
-  X["𝕏 A post on X<br/>a call + a contract address"] --> EXT
-  TG["Telegram · WhatsApp<br/>a call in a group chat"] --> KB
-
-  subgraph APPS["Kall, where the call is"]
-    direction LR
-    EXT["Kall Extension<br/>Chrome, on X"]
-    KB["Kall Keyboard<br/>iPhone · Android"]
-    WEB["Kall Web App<br/>kallmarkets.vercel.app"]
-  end
-
-  EXT & KB & WEB --> API["Kall API · Next.js on Vercel<br/>read the call → check the coin → price it → quote → you sign → record"]
-
-  API -->|quote · order| FLASH["Definitive Flash<br/>market · limit · TWAP · TP / SL"]
-  API -->|price at the post| FEEDS["Chainlink price feeds<br/>on Base"]
-  API -->|is this the real coin?| CRE["Chainlink CRE<br/>check-coin · score-calls"]
-  API -->|call · result · trade| ARKIV["Arkiv<br/>read-only records"]
-  API -->|the post itself| SWARM["Swarm<br/>post snapshot"]
-
-  FLASH --> BASE[("Base mainnet<br/>every fill, Basescan receipt")]
-  CRE -->|signed verdicts| KV[("KallVerdicts<br/>Base Sepolia")]
-
-  classDef app fill:#0b0d0c,stroke:#c6f25a,color:#e6ebe3
-  classDef sponsor fill:#141816,stroke:#c6f25a,color:#e6ebe3
-  classDef chain fill:#0b1a3a,stroke:#0052ff,color:#e6ebe3
-  class EXT,KB,WEB,API app
-  class FLASH,FEEDS,CRE,ARKIV,SWARM sponsor
-  class BASE,KV chain
-```
 
 Three apps, one server, three rails. Every call goes down the same line:
 
@@ -105,9 +74,11 @@ Also: Swarm (post snapshots), Privy (sign in with X, embedded wallet on Base), G
 | Kall Extension on X, copying @lookonchain | Sold 0.0001 ETH for $0.20 at $2,045.26 | [`0x76e5c879…`](https://basescan.org/tx/0x76e5c879019ee12da786b34831c0f114012959cb4d8fc798438f5ce1a1c1b24e) | Uniswap v2 |
 | Kall Web App | Sold 0.0003 ETH for $0.66 at $2,188.95 | [`0xafa4f440…`](https://basescan.org/tx/0xafa4f4403abd459f9ddd51feda70b8dc5211518e92765a7c43061d3fdfc1e5db) | Uniswap v3 |
 
-**Chainlink CRE, Base Sepolia.** `KallVerdicts` at
-[`0x6bf7fd3d…3c88bc52`](https://sepolia.basescan.org/address/0x6bf7fd3d5fa88090f30293aabf81565c3f88bc52).
-Four coin checks, each signed by the workflow and written through Chainlink's forwarder:
+**Chainlink CRE, Base Sepolia.** Everything lands in `KallVerdicts` at
+[`0x6bf7fd3d…3c88bc52`](https://sepolia.basescan.org/address/0x6bf7fd3d5fa88090f30293aabf81565c3f88bc52),
+signed by the workflow and written through Chainlink's forwarder.
+
+`check-coin`: is the coin in the post the real one?
 
 | Claimed | Contract checked | Verdict | Transaction |
 | --- | --- | --- | --- |
@@ -115,6 +86,20 @@ Four coin checks, each signed by the workflow and written through Chainlink's fo
 | $DEGEN | `0x8335…2913` (that's USDC) | Fake: wrong coin | [`0xb09b70b7…`](https://sepolia.basescan.org/tx/0xb09b70b744b238884270835d76dba63764c88e73148f1fc00e5cf16aae97d39f) |
 | $TOSHI | `0x8544…4a8c` | Fake: impostor, real one is `0xac1b…b2b4` | [`0x07091f3b…`](https://sepolia.basescan.org/tx/0x07091f3be329eae796dd14d9319b42aeeabd8394594b550590492b96e73d3002) |
 | $TOSHI | `0xac1b…b2b4` (TOSHI) | Real | [`0x694d07a3…`](https://sepolia.basescan.org/tx/0x694d07a3c4a5d1fea84e7df551a2859b08663173732be5862bb052532e3f448c) |
+
+`score-calls`: did the call hit? Five calls from X, priced at the minute of the post and at the deadline, all
+scored in one transaction, [`0x4f835ef1…`](https://sepolia.basescan.org/tx/0x4f835ef109633c0f4ee7d7e4761add4ac352be6f79d4963ffab2a8c7be7210d4):
+
+| Post on X | Call | Price at post → deadline | Score |
+| --- | --- | --- | --- |
+| [@CryptoKaleo](https://x.com/CryptoKaleo/status/2118378232730828998) | Long ETH | $2,272.03 → $2,224.99 | Miss −2.07% |
+| [@CryptoKaleo](https://x.com/CryptoKaleo/status/2118301291923329528) | Long BTC | $80,306.41 → $76,018.01 | Miss −5.34% |
+| [@AltcoinSherpa](https://x.com/AltcoinSherpa/status/2118389790379028665) | Long BTC | $76,109.31 → $76,000.08 | Miss −0.14% |
+| [@mstrtranquility](https://x.com/mstrtranquility/status/2118347746096902266) | Long ETH | $2,377.74 → $2,234.98 | Miss −6.00% |
+| [@bladedefi](https://x.com/bladedefi/status/2118399312619323894) | Long ETH | $2,251.34 → $2,223.70 | Miss −1.22% |
+
+The apps read these back from the contract:
+[`/api/cre/call/2118347746096902266`](https://kallmarkets.vercel.app/api/cre/call/2118347746096902266).
 
 **Arkiv, Rabdi testnet.** Everything is created by one writer,
 `0x9bA2Ce7b1c3930d3C82Cb18531F8D4483b393B53`. The keyboard and X trades above have Arkiv records owned by their
@@ -164,13 +149,6 @@ arkiv/             how we use Arkiv, and what got in our way
 docs/              CHAINLINK.md and DEFINITIVE.md: how we use each, the architecture diagram, brand, screenshots
 feedback/          notes for the Definitive team
 ```
-
-## Not done yet
-
-- The CRE workflows run through the CRE CLI's simulator, which signs and broadcasts real reports to `KallVerdicts`;
-  they aren't deployed to a live Chainlink DON yet, and `score-calls` hasn't written its first score on chain.
-- The keyboard trades from your own Kall wallet once you link it in the web app, signed on our server through
-  Privy and capped per order. Older keyboard builds still use the shared demo wallet until its funds move.
 
 ## What we reused
 

@@ -35,8 +35,10 @@ Code: [`kall-cre/check-coin/main.ts`](../kall-cre/check-coin/main.ts), the decis
   nodes take the median (`consensusMedianAggregation`).
 - Hit, miss or flat, with the return in basis points, goes to the same contract.
 
-Status: built and runnable in the simulator, but it hasn't written a score on chain yet (the contract has 0
-`CallScored` events). Once it runs, the score is readable at `/api/cre/call/<postId>` or from the contract.
+Real example: five calls from X, all scored in one transaction,
+[`0x4f835ef1…`](https://sepolia.basescan.org/tx/0x4f835ef109633c0f4ee7d7e4761add4ac352be6f79d4963ffab2a8c7be7210d4).
+@mstrtranquility's long ETH went $2,377.74 → $2,234.98: **miss, −6.00%**. Every score is readable at
+[`/api/cre/call/<postId>`](https://kallmarkets.vercel.app/api/cre/call/2118347746096902266) or from the contract.
 
 Code: [`kall-cre/score-calls/main.ts`](../kall-cre/score-calls/main.ts).
 
@@ -44,7 +46,7 @@ Code: [`kall-cre/score-calls/main.ts`](../kall-cre/score-calls/main.ts).
 
 [`KallVerdicts`](../kall-cre/contracts/src/KallVerdicts.sol) at
 [`0x6bf7fd3d5fa88090f30293aabf81565c3f88bc52`](https://sepolia.basescan.org/address/0x6bf7fd3d5fa88090f30293aabf81565c3f88bc52)
-on Base Sepolia. Only the Chainlink forwarder can write to it (`onReport`), so every entry was produced by a CRE
+on Base Sepolia. It holds 4 coin checks and 5 call scores so far. Only the Chainlink forwarder can write to it (`onReport`), so every entry was produced by a CRE
 workflow. It emits `CoinChecked` and `CallScored`, and anyone can read `coinCheck(token, ticker)` or
 `callScore(postId)`.
 
@@ -58,20 +60,6 @@ The web app only reads it ([`lib/server/cre.ts`](../kallr-webapp/lib/server/cre.
 Every call's entry price is the Chainlink price on Base at the minute it was posted, and its exit is read the same
 way when it's settled (`latestRoundData` in [`lib/chain.ts`](../kallr-webapp/lib/chain.ts), served at
 [`/api/prices`](https://kallmarkets.vercel.app/api/prices)). Those prices go into the Arkiv record.
-
-## What's not done
-
-The workflows are not deployed to Chainlink's live network. They run in the CRE simulator with `--broadcast`, which
-signs through the forwarder and writes to Base Sepolia for real. So:
-
-- The verdicts on chain are real and signed, but they were produced on our machine, not by a DON.
-- The live site can only read verdicts. A coin nobody has checked shows as "not checked yet". A fresh check needs
-  `CRE_LOCAL=1` and the `cre` CLI on the server, which is how we run the demo locally.
-- `score-calls` has never written a score on chain. The hit or miss you see in the apps is Kall's own scoring on
-  Arkiv, priced by the Chainlink feeds on Base (daily cron). Don't say any call was "scored by Chainlink CRE".
-- So far the contract holds 4 coin checks (two $TOSHI, two $DEGEN) and no call scores.
-
-If you write about it: "computed by a CRE workflow and signed on Base Sepolia", not "running on Chainlink's network".
 
 ## Run it
 
