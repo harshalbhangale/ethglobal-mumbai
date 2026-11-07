@@ -164,7 +164,8 @@ function cardCanvas([who, text, verdict, color]: [string, string, string, string
   return c;
 }
 
-export function Hero3D({ children }: { children: ReactNode }) {
+/** `from`: the stage the story starts at (0 logo, 1 chart, 2 globe, 3 logo again). */
+export function Hero3D({ children, from = 0 }: { children: ReactNode; from?: number }) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dotsRef = useRef<HTMLDivElement>(null);
@@ -231,7 +232,7 @@ export function Hero3D({ children }: { children: ReactNode }) {
       geo.setAttribute("aRand", new THREE.BufferAttribute(rand, 1));
       const uniforms = {
         uTime: { value: 0 },
-        uMorph: { value: 0 },
+        uMorph: { value: from },
         uIntro: { value: calm ? 1 : 0 },
         uCalm: { value: calm ? 1 : 0 },
         uMouse: { value: new THREE.Vector2(99, 99) },
@@ -286,8 +287,8 @@ export function Hero3D({ children }: { children: ReactNode }) {
       const onScroll = () => {
         const r = box.getBoundingClientRect();
         const span = r.height - innerHeight;
-        target = span > 0 ? Math.min(1, Math.max(0, -r.top / span)) * 3 : 0;
-        const idx = Math.round(target);
+        target = from + (span > 0 ? Math.min(1, Math.max(0, -r.top / span)) : 0) * (3 - from);
+        const idx = Math.round(target) - from;
         dots.forEach((d, i) => d.classList.toggle("on", i === idx));
       };
       addEventListener("scroll", onScroll, { passive: true });
@@ -305,9 +306,10 @@ export function Hero3D({ children }: { children: ReactNode }) {
       cleanups.push(() => removeEventListener("resize", onResize));
 
       // Only draw while the section is on screen.
-      let visible = true;
+      let visible = false;
       const io = new IntersectionObserver(([e]) => {
         visible = e.isIntersecting;
+        if (dotsRef.current) dotsRef.current.style.opacity = visible ? "1" : "0";
         if (visible && !raf) raf = requestAnimationFrame(frame);
       });
       io.observe(box);
@@ -354,7 +356,6 @@ export function Hero3D({ children }: { children: ReactNode }) {
         composer.render();
         raf = requestAnimationFrame(frame);
       }
-      raf = requestAnimationFrame(frame);
       cleanups.push(() => {
         geo.dispose();
         mat.dispose();
@@ -378,10 +379,9 @@ export function Hero3D({ children }: { children: ReactNode }) {
         </div>
       </div>
       <div ref={dotsRef} className="hero3d-dots" aria-hidden="true">
-        <i className="on" />
-        <i />
-        <i />
-        <i />
+        {Array.from({ length: 4 - from }, (_, i) => (
+          <i key={i} className={i === 0 ? "on" : undefined} />
+        ))}
       </div>
       <div className="relative z-10">{children}</div>
     </div>
