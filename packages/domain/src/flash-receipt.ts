@@ -19,7 +19,14 @@ export type ReceiptRowKey = "quote" | "signed" | "sent" | "filled";
  * `vsUniswap`: how much more Flash gives than Uniswap's pools for the same trade (0.004 = 0.4%;
  * negative when Uniswap gives more), when it was measured.
  */
-export type ReceiptQuote = { price: number | null; impact: number | null; feeUsd: number | null; vsUniswap?: number | null };
+export type ReceiptQuote = {
+  price: number | null;
+  impact: number | null;
+  feeUsd: number | null;
+  vsUniswap?: number | null;
+  /** The same edge in dollars: what this trade gets beyond Uniswap's best pool, at the quote's price. */
+  savedUsd?: number | null;
+};
 
 export type FlashReceipt = {
   /** Who signs, as the row reads: "your Kall wallet", "MetaMask". */
@@ -113,12 +120,30 @@ export function formatAmount(v: string | number) {
 /** Edges under this read as a tie: too small to claim. */
 const MIN_EDGE = 0.0001;
 
+/** "$0.12", or "$0.004" under a cent, so a small trade's saving still reads as money. */
+export const formatSaved = (usd: number) => `$${usd.toFixed(usd >= 0.01 ? 2 : usd >= 0.001 ? 3 : 4)}`;
+
+const measuredSaving = (q: ReceiptQuote) => (q.savedUsd != null && q.savedUsd >= 0.0001 ? q.savedUsd : null);
+
+/**
+ * The line to celebrate: "You saved $0.12 vs Uniswap" when Definitive Flash beat Uniswap's best pool
+ * on this exact trade (the percentage when the dollars round to nothing). Null with no measurement or
+ * no edge: a saving is only claimed when it was measured.
+ */
+export function savingsLine(q: ReceiptQuote | null | undefined): string | null {
+  if (!q || q.vsUniswap == null || q.vsUniswap < MIN_EDGE) return null;
+  const saved = measuredSaving(q);
+  return saved !== null ? `You saved ${formatSaved(saved)} vs Uniswap` : `You got ${pct(q.vsUniswap)} more than Uniswap`;
+}
+
 export function quoteLine(q: ReceiptQuote) {
   const parts: string[] = [];
   if (q.price !== null) parts.push(formatUsdPrice(q.price));
   // Flash beat Uniswap on this exact trade: say by how much, in place of the impact.
-  if (q.vsUniswap != null && q.vsUniswap >= MIN_EDGE) parts.push(`${pct(q.vsUniswap)} more than Uniswap`);
-  else if (q.impact !== null) parts.push(`impact ${pct(q.impact)}`);
+  if (q.vsUniswap != null && q.vsUniswap >= MIN_EDGE) {
+    const saved = measuredSaving(q);
+    parts.push(saved !== null ? `${formatSaved(saved)} better than Uniswap` : `${pct(q.vsUniswap)} more than Uniswap`);
+  } else if (q.impact !== null) parts.push(`impact ${pct(q.impact)}`);
   if (q.feeUsd !== null) parts.push(q.feeUsd === 0 ? "no fee" : `fee $${q.feeUsd.toFixed(q.feeUsd < 0.01 ? 4 : 2)}`);
   return parts.length ? parts.join(" · ") : "Quoted";
 }
@@ -190,7 +215,22 @@ export function receiptQuote(q: QuoteNumbers, side: "buy" | "sell", uniswapOut?:
     impact: impact === null ? null : Math.abs(impact),
     feeUsd: num(q.fees?.estimatedFeeNotional),
     vsUniswap: uniswapEdge(q.to.amount, uniswapOut),
+    savedUsd: savedVsUniswap(q, side, uniswapOut),
   };
+}
+
+/**
+ * Flash's edge over Uniswap in dollars: the extra output this trade gets, valued at the quote's own
+ * price (a buy gets more tokens, a sell more USDC). Negative when Uniswap gives more; null unmeasured.
+ */
+export function savedVsUniswap(q: QuoteNumbers, side: "buy" | "sell", uniswapOut: string | null | undefined): number | null {
+  const flash = num(q.to.amount);
+  const uni = num(uniswapOut);
+  if (flash === null || uni === null || flash <= 0 || uni <= 0) return null;
+  const extra = flash - uni;
+  if (side === "sell") return extra;
+  const usdc = num(q.from.amount);
+  return usdc === null ? null : (extra * usdc) / flash;
 }
 
 /**

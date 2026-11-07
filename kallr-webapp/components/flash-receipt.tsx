@@ -6,6 +6,7 @@ import {
   type ReceiptEvent,
   type ReceiptRowState,
   receiptRows,
+  savingsLine,
   startReceipt,
 } from "@kallr/domain/flash-receipt";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -59,6 +60,8 @@ const DOT: Record<ReceiptRowState, string> = {
 
 export function FlashReceiptView({ receipt, className = "" }: { receipt: FlashReceipt; className?: string }) {
   const rows = receiptRows(receipt);
+  // Flash beat Uniswap on this trade: say it in dollars, once the order is on its way.
+  const saved = !receipt.error && receipt.at >= 1 ? savingsLine(receipt.quote) : null;
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -113,6 +116,13 @@ export function FlashReceiptView({ receipt, className = "" }: { receipt: FlashRe
           </li>
         ))}
       </ol>
+      {saved && (
+        <p className="mt-3 flex items-center gap-2 rounded-md bg-lime/15 px-3 py-2 text-sm font-bold tabular-nums text-lime">
+          <span aria-hidden="true">✓</span>
+          {saved}
+          <span className="ml-auto text-[11px] font-semibold text-slate">Definitive Flash</span>
+        </p>
+      )}
     </section>
   );
 }

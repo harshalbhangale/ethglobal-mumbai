@@ -1801,8 +1801,12 @@ private struct ReviewCard: View {
                     leg("You pay", symbol: paySymbol, logo: nil, amount: quote.map { ReviewCard.clean($0.preview.pay) } ?? "$\(model.usd)")
                     leg("You get", symbol: getSymbol, logo: getLogo, amount: quote.map { ReviewCard.clean($0.preview.get) } ?? "…")
                     if details, let quote { detailLines(quote) }
-                    Label("Definitive Flash · best price", systemImage: "checkmark.seal.fill")
-                        .font(TradeFont.body).foregroundStyle(Kallr.lime)
+                    if let saving = quote?.details?.savings(past: false) {
+                        SavingsPill(text: saving)
+                    } else {
+                        Label("Definitive Flash · best price", systemImage: "checkmark.seal.fill")
+                            .font(TradeFont.body).foregroundStyle(Kallr.lime)
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 10)
@@ -1945,6 +1949,21 @@ private struct FakeCoinCard: View {
     }
 }
 
+/** "You saved $0.12 vs Uniswap · Definitive Flash": the line worth celebrating on a review or a fill. */
+private struct SavingsPill: View {
+    let text: String
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.down.circle.fill").font(.system(size: 13, weight: .bold))
+            Text(text).font(.system(size: 14, weight: .heavy).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.7)
+            Text("Definitive Flash").font(.system(size: 11, weight: .semibold)).foregroundStyle(Kallr.muted)
+        }
+        .foregroundStyle(Kallr.lime)
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Kallr.lime.opacity(0.13), in: Capsule())
+    }
+}
+
 /** Placed: what you got, on Definitive Flash, and its BaseScan link to drop into the chat. */
 private struct DoneCard: View {
     @ObservedObject var model: KeyboardModel
@@ -1965,6 +1984,9 @@ private struct DoneCard: View {
             Text(model.fillTx.map { "Filled on Base · \($0.prefix(6))…\($0.suffix(4))" } ?? "\(placed.preview.title) · Definitive Flash")
                 .font(TradeFont.body).foregroundStyle(Kallr.muted).lineLimit(1).minimumScaleFactor(0.8)
                 .padding(.top, 4)
+            if let saving = placed.details?.savings(past: true) {
+                SavingsPill(text: saving).padding(.top, 10)
+            }
             if let key = model.doneArkivKey, let url = Kallr.arkivURL(key) {
                 ArkivLink(key: key, label: "Trade recorded on Arkiv") { model.openLink(url) }
                     .padding(.horizontal, 24).padding(.top, 10)

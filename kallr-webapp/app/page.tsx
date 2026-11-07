@@ -227,8 +227,8 @@ export default function Landing() {
 
             <div className="hero3d-step mx-auto flex max-w-[1360px] flex-col items-center justify-center px-6 text-center lg:px-10">
               <p className="font-mono text-xs tracking-[0.16em] text-lime">03 · BUILT ON</p>
-              <h2 className="hero3d-text font-display mt-4 text-[clamp(40px,5.6vw,88px)] leading-[0.95] font-bold tracking-[-0.045em]">
-                Trading just got faster.
+              <h2 className="hero3d-text font-display mt-4 max-w-[16ch] text-[clamp(40px,5.6vw,88px)] leading-[0.95] font-bold tracking-[-0.045em]">
+                Wherever you trade, it&rsquo;s faster with <span className="text-lime">Kall Markets</span>.
               </h2>
               <ul className="mt-10 grid w-full max-w-5xl gap-4 text-left md:grid-cols-3">
                 {spotlight.map((s) => (

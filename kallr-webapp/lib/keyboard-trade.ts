@@ -1,3 +1,4 @@
+import { savedVsUniswap, uniswapEdge } from "@kallr/domain/flash-receipt";
 import type { FlashOrderInput, FlashQuote } from "@kallr/integrations/definitive";
 import { z } from "zod";
 
@@ -97,13 +98,20 @@ export function buildSwapOrder(usd: string, price: number, funder: string): Flas
   return { asset: "ETH", side: "sell", qty: ethForUsd(Number(usd), price), orderType: "market", funderAddress: funder, native: true };
 }
 
-/** Flash's own estimates for a quote, for the review card. */
-export function quoteDetails(q: FlashQuote) {
+/**
+ * Flash's own estimates for a quote, for the review card, plus what it beats Uniswap's best pool by
+ * for the same trade (`uniswapOut`, measured alongside): `savedUsd` in dollars, `vsUniswapPct` in
+ * percent. Both null when unmeasured; negative when Uniswap would give more.
+ */
+export function quoteDetails(q: FlashQuote, side?: "buy" | "sell", uniswapOut?: string | null) {
   const pct = (v: string | null | undefined) => (v === null || v === undefined || v === "" ? null : Number(v) * 100);
+  const edge = side ? uniswapEdge(q.to.amount, uniswapOut) : null;
   return {
     impactPct: pct(q.estimatedPriceImpact),
     slippagePct: pct(q.recommendedSlippage),
     feeUsd: q.fees?.estimatedFeeNotional ? Number(q.fees.estimatedFeeNotional) : null,
+    savedUsd: side ? savedVsUniswap(q, side, uniswapOut) : null,
+    vsUniswapPct: edge === null ? null : edge * 100,
   };
 }
 

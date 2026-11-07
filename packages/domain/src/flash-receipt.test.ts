@@ -7,6 +7,7 @@ import {
   type ReceiptEvent,
   receiptQuote,
   receiptRows,
+  savingsLine,
   shortHex,
   shortOrderId,
   startReceipt,
@@ -96,9 +97,9 @@ describe("Flash receipt rows", () => {
 describe("quote numbers", () => {
   it("prices a buy and a sell from the quote's own amounts", () => {
     const buy = receiptQuote({ from: { amount: "1" }, to: { amount: "0.0005" }, estimatedPriceImpact: "-0.0012", fees: { estimatedFeeNotional: "0.003" } }, "buy");
-    expect(buy).toEqual({ price: 2000, impact: 0.0012, feeUsd: 0.003, vsUniswap: null });
+    expect(buy).toEqual({ price: 2000, impact: 0.0012, feeUsd: 0.003, vsUniswap: null, savedUsd: null });
     const sell = receiptQuote({ from: { amount: "0.001" }, to: { amount: "3.4" } }, "sell");
-    expect(sell).toEqual({ price: 3400, impact: null, feeUsd: null, vsUniswap: null });
+    expect(sell).toEqual({ price: 3400, impact: null, feeUsd: null, vsUniswap: null, savedUsd: null });
     expect(receiptQuote({ from: { amount: "1" }, to: { amount: "0" } }, "buy").price).toBeNull();
   });
 
@@ -110,6 +111,27 @@ describe("quote numbers", () => {
     expect(receiptQuote({ from: { amount: "1" }, to: { amount: "0.0005" } }, "buy", "0.000498").vsUniswap).toBeCloseTo(0.004016, 5);
     expect(quoteLine({ price: 2000, impact: 0.0012, feeUsd: 0, vsUniswap: 0.0042 })).toBe("$2,000.00 · 0.42% more than Uniswap · no fee");
     expect(quoteLine({ price: 2000, impact: 0.0012, feeUsd: 0, vsUniswap: -0.003 })).toBe("$2,000.00 · impact 0.12% · no fee");
+  });
+
+  it("says the saving in dollars: extra tokens at the quote's price on a buy, extra USDC on a sell", () => {
+    // $100 buys 0.05 ETH on Flash, 0.0498 on Uniswap: 0.0002 ETH more, at $2,000 = $0.40.
+    const buy = receiptQuote({ from: { amount: "100" }, to: { amount: "0.05" } }, "buy", "0.0498");
+    expect(buy.savedUsd).toBeCloseTo(0.4, 10);
+    expect(savingsLine(buy)).toBe("You saved $0.40 vs Uniswap");
+    expect(quoteLine(buy)).toBe("$2,000.00 · $0.40 better than Uniswap");
+    // Selling 0.01 ETH: 34.12 USDC on Flash, 34.05 on Uniswap.
+    const sell = receiptQuote({ from: { amount: "0.01" }, to: { amount: "34.12" } }, "sell", "34.05");
+    expect(savingsLine(sell)).toBe("You saved $0.07 vs Uniswap");
+    // A $1 trade: under a cent still reads as money.
+    expect(savingsLine(receiptQuote({ from: { amount: "1" }, to: { amount: "0.0005" } }, "buy", "0.000498"))).toBe("You saved $0.004 vs Uniswap");
+  });
+
+  it("claims no saving when it wasn't measured or Uniswap was as good", () => {
+    expect(savingsLine(receiptQuote({ from: { amount: "100" }, to: { amount: "0.05" } }, "buy"))).toBeNull();
+    expect(savingsLine(receiptQuote({ from: { amount: "100" }, to: { amount: "0.0498" } }, "buy", "0.05"))).toBeNull();
+    expect(savingsLine(null)).toBeNull();
+    // Measured as a percentage only: say that.
+    expect(savingsLine({ price: 2000, impact: null, feeUsd: null, vsUniswap: 0.0042 })).toBe("You got 0.42% more than Uniswap");
   });
 
   it("writes the quote line compactly", () => {

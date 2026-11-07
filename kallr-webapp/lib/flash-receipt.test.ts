@@ -21,7 +21,7 @@ describe("web placement steps as Flash receipt events", () => {
 
   it("the first step after the quote completes the quote row and shows what is signing", () => {
     expect(receiptEvents("approving", info, "buy")).toEqual([
-      { type: "quoted", quote: { price: 2000, impact: 0.0005, feeUsd: 0, vsUniswap: null } },
+      { type: "quoted", quote: { price: 2000, impact: 0.0005, feeUsd: 0, vsUniswap: null, savedUsd: null } },
       { type: "signing", wallet: FROM, note: stepLabel.approving },
     ]);
   });

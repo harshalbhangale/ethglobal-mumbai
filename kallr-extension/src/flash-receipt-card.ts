@@ -3,6 +3,7 @@ import {
   type FlashReceipt,
   type ReceiptEvent,
   receiptRows,
+  savingsLine,
   startReceipt,
 } from "@kallr/domain/flash-receipt";
 import { el, safeLink } from "./dom";
@@ -24,15 +25,21 @@ export function stepEvents(step: Step, from?: string | null): ReceiptEvent[] {
 export function flashReceiptRows(signer: string) {
   let state: FlashReceipt = startReceipt(signer);
   const list = el("ol", { class: "fr-rows", "aria-live": "polite" });
+  const saved = el("p", { class: "fr-saved", hidden: "" });
   const root = el(
     "section",
     { class: "flash-receipt", "aria-label": "Definitive Flash receipt" },
     el("p", { class: "fr-head" }, el("span", {}, "Definitive Flash receipt"), el("span", { class: "fr-chain" }, "Base")),
     list,
+    saved,
   );
   let copiedTimer: ReturnType<typeof setTimeout> | null = null;
 
   const render = () => {
+    // Flash beat Uniswap on this trade: say it in dollars, once the order is on its way.
+    const line = !state.error && state.at >= 1 ? savingsLine(state.quote) : null;
+    saved.hidden = !line;
+    saved.replaceChildren(...(line ? [el("span", {}, `✓ ${line}`), el("span", { class: "fr-saved-by" }, "Definitive Flash")] : []));
     list.replaceChildren(
       ...receiptRows(state).map((row, i) => {
         const detail = el("span", { class: (row.key === "signed" || row.key === "sent") && row.state === "done" ? "fr-detail-text mono" : "fr-detail-text" }, row.detail);

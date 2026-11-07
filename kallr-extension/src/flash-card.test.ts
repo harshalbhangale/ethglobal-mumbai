@@ -490,7 +490,9 @@ describe("sign on X with the Kall wallet, by default", () => {
     expect(sent.caller).toBe("kol");
     // The Flash receipt shows what the server did: Flash's quote, the Kall wallet, the order ID, the fill.
     await vi.waitFor(() => expect(q(made.card, '.fr-row[data-row="filled"]').className).toBe("fr-row done"));
-    expect(q(made.card, '.fr-row[data-row="quote"]').textContent).toBe("✓Quote from Definitive$2,500.00 · 0.40% more than Uniswap · no fee");
+    expect(q(made.card, '.fr-row[data-row="quote"]').textContent).toBe("✓Quote from Definitive$2,500.00 · $0.02 better than Uniswap · no fee");
+    // And the line worth celebrating, in dollars, under the rows.
+    expect(q(made.card, ".fr-saved").textContent).toBe("✓ You saved $0.02 vs UniswapDefinitive Flash");
     expect(q(made.card, '.fr-row[data-row="signed"]').textContent).toBe("✓Signed by your Kall wallet0x0000…00c4");
     expect(q(made.card, '.fr-row[data-row="sent"]').textContent).toContain("Order 99999999…0000");
     // No wallet prompt and no desk: the server signed.

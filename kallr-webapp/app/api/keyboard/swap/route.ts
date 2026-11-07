@@ -4,6 +4,7 @@ import { buildSwapOrder, keyboardSwapSchema, maxSwapUsd, quoteDetails, swapPrevi
 import { recordTrade } from "@/lib/server/arkiv";
 import { errorResponse } from "@/lib/server/flash";
 import { keyboardWallet } from "@/lib/server/keyboard-auth";
+import { uniswapOut } from "@/lib/server/uniswap";
 
 /**
  * Swap ETH to USDC in the user's Kall wallet, from the Kall Keyboard app: the user deposits ETH, swaps some to
@@ -36,9 +37,11 @@ export async function POST(req: Request) {
     }
     const input = buildSwapOrder(usd, ethPrice, wallet.address);
     const dryRun = body.dryRun === true;
+    // Uniswap's pools for the same swap, measured alongside: a benchmark only, the swap goes to Flash.
+    const uniswap = uniswapOut(input);
     const placed = await wallet.place(input, dryRun);
     const preview = swapPreviewLines(usd, input, placed.quote);
-    const details = quoteDetails(placed.quote);
+    const details = quoteDetails(placed.quote, input.side, await uniswap);
     if (placed.dryRun) return Response.json({ dryRun: true, preview, details, approvals: placed.approvals });
     after(() => recordTrade(input, placed.submitted.orderId, { source: "keyboard", caller: null }));
     return Response.json({ dryRun: false, orderId: placed.submitted.orderId, preview, details, approvals: placed.approvals });
