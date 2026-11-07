@@ -4,7 +4,7 @@
 
 **Don't trust. Check the caller. Trade it.**
 
-**[kallmarkets.vercel.app](https://kallmarkets.vercel.app)** · [Android app (APK)](https://kall-markets-downloads-308324916322.s3.ap-south-1.amazonaws.com/apps/kall-keyboard.apk) · Built at ETHGlobal Mumbai 2026 · Not financial advice
+**[kallmarkets.vercel.app](https://kallmarkets.vercel.app)** · [Android app (APK)](https://kall-markets-downloads-308324916322.s3.ap-south-1.amazonaws.com/apps/kall-keyboard.apk) · Built at ETHGlobal Mumbai 2026 · [buddyharshal2751@gmail.com](mailto:buddyharshal2751@gmail.com) · Not financial advice
 
 ## Why we built it
 
@@ -60,7 +60,7 @@ Three apps, one server, three rails. Every call goes down the same line:
 | --- | --- | --- |
 | **Definitive Flash** | Every trade: market, limit, TWAP, take-profit and stop-loss. Approvals sized to the order, never unlimited; the API key never leaves the server | **[docs/DEFINITIVE.md](docs/DEFINITIVE.md)** · [`definitive.ts`](packages/integrations/src/definitive.ts), [`/api/flash`](kallr-webapp/app/api/flash) · [our feedback](feedback/definitive.md) |
 | **Chainlink** | Price feeds on Base for entry and exit prices; CRE workflows for coin checks and call scores, written to `KallVerdicts` on Base Sepolia | **[docs/CHAINLINK.md](docs/CHAINLINK.md)** · [`kall-cre/`](kall-cre), [`/api/cre`](kallr-webapp/app/api/cre) |
-| **Arkiv** | Calls, results, trades and tracked callers as read-only entities anyone can query; each trade owned by its trader | **[arkiv/README.md](arkiv/README.md)** · [`arkiv.ts`](packages/integrations/src/arkiv.ts) |
+| **Arkiv** | Calls, results, trades and tracked callers as read-only entities anyone can query; each trade owned by its trader | **[arkiv/README.md](arkiv/README.md)** · [schema](arkiv/schema.md) · [why Arkiv](arkiv/why-arkiv.md) · [our feedback](arkiv/friction.md) · [Swarm](arkiv/swarm.md) · [`arkiv.ts`](packages/integrations/src/arkiv.ts) |
 
 Also: Swarm (post snapshots), Privy (sign in with X, embedded wallet on Base), GoPlus and Dexscreener (token checks).
 
@@ -120,6 +120,12 @@ Yes, the famous accounts miss a lot. That's the point.
 [Arkiv `0x6277fe4a…`](https://rabdi.explorer.arkiv.network/tx/0x6277fe4ad3d91f45d6932829e3b75ff2eb3b2dad828584ae31de453fbac38cbc)
 → [Swarm snapshot `ead89c2a…`](https://api.gateway.ethswarm.org/bzz/ead89c2aeed4dbcf16a7d65094692e1a4ad4d70a95a380832867a286d101de3e/).
 
+## What's still a demo
+
+The iPhone keyboard places orders from a small shared wallet our server holds, capped at $25 an order. The
+Android keyboard, the extension and the web app sign with your own Privy wallet. Moving the iPhone keyboard onto
+the same wallet is built on the server and not yet switched on.
+
 ## Run it
 
 ```sh
@@ -160,6 +166,10 @@ what we added is in [KALLR.md](kallr-keyboard/KALLR.md).
 
 Much of the code was written with Claude Code, directed and reviewed by us; those commits carry
 `Co-Authored-By: Claude`.
+
+## Contact
+
+Questions, or want to build on this: [buddyharshal2751@gmail.com](mailto:buddyharshal2751@gmail.com).
 
 ## License
 
