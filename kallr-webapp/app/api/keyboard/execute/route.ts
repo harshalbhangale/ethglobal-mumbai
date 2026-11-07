@@ -6,6 +6,7 @@ import { errorResponse } from "@/lib/server/flash";
 import { keyboardWallet } from "@/lib/server/keyboard-auth";
 import { keyboardWalletAddress, MAX_ORDER_USD } from "@/lib/server/keyboard-wallet";
 import { tradeTokenByKey } from "@/lib/server/keyboard-tokens";
+import { uniswapOut } from "@/lib/server/uniswap";
 
 /**
  * One-tap orders from the Kall keyboard on iPhone. The keyboard sends a simple order (token, dollars,
@@ -41,10 +42,12 @@ export async function POST(req: Request) {
     const token = await tradeTokenByKey(order.token);
     const input = buildKeyboardOrder(order, token.price);
     const dryRun = body.dryRun === true;
+    // Uniswap's pools for the same trade, measured alongside: a benchmark only, the order goes to Flash.
+    const uniswap = uniswapOut(input);
     const placed = await wallet.place(input, dryRun);
     const preview = previewLines(order, input, placed.quote, token.symbol);
-    // What the review card shows next to the preview: Flash's own estimates for this quote.
-    const details = quoteDetails(placed.quote);
+    // What the review card shows next to the preview: Flash's own estimates, and its edge over Uniswap.
+    const details = quoteDetails(placed.quote, input.side, await uniswap);
     if (placed.dryRun) return Response.json({ dryRun: true, preview, details, approvals: placed.approvals });
     after(() => recordTrade(input, placed.submitted.orderId, { source: "keyboard", caller: order.caller ?? null }));
     return Response.json({ dryRun: false, orderId: placed.submitted.orderId, preview, details, approvals: placed.approvals });

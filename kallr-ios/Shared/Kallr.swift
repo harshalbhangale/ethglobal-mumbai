@@ -382,7 +382,28 @@ enum Kallr {
         let caller: String?
     }
     struct Preview: Codable { let title: String; let kind: String; let pay: String; let get: String; let exits: String; let approval: String }
-    struct Details: Codable { let impactPct: Double?; let slippagePct: Double?; let feeUsd: Double? }
+    struct Details: Codable {
+        let impactPct: Double?
+        let slippagePct: Double?
+        let feeUsd: Double?
+        /** What Definitive Flash beats Uniswap's best pool by for this same trade, measured by the server. */
+        var savedUsd: Double? = nil
+        var vsUniswapPct: Double? = nil
+
+        /**
+         * "You save $0.12 vs Uniswap" ("saved" once placed), or the percentage when the dollars round
+         * to nothing. Nil when it wasn't measured or Flash had no edge: never claim an unmeasured saving.
+         */
+        func savings(past: Bool) -> String? {
+            guard let pct = vsUniswapPct, pct >= 0.01 else { return nil }
+            let verb = past ? "saved" : "save"
+            if let usd = savedUsd, usd >= 0.0001 {
+                let money = usd >= 0.01 ? String(format: "$%.2f", usd) : usd >= 0.001 ? String(format: "$%.3f", usd) : String(format: "$%.4f", usd)
+                return "You \(verb) \(money) vs Uniswap"
+            }
+            return String(format: "You get %.2f%% more than Uniswap", pct)
+        }
+    }
 
     /** One token's live price on Base and its 24h move, for the keyboard's ticker. */
     struct LivePrice: Codable {

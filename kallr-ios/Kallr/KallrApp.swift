@@ -414,7 +414,14 @@ private struct SwapCard: View {
             line("Impact · fee", [q.details?.impactPct.map { String(format: "%.2f%%", abs($0)) }, q.details?.feeUsd.map { String(format: "$%.2f", $0) }]
                 .compactMap { $0 }.joined(separator: " · "))
             line("On Base", q.preview.approval)
-            line("Best price", "✓ Definitive Flash · best route on Base")
+            if let saving = q.details?.savings(past: false) {
+                Label(saving, systemImage: "arrow.down.circle.fill")
+                    .font(.system(size: 15, weight: .heavy).monospacedDigit()).foregroundStyle(Kallr.lime)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(Kallr.lime.opacity(0.13), in: Capsule())
+            } else {
+                line("Best price", "✓ Definitive Flash · best route on Base")
+            }
             HStack(spacing: 8) {
                 Button { step = .idle } label: {
                     Text("BACK").font(.system(size: 13, weight: .heavy)).foregroundStyle(Kallr.bone)
@@ -473,7 +480,8 @@ private struct SwapCard: View {
             case .success(let placed):
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 Chime.play()
-                step = .done("Swapped on Flash: \(placed.preview.get) is on its way.")
+                let saved = placed.details?.savings(past: true).map { " \($0)." } ?? ""
+                step = .done("Swapped on Flash: \(placed.preview.get) is on its way.\(saved)")
                 usd = ""
                 // The fill takes a moment: read the balances until the USDC shows.
                 for _ in 0..<8 {

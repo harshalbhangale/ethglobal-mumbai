@@ -269,6 +269,9 @@ blockquote { margin: 0 0 8px; padding: 0; white-space: pre-wrap; overflow-wrap: 
 .fr-copy { cursor: pointer; padding: 0 6px; border-radius: 5px; border: 1px solid var(--line-strong); background: transparent; color: var(--muted); font: 600 11px/16px system-ui, sans-serif; }
 .fr-copy:hover { color: var(--foreground); border-color: var(--foreground); }
 .inline-card .fr-link, .fr-link { color: var(--fr-accent); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+/* "You saved $0.12 vs Uniswap": the one line worth celebrating, under the receipt's rows. */
+.fr-saved { display: flex; align-items: center; gap: 6px; margin: 9px 0 0; padding: 7px 10px; border-radius: 9px; background: color-mix(in srgb, var(--fr-accent) 14%, transparent); color: var(--fr-accent); font: 800 12.5px/1.2 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.fr-saved-by { margin-left: auto; color: var(--muted); font-weight: 600; font-size: 11px; }
 .swap-pending { color: var(--muted); font-weight: 500; animation: kallr-pulse 1.4s ease-in-out infinite; }
 @keyframes kallr-pulse { 50% { opacity: .45; } }
 

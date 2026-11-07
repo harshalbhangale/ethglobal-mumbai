@@ -29,9 +29,9 @@ describe("quote facts", () => {
 
 describe("the receipt's quote row against Uniswap", () => {
   it("says how much more Flash gives than Uniswap's pools for the same trade", () => {
-    // Uniswap's best pool would give 0.42% less DEGEN.
+    // Uniswap's best pool would give 0.42% less DEGEN: on $5,000 that's about $20.91 more DEGEN with Flash.
     const uni = (5991128.507086361682721822 / 1.0042).toString();
-    expect(quoteLine(receiptQuote(quote, "buy", uni))).toBe("$0.00083457 · 0.42% more than Uniswap · no fee");
+    expect(quoteLine(receiptQuote(quote, "buy", uni))).toBe("$0.00083457 · $20.91 better than Uniswap · no fee");
   });
 
   it("shows the price impact instead when Uniswap wasn't measured, ties or gives more", () => {
