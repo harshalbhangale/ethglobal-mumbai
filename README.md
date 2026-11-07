@@ -120,12 +120,6 @@ Yes, the famous accounts miss a lot. That's the point.
 [Arkiv `0x6277fe4a…`](https://rabdi.explorer.arkiv.network/tx/0x6277fe4ad3d91f45d6932829e3b75ff2eb3b2dad828584ae31de453fbac38cbc)
 → [Swarm snapshot `ead89c2a…`](https://api.gateway.ethswarm.org/bzz/ead89c2aeed4dbcf16a7d65094692e1a4ad4d70a95a380832867a286d101de3e/).
 
-## What's still a demo
-
-The iPhone keyboard places orders from a small shared wallet our server holds, capped at $25 an order. The
-Android keyboard, the extension and the web app sign with your own Privy wallet. Moving the iPhone keyboard onto
-the same wallet is built on the server and not yet switched on.
-
 ## Run it
 
 ```sh
