@@ -50,6 +50,22 @@ on Base Sepolia. It holds 4 coin checks and 5 call scores so far. Only the Chain
 workflow. It emits `CoinChecked` and `CallScored`, and anyone can read `coinCheck(token, ticker)` or
 `callScore(postId)`.
 
+**See it on-chain:** the contract's
+[Events tab](https://sepolia.basescan.org/address/0x6bf7fd3d5fa88090f30293aabf81565c3f88bc52#events) lists every
+verdict. Its Transactions tab looks empty because CRE sends each report to Chainlink's forwarder, which calls
+our contract. Each one:
+
+| What | Transaction |
+| --- | --- |
+| Fake $TOSHI caught (impostor) | [`0x07091f3b…`](https://sepolia.basescan.org/tx/0x07091f3be329eae796dd14d9319b42aeeabd8394594b550590492b96e73d3002) |
+| Real $TOSHI | [`0x694d07a3…`](https://sepolia.basescan.org/tx/0x694d07a3c4a5d1fea84e7df551a2859b08663173732be5862bb052532e3f448c) |
+| Real $DEGEN | [`0x5582d3ba…`](https://sepolia.basescan.org/tx/0x5582d3ba9fa5515c5161273941e7933b009f8c194b32b2d1d82cc9a3bc991954) |
+| Fake $DEGEN (the contract was USDC) | [`0xb09b70b7…`](https://sepolia.basescan.org/tx/0xb09b70b744b238884270835d76dba63764c88e73148f1fc00e5cf16aae97d39f) |
+| 5 calls from X scored | [`0x4f835ef1…`](https://sepolia.basescan.org/tx/0x4f835ef109633c0f4ee7d7e4761add4ac352be6f79d4963ffab2a8c7be7210d4) |
+
+On a transaction page, the **Logs** tab shows what was written (token, claimed ticker, verdict, or the call's
+score).
+
 The web app only reads it ([`lib/server/cre.ts`](../kallr-webapp/lib/server/cre.ts)):
 
 - `GET /api/cre/coin?token=…&claimed=…` gives a coin's verdict

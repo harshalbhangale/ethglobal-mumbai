@@ -78,6 +78,13 @@ Also: Swarm (post snapshots), Privy (sign in with X, embedded wallet on Base), G
 [`0x6bf7fd3d…3c88bc52`](https://sepolia.basescan.org/address/0x6bf7fd3d5fa88090f30293aabf81565c3f88bc52),
 signed by the workflow and written through Chainlink's forwarder.
 
+> **See it on-chain:** open the contract on Basescan and go to the
+> **[Events](https://sepolia.basescan.org/address/0x6bf7fd3d5fa88090f30293aabf81565c3f88bc52#events)** tab:
+> every `CoinChecked` and `CallScored` is there. (The Transactions tab looks empty because CRE writes through
+> Chainlink's forwarder, which then calls our contract.) Or ask the live site: the fake TOSHI's
+> [verdict](https://kallmarkets.vercel.app/api/cre/coin?token=0x8544fe9d190fd7ec52860abbf45088e81ee24a8c&claimed=TOSHI)
+> and a call's [score](https://kallmarkets.vercel.app/api/cre/call/2118347746096902266), each with its transaction.
+
 `check-coin`: is the coin in the post the real one?
 
 | Claimed | Contract checked | Verdict | Transaction |
