@@ -33,7 +33,7 @@ private struct SuggestionStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     if model.clipboardHasText {
-                        StripChip(text: "📋 Paste", style: .lime) { model.controller?.pasteAndTrade() }
+                        StripChip(text: "Trade copied", symbol: "bolt.fill", style: .lime) { model.controller?.tradeCopied() }
                     }
                     if model.checking {
                         StripChip(text: "Checking…", style: .plain) {}
@@ -86,15 +86,33 @@ struct NoEdgeBlur: ViewModifier {
 private struct StripChip: View {
     enum Style { case plain, lime, warning }
     let text: String
+    var symbol: String? = nil
     let style: Style
     let action: () -> Void
 
     var body: some View {
         Button { Haptics.modifier(); action() } label: {
-            Text(text).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+            Label {
+                Text(text)
+            } icon: {
+                if let symbol { Image(systemName: symbol).font(.system(size: 11, weight: .bold)) }
+            }
+            .labelStyle(StripLabel(hasIcon: symbol != nil))
+            .font(.system(size: 12, weight: .semibold)).lineLimit(1)
                 .foregroundStyle(style == .lime ? Kallr.black : style == .warning ? Kallr.danger : Kallr.bone)
                 .padding(.horizontal, 10).frame(height: 30)
                 .background(style == .lime ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+/** Icon and text close together, or just the text. */
+private struct StripLabel: LabelStyle {
+    let hasIcon: Bool
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 5) {
+            if hasIcon { configuration.icon }
+            configuration.title
         }
     }
 }

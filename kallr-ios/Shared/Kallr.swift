@@ -1,6 +1,7 @@
 // Kallr's server client and look, shared by the app and the keyboard. It speaks the same
 // /api/keyboard API as the Android keyboard (kallr-keyboard/.../KallrClient.kt).
 
+import CoreImage.CIFilterBuiltins
 import Foundation
 import SwiftUI
 import Security
@@ -63,11 +64,20 @@ enum Kallr {
         return nil
     }
 
-    /** A copied post link, or a copied message that names a coin. Anything else stays on the phone. */
+    /** Coins and call words a plain-text call uses without a $: "ETH looking strong, going long here". */
+    private static let callWords = try! NSRegularExpression(
+        pattern: #"\b(eth|ether|ethereum|btc|bitcoin|sol|solana|degen|toshi|brett|pepe|doge|long|short|longing|shorting|buy|buying|sell|pump|moon|bullish|bearish|breakout|target|entry|tp|sl)\b"#,
+        options: .caseInsensitive)
+
+    /**
+     * A copied post link, or a copied message that reads like a call (a coin, a contract, or call words).
+     * Kall's reader decides if it really is one. Anything else stays on the phone.
+     */
     static func reference(fromCopied text: String?) -> String? {
         guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         if let link = first(postLink, in: text) { return link }
-        if first(cashtag, in: text) != nil || first(hashtag, in: text) != nil || first(evmAddress, in: text) != nil {
+        if first(cashtag, in: text) != nil || first(hashtag, in: text) != nil || first(evmAddress, in: text) != nil
+            || first(callWords, in: text) != nil {
             return String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1500))
         }
         return nil
@@ -179,8 +189,7 @@ enum Kallr {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.httpBody = try? JSONEncoder().encode(Request(text: text, typed: typed, history: []))
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+        guard let (data, http) = await send(request), (200..<300).contains(http.statusCode) else { return nil }
         return try? JSONDecoder().decode(Result.self, from: data)
     }
 
@@ -641,9 +650,29 @@ enum Kallr {
         if linked, path.hasPrefix("api/keyboard/"), let key = link?.key {
             request.setValue("Bearer \(key)", forHTTPHeaderField: "authorization")
         }
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+        guard let (data, http) = await send(request), (200..<300).contains(http.statusCode) else { return nil }
         return try? JSONDecoder().decode(T.self, from: data)
+    }
+
+    /**
+     * One request, tried twice: iOS reuses a connection that sat idle, and when the server has dropped it
+     * the first try fails at once ("The network connection was lost"). The second goes out on a fresh one.
+     */
+    static func send(_ request: URLRequest) async -> (Data, HTTPURLResponse)? {
+        for attempt in 0..<2 {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse else { return nil }
+                return (data, http)
+            } catch let error as URLError where attempt == 0 && !Task.isCancelled
+                && [.networkConnectionLost, .timedOut, .notConnectedToInternet, .cannotConnectToHost].contains(error.code) {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                continue
+            } catch {
+                return nil
+            }
+        }
+        return nil
     }
 }
 
@@ -681,6 +710,18 @@ enum Deposit {
     }
 
     static func anyWallet(_ path: String) -> URL? { URL(string: "ethereum:\(path)") }
+}
+
+/** A QR code for an address or an ethereum: link, for another phone's wallet to scan. */
+enum QR {
+    static func image(for text: String) -> UIImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(text.utf8)
+        filter.correctionLevel = "M"
+        guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 8, y: 8)),
+              let cg = CIContext().createCGImage(output, from: output.extent) else { return nil }
+        return UIImage(cgImage: cg)
+    }
 }
 
 /** A keychain group the app and the keyboard share (KallKeychainGroup in both Info.plists). */

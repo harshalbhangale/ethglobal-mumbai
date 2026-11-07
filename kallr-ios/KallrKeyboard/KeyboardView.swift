@@ -1448,6 +1448,8 @@ private struct TradeTab: View {
                 TokenPicker(model: model)
             } else if let fake = model.creFake {
                 FakeCoinCard(model: model, verdict: fake)
+            } else if model.checking {
+                ReadingCall()
             } else if model.editingAmount {
                 AmountPad(model: model)
             } else if case .review(let quote) = model.placing {
@@ -2502,47 +2504,41 @@ private struct OrderDetail: View {
     }
 }
 
+/** While Kall reads the call you copied: a calm placeholder where the trade will appear. */
+private struct ReadingCall: View {
+    @State private var pulse = false
+    var body: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle().stroke(Kallr.lime.opacity(0.25), lineWidth: 3).frame(width: 46, height: 46)
+                    .scaleEffect(pulse ? 1.25 : 0.9).opacity(pulse ? 0 : 1)
+                Image(systemName: "bolt.fill").font(.system(size: 18, weight: .bold)).foregroundStyle(Kallr.lime)
+                    .frame(width: 46, height: 46).background(Kallr.graphite, in: Circle())
+            }
+            Text("Reading the call you copied…").font(.system(size: 14, weight: .bold)).foregroundStyle(Kallr.bone)
+            Text("Coin, direction and exits, then a Flash quote on Base.").font(.system(size: 11)).foregroundStyle(Kallr.muted)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { withAnimation(.easeOut(duration: 1.1).repeatForever(autoreverses: false)) { pulse = true } }
+    }
+}
+
 // MARK: - Wallet
 
 private struct WalletTab: View {
     @ObservedObject var model: KeyboardModel
+    @State private var depositing = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        Group {
             if let w = model.wallet, let address = w.address {
-                let linked = Kallr.link != nil
-                if Kallr.linkingEnabled { HStack(spacing: 6) {
-                    Text(linked ? "YOUR KALL WALLET" : "SHARED DEMO WALLET").font(.system(size: 10, weight: .heavy))
-                        .foregroundStyle(linked ? Kallr.lime : Kallr.muted)
-                    Spacer(minLength: 0)
-                    if !linked {
-                        Button { model.openLink(Kallr.linkPage) } label: {
-                            Text("Sign in with X ↗").font(.system(size: 12, weight: .bold)).foregroundStyle(Kallr.lime)
-                        }
-                        .buttonStyle(Press())
-                    }
-                } }
-                HStack(spacing: 8) {
-                    Balance(label: "ETH", value: w.ethValue.map { String(format: "%.5f", $0) } ?? "…")
-                    Balance(label: "USDC", value: w.usdcValue.map { String(format: "%.2f", $0) } ?? "…")
+                if depositing {
+                    DepositPanel(model: model, address: address) { withAnimation(.easeOut(duration: 0.18)) { depositing = false } }
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                } else {
+                    home(w, address)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                 }
-                HStack(spacing: 8) {
-                    Text(address).font(.system(size: 11, design: .monospaced)).foregroundStyle(Kallr.bone).lineLimit(1).truncationMode(.middle)
-                    Spacer(minLength: 4)
-                    Button {
-                        UIPasteboard.general.string = address
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        model.note = "Kall wallet address copied"
-                    } label: {
-                        Text("COPY").font(.system(size: 11, weight: .heavy)).foregroundStyle(Kallr.black)
-                            .frame(width: 58, height: 30).background(Kallr.lime, in: RoundedRectangle(cornerRadius: 7))
-                    }
-                    .buttonStyle(Press())
-                }
-                .padding(10)
-                .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
-                Text("Deposit and swap in the Kall app. Up to $\(Kallr.fmt(w.maxUsd ?? 25)) per order, Base only.")
-                    .font(.system(size: 11)).foregroundStyle(Kallr.muted)
             } else if !model.fullAccess {
                 Empty(text: "Turn on Allow Full Access for Kall Keyboard in Settings.")
             } else if model.walletNotSetUp {
@@ -2550,34 +2546,228 @@ private struct WalletTab: View {
             } else if let problem = model.walletProblem {
                 VStack(spacing: 8) {
                     Empty(text: "Couldn't read your Kall wallet: \(problem).")
-                    Button { model.retryWallet() } label: {
-                        Text("RETRY").font(.system(size: 12, weight: .heavy)).foregroundStyle(Kallr.black)
-                            .frame(width: 96, height: 32).background(Kallr.lime, in: RoundedRectangle(cornerRadius: 7))
-                    }
-                    .buttonStyle(Press())
+                    WalletButton(label: "RETRY", symbol: "arrow.clockwise", primary: true) { model.retryWallet() }
+                        .frame(width: 130)
                 }
                 .frame(maxWidth: .infinity)
             } else {
-                Empty(text: "Reading your Kall wallet…")
+                VStack(spacing: 10) {
+                    ProgressView().tint(Kallr.lime)
+                    Text("Reading your Kall wallet…").font(.system(size: 12)).foregroundStyle(Kallr.muted)
+                }
+                .frame(maxWidth: .infinity, minHeight: 160)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 4)
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
         .onAppear { model.watchWallet() }
+    }
+
+    private func home(_ w: Kallr.Wallet, _ address: String) -> some View {
+        let price = model.feed?.prices["ETH"] ?? nil
+        let total = (w.usdcValue ?? 0) + (w.ethValue ?? 0) * (price ?? 0)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("KALL WALLET · BASE").font(.system(size: 10, weight: .heavy)).tracking(0.6).foregroundStyle(Kallr.muted)
+                    Text(price == nil && w.ethValue ?? 0 > 0 ? "…" : String(format: "$%.2f", total))
+                        .font(.system(size: 34, weight: .black).monospacedDigit()).foregroundStyle(Kallr.bone)
+                        .contentTransition(.numericText())
+                }
+                Spacer(minLength: 0)
+                AddressPill(address: address) {
+                    UIPasteboard.general.string = address
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    model.note = "Kall wallet address copied"
+                }
+            }
+            HStack(spacing: 8) {
+                Holding(symbol: "ETH", amount: w.ethValue.map { String(format: "%.5f", $0) } ?? "…",
+                        usd: w.ethValue.flatMap { e in price.map { String(format: "$%.2f", e * $0) } })
+                Holding(symbol: "USDC", amount: w.usdcValue.map { String(format: "%.2f", $0) } ?? "…", usd: nil)
+            }
+            HStack(spacing: 8) {
+                WalletButton(label: "DEPOSIT", symbol: "arrow.down", primary: true) {
+                    withAnimation(.easeOut(duration: 0.18)) { depositing = true }
+                }
+                WalletButton(label: "SWAP", symbol: "arrow.left.arrow.right", primary: false) {
+                    if !model.payingETH { model.togglePay() }
+                    withAnimation(.easeOut(duration: 0.15)) { model.tab = .trade }
+                }
+            }
+            Text(hint(w)).font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(1)
+        }
+    }
+
+    private func hint(_ w: Kallr.Wallet) -> String {
+        let cap = "Up to $\(Kallr.fmt(w.maxUsd ?? 25)) per order on Base"
+        guard let usdc = w.usdcValue, let eth = w.ethValue else { return cap }
+        if eth < 0.0004 { return "Add about $1 of ETH for gas · " + cap }
+        if usdc < 1 { return "Swap some ETH to USDC to buy · " + cap }
+        return cap
     }
 }
 
-private struct Balance: View {
-    let label: String
-    let value: String
+/** One coin you hold: logo, amount, and its dollar value. */
+private struct Holding: View {
+    let symbol: String
+    let amount: String
+    let usd: String?
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(Kallr.muted)
-            Text(value).font(.system(size: 20, weight: .black).monospacedDigit()).foregroundStyle(Kallr.lime)
+        HStack(spacing: 8) {
+            TokenIcon(symbol: symbol, size: 26)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(amount).font(.system(size: 15, weight: .bold).monospacedDigit()).foregroundStyle(Kallr.bone)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                Text(usd.map { "\(symbol) · \($0)" } ?? symbol).font(.system(size: 10, weight: .semibold)).foregroundStyle(Kallr.muted)
+            }
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 10).padding(.vertical, 9)
+        .frame(maxWidth: .infinity)
+        .background(Kallr.graphite, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/** 0x4c7f…a8c0 with a copy glyph: tap to copy the whole address. */
+private struct AddressPill: View {
+    let address: String
+    let copy: () -> Void
+    @State private var copied = false
+    var body: some View {
+        Button {
+            copy()
+            withAnimation { copied = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { withAnimation { copied = false } }
+        } label: {
+            HStack(spacing: 5) {
+                Text(copied ? "Copied" : "\(address.prefix(6))…\(address.suffix(4))")
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.system(size: 11, weight: .bold))
+            }
+            .foregroundStyle(copied ? Kallr.lime : Kallr.bone)
+            .padding(.horizontal, 10).frame(height: 30)
+            .background(Kallr.graphite, in: Capsule())
+            .overlay(Capsule().stroke(Kallr.hairline))
+        }
+        .buttonStyle(Press())
+        .accessibilityLabel("Copy your Kall wallet address")
+    }
+}
+
+private struct WalletButton: View {
+    let label: String
+    let symbol: String
+    let primary: Bool
+    let action: () -> Void
+    var body: some View {
+        Button { Haptics.impact(.medium); action() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: symbol).font(.system(size: 13, weight: .heavy))
+                Text(label).font(.system(size: 14, weight: .heavy)).tracking(0.4)
+            }
+            .foregroundStyle(primary ? Kallr.black : Kallr.bone)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .background(primary ? Kallr.lime : Kallr.keyDark, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(Press())
+    }
+}
+
+/**
+ * Deposit, inside the keyboard: pick ETH or USDC and an amount, then open a wallet app with the transfer
+ * filled in (EIP-681), copy the address, or let another phone scan the QR.
+ */
+private struct DepositPanel: View {
+    @ObservedObject var model: KeyboardModel
+    let address: String
+    let back: () -> Void
+    @State private var asset = "USDC"
+    @State private var usd = 10.0
+    @State private var note: String?
+
+    private var price: Double? { model.feed?.prices["ETH"] ?? nil }
+    private var path: String? { Deposit.path(asset: asset, to: address, usd: usd, ethPrice: price) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Button { Haptics.layer(); back() } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 14, weight: .bold)).foregroundStyle(Kallr.bone)
+                        .frame(width: 30, height: 30).background(Kallr.graphite, in: Circle())
+                }
+                .buttonStyle(Press())
+                .accessibilityLabel("Back to wallet")
+                Text("DEPOSIT ON BASE").font(.system(size: 13, weight: .heavy)).tracking(0.5).foregroundStyle(Kallr.bone)
+                Spacer(minLength: 0)
+                HStack(spacing: 2) {
+                    ForEach(["USDC", "ETH"], id: \.self) { a in
+                        Button { Haptics.modifier(); asset = a; note = nil } label: {
+                            Text(a).font(.system(size: 12, weight: .heavy))
+                                .foregroundStyle(asset == a ? Kallr.black : Kallr.muted)
+                                .frame(width: 52, height: 26)
+                                .background(asset == a ? Kallr.lime : .clear, in: Capsule())
+                        }
+                        .buttonStyle(Press())
+                    }
+                }
+                .padding(2).background(Kallr.graphite, in: Capsule())
+            }
+            HStack(alignment: .top, spacing: 12) {
+                qr
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        ForEach([5.0, 10, 25, 50], id: \.self) { v in
+                            Button { Haptics.modifier(); usd = v } label: {
+                                Text("$\(Kallr.fmt(v))").font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(usd == v ? Kallr.black : Kallr.bone)
+                                    .frame(maxWidth: .infinity, minHeight: 32)
+                                    .background(usd == v ? Kallr.lime : Kallr.graphite, in: RoundedRectangle(cornerRadius: 8))
+                            }
+                            .buttonStyle(Press())
+                        }
+                    }
+                    Text(amountLine).font(.system(size: 11)).foregroundStyle(Kallr.muted).lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    WalletButton(label: "OPEN WALLET APP", symbol: "arrow.up.forward.app", primary: true) { openWallet() }
+                        .disabled(path == nil)
+                    WalletButton(label: "COPY ADDRESS", symbol: "doc.on.doc", primary: false) {
+                        UIPasteboard.general.string = address
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        note = "Address copied. Send on Base only."
+                    }
+                }
+            }
+            Label(note ?? "Base only. Other networks lose funds.", systemImage: note == nil ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .font(.system(size: 11, weight: .semibold)).foregroundStyle(note == nil ? Kallr.danger : Kallr.lime)
+                .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder private var qr: some View {
+        if let path, let image = QR.image(for: "ethereum:\(path)") {
+            Image(uiImage: image).interpolation(.none).resizable().scaledToFit()
+                .frame(width: 112, height: 112).padding(7)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityLabel("QR code to send \(asset) to your Kall wallet")
+        } else {
+            RoundedRectangle(cornerRadius: 12).fill(Kallr.graphite).frame(width: 126, height: 126)
+                .overlay(ProgressView().tint(Kallr.lime))
+        }
+    }
+
+    private var amountLine: String {
+        if asset == "USDC" { return "\(Kallr.fmt(usd)) USDC lands ready to trade." }
+        guard let p = price, p > 0 else { return "Reading the ETH price…" }
+        return String(format: "About %.5f ETH. Keep ~$1 for gas, swap the rest.", usd / p)
+    }
+
+    private func openWallet() {
+        guard let url = path.flatMap(Deposit.anyWallet) else { return }
+        guard let controller = model.controller else { note = "Copy the address instead."; return }
+        controller.openURL(url) { opened in
+            Task { @MainActor in if !opened { note = "No wallet app took it. Copy the address instead." } }
+        }
     }
 }
 

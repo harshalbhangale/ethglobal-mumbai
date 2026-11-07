@@ -12,6 +12,9 @@ final class KeyboardViewController: UIInputViewController {
     /** Text before the cursor at the last change, to spot a paste (a jump of a whole message). */
     private var lastContextLength = 0
     private var height: NSLayoutConstraint?
+    /** Watches the clipboard's change count (no paste prompt) so the strip's Paste shows as soon as you copy. */
+    private var clipboardWatch: Timer?
+    private var clipboardCount = UIPasteboard.general.changeCount
     /** Typing is the iPhone keyboard's height plus the strip; the panel needs more room. */
     static let typingHeight: CGFloat = 260
     static let panelHeight: CGFloat = 336
@@ -97,6 +100,27 @@ final class KeyboardViewController: UIInputViewController {
         readTypedOrder()
     }
 
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        clipboardWatch?.invalidate()
+        clipboardWatch = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.clipboardChanged() }
+        }
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        clipboardWatch?.invalidate()
+        clipboardWatch = nil
+    }
+
+    private func clipboardChanged() {
+        let count = UIPasteboard.general.changeCount
+        guard count != clipboardCount else { return }
+        clipboardCount = count
+        model.clipboardHasText = UIPasteboard.general.hasStrings
+    }
+
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
         model.autoShift()
@@ -105,41 +129,48 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     /**
-     * A call pasted into the chat (iOS's own Paste): when the text jumps by a message's worth and names a
-     * coin, open Trade with it. Reads the text before the cursor; if that's cut short, what was copied.
+     * A call pasted into the chat (iOS's own Paste): the text jumps by more than a key or a word would add.
+     * iOS often hands a keyboard only the last line before the cursor, so when what was copied ends the
+     * same way, read the whole copied message; otherwise read what's in the field.
      */
     private func readPastedCall() {
         let context = textDocumentProxy.documentContextBeforeInput ?? ""
         defer { lastContextLength = context.count }
-        guard context.count - lastContextLength >= 40 else { return }
-        var reference = Kallr.reference(fromCopied: context)
-        if reference == nil, hasFullAccess, UIPasteboard.general.hasStrings,
-           let copied = Kallr.copiedText(), context.hasSuffix(String(copied.suffix(20))) {
+        guard context.count - lastContextLength >= 8 else { return }
+        var reference: String?
+        if hasFullAccess, UIPasteboard.general.hasStrings, let copied = Kallr.copiedText(), endsTheSame(context, copied) {
             reference = Kallr.reference(fromCopied: copied)
         }
+        if reference == nil { reference = Kallr.reference(fromCopied: context) }
         guard let reference else { return }
         check(text: reference, typed: nil, openTrade: true, openPanel: true)
     }
 
+    /** The field ends with the copied text's last line: that's what was just pasted. */
+    private func endsTheSame(_ context: String, _ copied: String) -> Bool {
+        let tail = copied.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .newlines).last ?? ""
+        let probe = String(tail.suffix(24))
+        return !probe.isEmpty && context.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix(probe)
+    }
+
     /**
-     * The strip's Paste: puts what you copied into the chat, like iOS's Paste, and when it's a call,
-     * opens Trade with the coin, amount and exits it names.
+     * The strip's Trade copied: takes the call you copied straight into Trade (nothing is typed into the
+     * chat). Opens the panel at once and fills in the coin, amount and exits the call names.
      */
-    func pasteAndTrade() {
+    func tradeCopied() {
         guard hasFullAccess else {
             model.note = "Turn on Allow Full Access for Kall Keyboard in Settings."
             return
         }
-        guard let copied = Kallr.copiedText() else {
-            model.note = "Nothing copied yet."
+        guard let reference = Kallr.reference(fromCopied: Kallr.copiedText()) else {
+            model.note = "Copy a call first: an X post link, or a message with a coin."
             return
         }
-        textDocumentProxy.insertText(copied)
-        lastContextLength = (textDocumentProxy.documentContextBeforeInput ?? "").count
-        afterTyping()
-        if let reference = Kallr.reference(fromCopied: copied) {
-            check(text: reference, typed: nil, openTrade: true, openPanel: true)
-        }
+        Haptics.trade()
+        model.placing = .idle
+        model.closePicker()
+        model.openPanel(.trade)
+        check(text: reference, typed: nil, openTrade: true, openPanel: true)
     }
 
     func nextKeyboard() { advanceToNextInputMode() }
@@ -200,6 +231,8 @@ final class KeyboardViewController: UIInputViewController {
                 if let target = text.flatMap(Kallr.creTarget(in:)) ?? Kallr.creTarget(result) {
                     model.checkCre(token: target.token, claimed: target.claimed, reveal: openPanel)
                 }
+                // Nothing to trade in it: say so instead of doing nothing.
+                if openPanel, result.headline(typed: nil) == nil { model.note = "No call in that to trade." }
             } else if text != nil {
                 model.note = hasFullAccess ? "Couldn't reach Kall Markets." : "Turn on Allow Full Access for Kall Keyboard in Settings."
             }
